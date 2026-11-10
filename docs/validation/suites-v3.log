@@ -1,0 +1,487 @@
+
+--- import ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+[   0% ] first_scan_filesystem | Started Project initialization (5 steps)
+[   0% ] first_scan_filesystem | Scanning file structure...
+[  16% ] first_scan_filesystem | Loading global class names...
+[  33% ] first_scan_filesystem | Verifying GDExtensions...
+[  50% ] first_scan_filesystem | Creating autoload scripts...
+[  66% ] first_scan_filesystem | Initializing plugins...
+[  83% ] first_scan_filesystem | Starting file scan...
+[ DONE ] first_scan_filesystem
+
+[   0% ] loading_editor_layout | Started Loading editor (5 steps)
+[   0% ] loading_editor_layout | Loading editor layout...
+[  16% ] loading_editor_layout | Loading docks...
+[ DONE ] loading_editor_layout
+
+
+--- regression ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Menu au démarrage
+PASS Jouer ouvre les protocoles
+PASS Démarrer charge l’arène
+PASS Déplacement AZERTY avec la touche Z
+PASS Échap suspend et ouvre la pause
+PASS Le chrono ne s’écoule pas pendant la pause
+PASS Paramètres accessibles pendant la partie
+PASS Onglet Audio et bouton d’écoute
+PASS Le volume général agit sur la sortie
+PASS Le volume est appliqué en dB
+PASS Élevée active ombres et résolution native
+PASS Faible réduit l’échelle 3D et coupe les ombres
+PASS La limite FPS est appliquée
+PASS QWERTY et affectation de touche
+PASS Retour des réglages vers la pause
+PASS Reprise et déplacement WASD
+PASS Le sprint ne traverse pas le mur d’enceinte
+PASS Accroupissement et glissade pendant le sprint
+PASS Saut avec la touche réassignée
+PASS Rampe et accès à la passerelle
+PASS Défaite et bilan
+PASS Relance depuis le bilan
+PASS Confirmation du redémarrage 1
+PASS Un seul directeur au redémarrage 1
+PASS Confirmation du redémarrage 2
+PASS Un seul directeur au redémarrage 2
+PASS Confirmation du redémarrage 3
+PASS Un seul directeur au redémarrage 3
+PASS La confirmation peut être annulée
+PASS Retour au menu confirmé
+PASS Quatre cibles actives en entraînement
+PASS Les cibles d’entraînement se déplacent
+PASS Entraînement sans défaite
+PASS Pulse-7 touche une vraie collision
+PASS Recharge active
+PASS Changer d’équipement annule la recharge
+PASS Volt Arc dépense une charge par éventail
+PASS Prism Burst tire une rafale de trois
+PASS Les cibles neutralisées réapparaissent
+PASS Nova monte en charge avant de tirer
+PASS Nova balistique, impact et retrait du projectile
+PASS Les tirs sont arrêtés par le décor
+PASS Console E et réarmement en entraînement
+PASS Le défi démarre avec 15 cibles
+PASS Le chrono déclenche un résultat à 90 secondes
+PASS Écriture de la première révision du profil
+PASS Relecture des réglages, des touches et du record
+PASS Profil corrompu récupéré depuis la révision précédente
+PASS Retour aux valeurs d’origine si le profil est absent
+PASS Banque locale et boucle audio intégrale de 13,44 secondes
+PASS Menu sans ancienne session active
+RÉGRESSION OK (0)
+
+--- v2_wave_generation ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS 3 000 vagues générées, budget/caps/archétypes/paliers valides
+PASS Composition reproductible à seed, difficulté et équipe identiques
+PASS Transition réelle vers 7
+PASS Transition réelle vers 10
+PASS Transition réelle vers 20
+PASS Vague 20 permet de poursuivre avant règlement
+PASS Transition réelle vers 21
+PASS Transition réelle vers 50
+PASS Transition réelle vers 100
+PASS 100 transitions de suite, sans plafond
+PASS Règlement et défaite concurrents ne terminent qu’une fois
+
+--- v2_systems ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Achat de terrain annulé sans perte de crédits
+PASS Transaction atomique, rejeu rejeté
+PASS Solde insuffisant rejeté
+PASS Solde entier borné
+PASS Migration v2 → v3 préserve réglages, mute et touches
+PASS Ancien record conservé
+PASS La nouvelle touche Gadget respecte une ancienne affectation de G
+PASS Nouveaux champs initialisés
+PASS Bilan et progression payés une seule fois
+PASS Copie v1 conservée octet pour octet
+PASS Temporaire tronqué ignoré
+PASS Contrat quotidien encaissé une fois
+PASS Bouton de boutique permanente visible
+PASS Confirmation du déblocage
+PASS Validation via l’interface
+PASS Achat du sniper appliqué après confirmation
+PASS Équipement via l’arsenal
+PASS Achat et emplacement conservés après relecture du profil
+PASS Huit définitions d’armes
+PASS Eclipse Rail en visée
+PASS Rail avec zoom ×4
+PASS Eclipse Rail touche le robot
+PASS Sortie de la lunette après changement
+PASS Stellar Lance en visée
+PASS Lance avec zoom progressif en charge
+PASS Stellar Lance touche le robot
+PASS Sortie de la lunette après changement
+PASS Huit armes avec tir, viewmodel et audio en entraînement
+PASS Cryo Foundry · chaque spawn a une route vers le pilote
+PASS Boutique en jeu applique réellement l’achat à l’intermission
+PASS 101 vagues Infini accélérées dans la scène
+PASS Entités temporaires bornées après 101 vagues
+ENDURANCE engine_static_bytes={ 20: 54150751.0, 50: 54345141.0, 75: 54486335.0, 100: 54485937.0 }
+PASS Extraction volontaire et pièces créditées
+PASS Retour au hub après la partie Infini
+
+--- v3_feeling ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Caméra de rendu distincte du repère balistique
+PASS Souris appliquée sans amortir la direction du tir
+PASS Le rechargement manipule réellement la cellule
+PASS Annulation sans transfert de munitions
+PASS Vingt-quatre changements rapides, un seul modèle visible
+PASS Charge Nova pendant pression
+PASS Charge annulée au changement
+PASS Rail en visée ×4 et FOV amorti
+PASS Retour de lunette et de l’arme
+PASS Le plafond empêche le déploiement de la capsule
+PASS Redressement progressif après sortie du plafond
+
+--- v3_modes ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Configuration du match et sept cartes
+PASS Compte à rebours et match sans bots
+PASS Égalité au chrono sans gain permanent
+PASS Le redémarrage reproduit la graine et les règles
+PASS Un bot apparaît en chacun pour soi
+PASS Élimination et point adverse
+PASS Réapparition du pilote avec protection
+PASS Victoire à la limite de score et écran de résultat
+PASS Classement isolé par règles
+PASS Relecture du classement personnalisé
+PASS Douze bots en équipes avec effectif disponible
+PASS Équipes distinctes et tir allié neutralisé
+PASS Les bots combattent et génèrent de vrais projectiles
+PASS La présence capture la zone et marque des points
+PASS Contestation bloque le score de zone
+PASS Défaite au chrono et bilan
+PASS Domination à trois points et fin au score
+PASS Exploration et accès aux points · reactor
+PASS Exploration et accès aux points · skyline
+PASS Exploration et accès aux points · cryo
+PASS Exploration et accès aux points · bastion
+PASS Exploration et accès aux points · district
+PASS Exploration et accès aux points · grove
+PASS Exploration et accès aux points · station
+PASS Détente à cinq vagues et pression réduite
+PASS Retour au menu depuis un match
+
+--- v3_career ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS V2 préserve XP, pièces, équipement, FOV et records
+PASS Copie du profil V2 avant migration, identique octet pour octet
+PASS Achat unique et reçu local avec solde cohérent
+PASS Préréglage utilise les équipements acquis sans débit
+PASS Configuration personnelle rechargeable après redémarrage
+PASS Bilan unique et déblocage automatique de trois succès
+PASS Défi hebdomadaire encaissable une seule fois et persistant
+PASS Historique et reçus bornés
+PASS Le recul de calendrier ne renouvelle pas un gain
+PASS Match artificiellement court sans gain permanent
+ECONOMIE survival cas=20 moyenne_pieces=177.2 moyenne_xp=496.1
+PASS Simulation économique bornée · survival
+ECONOMIE short cas=20 moyenne_pieces=138.7 moyenne_xp=407.7
+PASS Simulation économique bornée · short
+ECONOMIE trial cas=20 moyenne_pieces=49.5 moyenne_xp=178.65
+PASS Simulation économique bornée · trial
+ECONOMIE classic cas=20 moyenne_pieces=45.15 moyenne_xp=160.95
+PASS Simulation économique bornée · classic
+ECONOMIE capture cas=20 moyenne_pieces=53.2 moyenne_xp=184.8
+PASS Simulation économique bornée · capture
+PASS Interpolation, angles courts et stabilisation après perte de snapshots
+PASS Déplacement discontinu réinitialise le tampon
+PASS Enveloppes réseau mal formées rejetées avant lecture
+PASS Le journal relance exactement les règles solo
+
+--- v3_field ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS 200 définitions déterministes, douze thèmes et quatre mutateurs
+PASS Réglages du stand accessibles depuis Pause
+PASS Cible fixe positionnée à huit mètres
+PASS Le chronomètre termine l’exercice
+PASS Quatre cibles aériennes, huit armes et réinitialisation
+PASS Objectif optionnel accorde ses crédits une fois
+PASS Le relais ne donne plus de crédits après stabilisation
+PASS Choix de renforts plus rapides et prime de risque
+PASS Éclairage d’urgence conserve routes et collisions
+PASS Les étincelles facultatives sont désactivables
+PASS L’indication de zone reste disponible sans étincelles
+PASS La finition Aurore est verrouillée avant la vague 50
+PASS Paliers 25/50/75/100 et finition du mode Infini
+
+--- v3_touch ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Profil mobile Ultra Léger au premier lancement
+PASS Trois doigts bougent, visent et tirent simultanément
+PASS Le doigt de tir garde sa fonction hors du bouton
+PASS Annulation système relâche le tir
+PASS Relâchement du joystick sans déplacement bloqué
+PASS Changement d’arme au toucher
+PASS Visée et zoom du Rail au toucher
+PASS Pause tactile libère tous les doigts
+PASS Disposition gaucher miroite la zone de déplacement
+PASS Disposition persistante et sauvegarde en arrière-plan
+PASS Suspension pendant une partie préserve une reprise manuelle
+PASS Reprise tactile après retour à l’application
+
+--- survival ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+WAVE 1 score=746 hull=100.0 combo=4
+WAVE 2 score=1882 hull=100.0 combo=5
+WAVE 3 score=3317 hull=100.0 combo=5
+WAVE 4 score=5079 hull=100.0 combo=6
+WAVE 5 score=7913 hull=100.0 combo=6
+WAVE 6 score=10313 hull=100.0 combo=6
+WAVE 7 score=13142 hull=100.0 combo=6
+WAVE 8 score=16071 hull=100.0 combo=6
+WAVE 9 score=19293 hull=100.0 combo=6
+WAVE 10 score=24941 hull=100.0 combo=6
+WAVE 11 score=28740 hull=100.0 combo=6
+WAVE 12 score=32604 hull=100.0 combo=6
+WAVE 13 score=36932 hull=100.0 combo=6
+WAVE 14 score=41400 hull=100.0 combo=6
+WAVE 15 score=48708 hull=100.0 combo=6
+WAVE 16 score=53725 hull=100.0 combo=6
+WAVE 17 score=59075 hull=100.0 combo=6
+WAVE 18 score=64602 hull=100.0 combo=6
+WAVE 19 score=70597 hull=100.0 combo=6
+PASS Survie complète, victoire en 20 vagues
+PASS Toutes les intermissions ont été jouées
+PASS Paliers de boss rencontrés
+PASS Trois phases du Warden atteintes
+PASS Score, crédits et tirs réels comptabilisés
+PASS Achats de terrain et bilan validés
+MATCH survival / cryo / discovery kills=164 shots=599 hits=574 time=140.433333333337 HP minimum=100.0 score=80944
+
+--- short ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+WAVE 1 score=758 hull=100.0 combo=4
+WAVE 2 score=1900 hull=100.0 combo=5
+WAVE 3 score=3335 hull=100.0 combo=5
+WAVE 4 score=5091 hull=100.0 combo=6
+WAVE 5 score=7879 hull=100.0 combo=6
+WAVE 6 score=10279 hull=100.0 combo=6
+WAVE 7 score=13105 hull=100.0 combo=6
+WAVE 8 score=16034 hull=100.0 combo=6
+WAVE 9 score=19268 hull=100.0 combo=6
+PASS Survie complète, victoire en 10 vagues
+PASS Toutes les intermissions ont été jouées
+PASS Paliers de boss rencontrés
+PASS Trois phases du Warden atteintes
+PASS Score, crédits et tirs réels comptabilisés
+PASS Achats de terrain et bilan validés
+MATCH short / skyline / discovery kills=65 shots=229 hits=220 time=65.0833333333309 HP minimum=100.0 score=24624
+
+--- trial ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Défi complet, les 15 cibles avant 90 secondes
+PASS Tirs et impacts réels du défi
+MATCH trial / reactor / discovery kills=15 shots=89 hits=86 time=17.9666666666669 HP minimum=100.0 score=5594
+
+--- boss_rush ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+WAVE 1 score=1310 hull=100.0 combo=4
+WAVE 2 score=4631 hull=100.0 combo=4
+WAVE 3 score=8691 hull=100.0 combo=5
+PASS Boss Rush complet et récompenses enregistrées
+PASS Les quatre boss et les trois ravitaillements ont été joués
+MATCH boss_rush / reactor / discovery kills=19 shots=211 hits=205 time=40.7833333333323 HP minimum=100.0 score=13854
+
+--- version ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Connexion refusée proprement
+PASS Motif du refus communiqué
+
+--- password ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Connexion refusée proprement
+PASS Motif du refus communiqué
+
+--- coop-2-host ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Port invalide rejeté
+PASS Hébergement ouvert depuis le lobby
+HOST READY
+PASS Pilotes prêts
+PASS Même arène et pilotes autoritaires
+PASS Entrées des clients déplacent tous les pilotes côté hôte
+PASS Les achats distants restent personnels
+PASS Un débit et un seul effet par client
+PASS Vague 6 réellement combattue, mini-boss franchi
+PASS Le pilote a réellement touché un robot côté serveur
+PASS Le pilote a réellement touché un robot côté serveur
+PASS Reprise de la vague 7
+PASS Client retiré en plein combat
+PASS Reconnexion pendant la boutique
+PASS La reconnexion restitue les crédits et l’amélioration au bon pilote
+PASS Bilan de l’hôte
+PASS Progression coop enregistrée sur l’hôte
+NET_METRICS pilots=2 snapshot_peak=459 snapshot_avg=332 engine_static_bytes=58055025 kills=50
+PASS Fermeture par l’hôte
+
+--- coop-2-version ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Connexion refusée proprement
+PASS Motif du refus communiqué
+
+--- coop-2-password ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Connexion refusée proprement
+PASS Motif du refus communiqué
+
+--- coop-2-rejoin ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Connexion via l’interface
+PASS Lancement reçu
+PASS Carte commune et avatar 3D de l’hôte
+PASS Mouvement retourné par l’hôte
+PASS Robots, tirs et éliminations reçus en vague 6
+PASS Reçu et portefeuille synchronisés
+PASS Vague 7 synchronisée
+PASS Connexion via l’interface
+PASS Retour dans la même partie et amélioration conservée
+PASS Bilan reçu de l’hôte
+PASS Bilan autoritaire et progression locale
+PASS Fin de connexion de l’hôte
+PASS Retour au salon sans état résiduel
+
+--- version ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Connexion refusée proprement
+PASS Motif du refus communiqué
+
+--- password ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Connexion refusée proprement
+PASS Motif du refus communiqué
+
+--- coop-4-host ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Port invalide rejeté
+PASS Hébergement ouvert depuis le lobby
+HOST READY
+PASS Pilotes prêts
+PASS Même arène et pilotes autoritaires
+PASS Entrées des clients déplacent tous les pilotes côté hôte
+PASS Les achats distants restent personnels
+PASS Un débit et un seul effet par client
+PASS Un débit et un seul effet par client
+PASS Un débit et un seul effet par client
+PASS Vague 6 réellement combattue, mini-boss franchi
+PASS Le pilote a réellement touché un robot côté serveur
+PASS Le pilote a réellement touché un robot côté serveur
+PASS Le pilote a réellement touché un robot côté serveur
+PASS Le pilote a réellement touché un robot côté serveur
+PASS Reprise de la vague 7
+PASS Client retiré en plein combat
+PASS Reconnexion pendant la boutique
+PASS La reconnexion restitue les crédits et l’amélioration au bon pilote
+PASS Bilan de l’hôte
+PASS Progression coop enregistrée sur l’hôte
+NET_METRICS pilots=4 snapshot_peak=691 snapshot_avg=462 engine_static_bytes=58573845 kills=65
+PASS Fermeture par l’hôte
+
+--- coop-4-version ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Connexion refusée proprement
+PASS Motif du refus communiqué
+
+--- coop-4-password ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Connexion refusée proprement
+PASS Motif du refus communiqué
+
+--- coop-4-rejoin ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Connexion via l’interface
+PASS Lancement reçu
+PASS Carte commune et avatar 3D de l’hôte
+PASS Mouvement retourné par l’hôte
+PASS Robots, tirs et éliminations reçus en vague 6
+PASS Reçu et portefeuille synchronisés
+PASS Vague 7 synchronisée
+PASS Connexion via l’interface
+PASS Retour dans la même partie et amélioration conservée
+PASS Bilan reçu de l’hôte
+PASS Bilan autoritaire et progression locale
+PASS Fin de connexion de l’hôte
+PASS Retour au salon sans état résiduel
+
+--- coop-4-client-2 ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Connexion via l’interface
+PASS Lancement reçu
+PASS Carte commune et avatar 3D de l’hôte
+PASS Mouvement retourné par l’hôte
+PASS Robots, tirs et éliminations reçus en vague 6
+PASS Reçu et portefeuille synchronisés
+PASS Vague 7 synchronisée
+PASS Bilan reçu de l’hôte
+PASS Bilan autoritaire et progression locale
+PASS Fin de connexion de l’hôte
+PASS Retour au salon sans état résiduel
+
+--- coop-4-client-3 ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Connexion via l’interface
+PASS Lancement reçu
+PASS Carte commune et avatar 3D de l’hôte
+PASS Mouvement retourné par l’hôte
+PASS Robots, tirs et éliminations reçus en vague 6
+PASS Reçu et portefeuille synchronisés
+PASS Vague 7 synchronisée
+PASS Bilan reçu de l’hôte
+PASS Bilan autoritaire et progression locale
+PASS Fin de connexion de l’hôte
+PASS Retour au salon sans état résiduel
+
+--- dedicated-host ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+COOP dedicated UDP 47142 · { "map": "skyline", "mode": "short", "difficulty": "discovery", "seed": 0 }
+MATCH started with 2 players
+MATCH complete wave=0 score=0
+COOP dedicated ready
+
+--- dedicated-client-1 ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Connexion via l’interface
+PASS Démarrage du serveur headless sans joueur hôte
+PASS Deux pilotes connectés à Skyline, partie courte
+PASS Apparition d’un robot sur le serveur dédié
+
+--- dedicated-client-2 ---
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Connexion via l’interface
+PASS Démarrage du serveur headless sans joueur hôte
+PASS Deux pilotes connectés à Skyline, partie courte
+PASS Apparition d’un robot sur le serveur dédié

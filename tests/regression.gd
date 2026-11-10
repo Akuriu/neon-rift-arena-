@@ -36,7 +36,10 @@ func run() -> void:
 	press("Paramètres")
 	check(app.screen == "settings" and paused, "Paramètres accessibles pendant la partie")
 	app.settings.tabs[1].pressed.emit()
-	check(app.settings.active == 1 and app.settings.entries.get_child_count() == 5, "Onglet Audio et bouton d’écoute")
+	var listen := false
+	for button in app.settings.entries.find_children("*", "Button", true, false):
+		listen = listen or button.text == "Écouter une impulsion"
+	check(app.settings.active == 1 and listen, "Onglet Audio et bouton d’écoute")
 	prefs.change_value("master", 0.0)
 	check(AudioServer.is_bus_mute(0), "Le volume général agit sur la sortie")
 	prefs.change_value("master", 0.5)
@@ -225,9 +228,10 @@ func save_tests() -> void:
 	DirAccess.remove_absolute(prefs.profile_file(prefs.BACKUP))
 	prefs.load_disk()
 	check(prefs.values.fov == 82.0 and prefs.keys.forward == KEY_Z, "Retour aux valeurs d’origine si le profil est absent")
-	check(sounds.bank.size() == 41 and sounds.bank.pulse.data.size() > 1000 \
+	check(sounds.bank.size() == 45 and sounds.bank.pulse.data.size() > 1000 \
 		and sounds.bank.combat.loop_mode == AudioStreamWAV.LOOP_FORWARD \
-		and absf(sounds.bank.combat.loop_end / float(sounds.bank.combat.mix_rate) - 13.44) < 0.025,
+		and absf(sounds.bank.combat.loop_end / float(sounds.bank.combat.mix_rate) - 13.44) < 0.025 \
+		and sounds.bank.pressure.loop_mode == AudioStreamWAV.LOOP_FORWARD,
 		"Banque locale et boucle audio intégrale de 13,44 secondes")
 
 func press(fragment: String) -> void:

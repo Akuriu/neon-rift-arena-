@@ -1,58 +1,65 @@
-# NEON RIFT ARENA 2.0 — UPRISING
+# NEON RIFT ARENA V3 · COMPLETE REFORGE
 
-FPS d’arène 3D en français. Combattez les robots en solo ou avec deux à quatre pilotes, équipez-vous entre les vagues et débloquez des armes au hangar.
+FPS d’arène hors ligne et en coop privée pour 2 à 4 joueurs. Cette version part des sources Godot de la V2 et conserve ses armes, sa progression locale, ses boss, son serveur dédié et ses modes.
 
-## Jouer sous Windows
+## Jouer
 
-1. Décompressez **NEON_RIFT_ARENA_V2_Windows_x64.zip**.
-2. Double-cliquez sur **NeonRiftArenaV2.exe** dans le dossier extrait. Le moteur et les ressources du jeu sont intégrés.
+- **Windows x64.** Décompressez l’archive Windows dans un dossier puis ouvrez **NeonRiftArenaV3.exe**. Le jeu est contenu dans l’exécutable.
+- **Projet.** Décompressez l’archive des sources, importez **project.godot** dans **Godot 4.6.3 Standard**, puis appuyez sur **F5**. Le paquet **build/NeonRiftArenaV3.pck** peut aussi être lancé via **JOUER_WINDOWS.bat** avec le moteur Godot.
+- **Android.** L’APK de débogage est une application Godot native en paysage avec commandes tactiles. Consultez [l’installation et les limites de validation](docs/ANDROID_PORT.md).
 
-Pour modifier le jeu, décompressez **NEON_RIFT_ARENA_V2_Sources.zip**, importez **project.godot** dans Godot **4.6.3 Standard** puis lancez avec **F5**. Le paquet **build/NeonRiftArenaV2.pck** peut aussi être ouvert en glissant l’exécutable Godot sur **JOUER_WINDOWS.bat**.
+Le solo fonctionne sans connexion et conserve sa progression entre les parties. Les **CR** de terrain expirent à la fin d’une opération. Les **pièces du pilote** et l’XP sont enregistrées dans le profil local à la clôture.
 
-## Parties
+## Modes
 
-| Mode | Objectif |
-| --- | --- |
-| Survie 20 | Vaincre les quatre boss, puis encaisser la victoire ou continuer avec le même équipement en Infini |
-| Survie 10 | Terminer un format court avec deux boss |
-| Infini | Tenir le plus longtemps possible et encaisser le bilan à l’intermission |
-| Défi chronométré | Éliminer 15 robots en 90 secondes |
-| Boss Rush | Vaincre les quatre boss et leur escorte sur quatre manches |
-| Entraînement | Essayer les huit armes et réarmer les cibles à la console de départ |
-| Coop | Héberger ou rejoindre Survie 20, Survie 10 ou Infini par IP et port UDP |
+| Mode | Fonctionnement |
+|---|---|
+| Survie 20 | Vingt vagues, quatre boss et choix d’extraction ou de prolongation en Infini |
+| Survie 10 | Dix vagues avec ravitaillement et deux boss |
+| Infini | Renforts continus, mutateurs et paliers 25, 50, 75, 100. Extraction entre deux vagues |
+| Défi chronométré | Quinze robots en 90 secondes |
+| Boss Rush | Quatre boss et trois ravitaillements |
+| Entraînement | Huit armes en prêt. Dans Pause, sélectionnez des cibles fixes, mobiles ou aériennes, une distance et un chrono |
+| FPS Classique | Match chacun pour soi contre bots. Sélection du score, du temps, de la graine et de l’effectif |
+| Équipes | Escarmouche avec alliés, adversaires, score d’équipe et réapparition |
+| Capture et Domination | Un point ou trois points de contrôle avec contestation |
+| Exploration et Détente | Visite libre des arènes ou cinq vagues à rythme modéré. Sessions libres |
 
-Choisissez **Reactor Court**, **Skyline Depot** ou **Cryo Foundry**. Une graine facultative reproduit les compositions à carte, difficulté et taille d’équipe identiques.
+Reactor Court, Skyline Depot et Cryo Foundry restent accessibles. Bastion Relay, Meridian District, Ashgrove Ruins et Transit Hall ajoutent une base, une place urbaine, des ruines en forêt et une station couverte. La sélection montre une capture issue de chaque carte.
 
-## Équipement et progression
+Le style **Classique / Normal** est actif au premier lancement. **Néon raffiné**, **Cinématique** et **Arcade coloré** sont accessibles dans le menu et les paramètres. Le style est indépendant des règles de match.
 
-Les **crédits de partie** achètent soins, munitions et améliorations à l’intermission. Les **pièces du pilote**, versées au bilan et pour les contrats, achètent des armes, gadgets, modules et apparences au hangar. Les achats permanents et les quatre emplacements sont sauvegardés. Le bouton **Tester au stand** prête une arme verrouillée.
+## Commandes et confort
 
-**ZQSD** par défaut, souris pour viser, clic gauche pour tirer, clic droit pour la lunette. **1–4** ou molette sélectionnent l’arme. La molette choisit ×2 ou ×4 pendant la visée de l’Eclipse Rail. Maintenez puis relâchez le clic gauche pour tirer avec la Nova ou la Stellar Lance. **R** recharge, **G** active le gadget, **I** inspecte l’arme, **E** interagit et **Tab** affiche le journal. [Commandes complètes](docs/CONTROLS.md)
+| Action | Clavier et souris |
+|---|---|
+| Se déplacer | ZQSD ou WASD selon la disposition |
+| Regarder, tirer, viser | Souris, clic gauche, clic droit |
+| Saut, sprint, accroupissement | Espace, Maj, Ctrl |
+| Recharger, interagir, gadget | R, E, G |
+| Armes, zoom du Rail | 1–4 ou molette. En visée Rail, molette pour ×2 / ×4 |
+| Inspecter, journal, pause | I, Tab, Échap |
 
-Les réglages, records et déblocages sont dans **%APPDATA%\NeonRiftArena\pilot_profile.json** sur Windows. La première écriture V2 garde une copie du profil V1 dans **pilot_profile.v1.json**. Les scores historiques restent associés à leur mode et leur arène.
+Les paramètres permettent de réassigner le clavier et de régler le FOV, le contraste, le HUD, la lunette, la sensibilité, les mouvements de caméra, les effets et les volumes. Sur Android, utilisez **Paramètres → Tactile → Modifier la disposition** pour déplacer et redimensionner chaque commande. Le profil mobile démarre en Ultra Léger, à 45 images par seconde maximum.
 
-## Coop et réglages vidéo
+## Profil, arsenal et boutiques
 
-Ouvrez **Coop · 2–4**. Un pilote héberge, les autres entrent son adresse IP et le port affiché. Le port par défaut est **24562 UDP**. L’hôte choisit la carte, le mode et la difficulté. Chaque pilote indique qu’il est prêt. [Connexion et serveur dédié](docs/NETWORKING.md)
+La boutique du pilote présente les armes en 3D, leurs caractéristiques, leur maîtrise et leur comparaison avec l’emplacement choisi. Les armes sont essayables au stand. La configuration rapide équipe les objets possédés, avec quatre préréglages et une configuration personnelle enregistrable.
 
-Pour un portable modeste, choisissez **Ultra faible**, **960 × 540** et **30 FPS** dans **Paramètres → Vidéo**. Le HUD garde sa résolution. Les temps d’image et l’environnement mesurés sont détaillés dans le [rapport de performance](docs/V2_PERFORMANCE.md).
+Le profil regroupe statistiques par mode, contrats quotidiens, défi hebdomadaire, succès, 32 bilans rejouables et 48 reçus. La migration préserve le profil V2 et crée une copie `pilot_profile.v2.json` au premier enregistrement. Godot utilise `user://`. Sous Windows, le dossier de profil est habituellement `%APPDATA%\NeonRiftArena`.
+
+## Coop privée
+
+Choisissez **Coop**, hébergez un salon ou entrez l’adresse et le port de l’hôte. Les pilotes se déclarent prêts avant le départ. Les modes Survie, Patrouille et Infini restent disponibles. L’hôte arbitre les vagues, dégâts et achats. Tous les joueurs utilisent le protocole V3. Voir [connexion locale et serveur dédié](docs/V3_NETWORK.md).
 
 ## Vérifier et reconstruire
 
-Depuis la racine du projet, avec Godot 4.6.3 et Python 3 accessibles en ligne de commande.
-
 ```sh
-python tools/run_tests.py --godot godot
+python3 tools/run_tests.py --suite all
+godot --headless --path . --export-release "Windows x64" build/NeonRiftArenaV3.exe
+godot --headless --path . --export-debug Android build/NEON_RIFT_ARENA_V3_Android_debug.apk
 ```
 
-L’option `--godot` accepte le chemin de Godot. Les tests créent des profils temporaires séparés. Les suites `solo`, `coop2`, `coop4` et `dedicated` peuvent être lancées avec `--suite`.
+Créez le dossier `build` et installez les modèles d’export **4.6.3 Standard** avant de reconstruire. Python 3 sert uniquement au banc de tests. Pour les tests avec interface et son, voir [la validation](docs/V3_QA_REPORT.md). Pour reprendre le développement et l’historique Git, voir [le passage de relais](docs/V3_HANDOFF.md).
 
-Pour reconstruire l’exécutable, installez les modèles d’export 4.6.3 dans Godot puis exportez le préréglage **Windows x64** en mode release.
-
-```sh
-godot --headless --path . --editor --import
-godot --headless --path . --export-pack "Windows x64" build/NeonRiftArenaV2.pck
-godot --headless --path . --export-release "Windows x64" build/NeonRiftArenaV2.exe
-```
-
-[Rapport de build](BUILD_REPORT.md) · [Validation](docs/V2_QA_REPORT.md) · [Changements](CHANGELOG.md) · [Crédits](CREDITS.md)
+[221 étapes](docs/V3_RAPPORT_221.md) · [Performances](docs/V3_PERFORMANCE.md) · [Direction artistique](docs/V3_ART_DIRECTION.md) · [Changements V3](CHANGELOG_V3.md) · [Crédits](CREDITS.md)

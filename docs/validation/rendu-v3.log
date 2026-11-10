@@ -1,0 +1,20 @@
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+WARNING: Could not set V-Sync mode, as changing V-Sync mode is not supported by the graphics driver.
+     at: set_use_vsync (platform/linuxbsd/x11/gl_manager_x11.cpp:364)
+OpenGL API 4.5 (Core Profile) Mesa 25.0.7-2+deb13u1 - Compatibility - Using Device: Mesa - llvmpipe (LLVM 19.1.7, 256 bits)
+
+PASS Clic dans la fenêtre sur Jouer
+PASS Démarrage et capture souris
+PASS La souris contrôle le lacet et la hauteur de visée
+PASS Échap libère la souris et suspend la simulation
+PASS La fenêtre et la surface rendue passent à 960 × 540
+PASS Le mode plein écran est demandé au pilote d’affichage
+PASS Retour au fenêtré 1280 × 720
+PASS Signal audio réellement mixé
+AUDIO frames=4096 peak=0.44487991929054
+PASS Reprise et nouvelle capture du curseur
+PASS Image de jeu 1280 × 720 rendue
+PASS Le lobby coop est accessible à la souris
+PASS La boutique du hub est accessible à la souris
+PASS Cryo Foundry et lunette rendues dans la fenêtre
+PASS Ravitaillement et monnaie visibles en 720p

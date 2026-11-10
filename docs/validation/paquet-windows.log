@@ -1,0 +1,14 @@
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+WARNING: Could not set V-Sync mode, as changing V-Sync mode is not supported by the graphics driver.
+     at: set_use_vsync (platform/linuxbsd/x11/gl_manager_x11.cpp:364)
+OpenGL API 4.5 (Core Profile) Mesa 25.0.7-2+deb13u1 - Compatibility - Using Device: Mesa - llvmpipe (LLVM 19.1.7, 256 bits)
+
+PASS Version exportée 3.0.0
+PASS Scène d’entrée et gestionnaire coop dans le paquet
+PASS Interface coop dans le paquet
+PASS Boutique et aperçu dans le paquet
+PASS Cryo Foundry et cibles chargées
+PASS Eclipse Rail équipé
+PASS Le paquet tire et ouvre sa lunette
+PASS 45 échantillons audio chargés depuis le paquet
+PASS Domination, bots et carte Transit Hall chargés depuis le paquet

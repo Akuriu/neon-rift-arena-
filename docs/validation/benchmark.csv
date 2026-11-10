@@ -1,0 +1,5 @@
+version,preset,width,height,scale,units,frames,median_ms,p95_ms,p99_ms,median_draw_calls,engine_static_mib,renderer
+V2,Faible,1280,720,0.76,9,180,24.13,28.92,34.78,235,47.7,Mesa llvmpipe
+V3,Faible,1280,720,0.76,9,180,25.42,32.10,50.03,243,50.7,Mesa llvmpipe
+V2,Ultra faible,960,540,0.64,7,180,16.13,21.24,23.85,226,49.1,Mesa llvmpipe
+V3,Ultra faible,960,540,0.64,7,180,17.10,21.46,25.48,232,51.7,Mesa llvmpipe
