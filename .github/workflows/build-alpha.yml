@@ -82,6 +82,7 @@ jobs:
           apk="$dist/RifleArena_Android_alpha.apk"
           signing_file="$RUNNER_TEMP/rifle-alpha.keystore"
           apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          expected_package=com.riflearena.alpha
           trap 'rm -f -- "$signing_file"' EXIT
           godot --headless --export-release 'Windows x64' "$exe"
           if [[ "$RIFLE_SIGNED" == true ]]; then
@@ -115,14 +116,20 @@ jobs:
             export GODOT_ANDROID_KEYSTORE_DEBUG_PATH="$signing_file"
             export GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey
             export GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android
+            [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]]
+            [[ "$GITHUB_RUN_ATTEMPT" =~ ^[0-9]+$ ]]
+            preview_package="com.riflearena.preview.r$GITHUB_RUN_ID.a$GITHUB_RUN_ATTEMPT"
+            expected_package="$preview_package"
             cp export_presets.cfg "$RUNNER_TEMP/export-presets.original"
-            sed -i 's|^package/unique_name="com\.riflearena\.alpha"$|package/unique_name="com.riflearena.preview"|;
-              s|^package/name="Rifle Arena Alpha"$|package/name="Rifle Arena Preview"|' export_presets.cfg
+            sed -i "s|^package/unique_name=\"com\.riflearena\.alpha\"$|package/unique_name=\"$preview_package\"|;
+              s|^package/name=\"Rifle Arena Alpha\"$|package/name=\"Rifle Arena Preview\"|" export_presets.cfg
             godot --headless --export-debug Android "$apk"
             mv "$RUNNER_TEMP/export-presets.original" export_presets.cfg
           fi
           file "$exe" | grep -E 'PE32\+.*x86-64'
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump badging "$apk" > "$RUNNER_TEMP/apk-metadata.txt"
+          grep -F "package: name='$expected_package'" "$RUNNER_TEMP/apk-metadata.txt"
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 "$apk"
           unzip -tq "$apk"
           unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"
@@ -178,7 +185,7 @@ jobs:
           export ANDROID_AVD_HOME="$RUNNER_TEMP/rifle-avd"
           mkdir -p "$ANDROID_AVD_HOME"
           df -m "$RUNNER_TEMP"
-          "$sdk_tools/sdkmanager" emulator "$image"
+          "$sdk_tools/sdkmanager" emulator "$image" 'build-tools;36.0.0'
           printf 'no\n' | "$sdk_tools/avdmanager" create avd --force --name rifle-ci --package "$image" \
             --path "$ANDROID_AVD_HOME/rifle-ci.avd"
           avd_config="$ANDROID_AVD_HOME/rifle-ci.avd/config.ini"
@@ -211,14 +218,16 @@ jobs:
             sleep 2
           done
           if [[ $booted != true ]]; then cat "$RUNNER_TEMP/emulator.log"; exit 1; fi
-          package=com.riflearena.preview
+          package=$("$ANDROID_HOME/build-tools/36.0.0/aapt2" dump badging RifleArena_Android_alpha.apk |
+            sed -n "s/^package: name='\([^']*\)'.*/\1/p")
           sha256sum --check SHA256SUMS
           if [[ "$RIFLE_SIGNED" == true ]]; then
-            package=com.riflearena.alpha
+            [[ "$package" == com.riflearena.alpha ]]
             test -s prior/previous.apk
             "$adb" install --no-incremental prior/previous.apk
             "$adb" install --no-incremental -r RifleArena_Android_alpha.apk
           else
+            [[ "$package" =~ ^com\.riflearena\.preview\.r[0-9]+\.a[0-9]+$ ]]
             "$adb" install --no-incremental RifleArena_Android_alpha.apk
           fi
           "$adb" shell wm dismiss-keyguard
