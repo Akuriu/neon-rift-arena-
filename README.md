@@ -43,3 +43,7 @@ Après les essais matériels du [suivi QA](docs/V0.0.6_QA.md), renseigner la var
 [Journal des changements](CHANGELOG.md) · [Suivi des essais v0.0.6](docs/V0.0.6_QA.md)
 
 Voir les [crédits et licences](CREDITS.md).
+
+Les derniers builds de contrôle Android portent le nom **Rifle Arena Preview** et un paquet unique par build/tentative. Ils s’installent à côté de l’Alpha et des anciennes Preview. Chaque installation conserve ses propres données ; aucun transfert automatique de progression n’est annoncé. Conservez l’Alpha et sa sauvegarde jusqu’à validation d’une mise à jour signée.
+
+[État des 240 étapes v0.0.7](docs/V0.0.7_STATUS_240.md) · [Validations et téléchargements des jalons](docs/V0.0.7_VALIDATION.md).

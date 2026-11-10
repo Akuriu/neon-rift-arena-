@@ -12,6 +12,7 @@
 - Descriptions des menus corrigées, avec une largeur minimale pour le retour à la ligne.
 - Menu Jouer en cartes et palette Classic Sand.
 - Profil schéma 6 avec copie v5 avant migration.
+- APK Preview isolée par build et tentative : installation à côté des anciennes Preview sans conflit de certificat.
 - Build Preview uniquement : les validations matérielles et la signature stable restent requises avant publication.
 
 ## v0.0.6-alpha
