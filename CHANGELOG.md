@@ -1,5 +1,12 @@
 # Rifle Arena
 
+## v0.0.7-alpha
+
+- Gun Game local : huit équipements en prêt, progression des bots, victoire au dernier palier, bilan et classement séparé.
+- Menu Jouer en cartes et palette Classic Sand.
+- Profil schéma 6 avec copie v5 avant migration.
+- Build Preview uniquement : les validations matérielles et la signature stable restent requises avant publication.
+
 ## v0.0.6-alpha
 
 - HUD tactile compact avec six commandes de combat, compteur de munitions tactile, objectif et chronomètre regroupés.

@@ -18,6 +18,7 @@ const Coop := preload("res://network/coop.gd")
 const Lobby := preload("res://ui/lobby.gd")
 const Rules := preload("res://game/modes/rules.gd")
 const ClassicSetup := preload("res://ui/screens/classic_setup.gd")
+const PlayMenu := preload("res://ui/screens/play.gd")
 const TouchLayer := preload("res://ui/mobile/touch_layer.gd")
 const TouchEditor := preload("res://ui/mobile/editor.gd")
 const CareerView := preload("res://ui/screens/career.gd")
@@ -305,15 +306,9 @@ func _home_link(rect: Rect2, title: String, icon: String, action: Callable, prim
 func play_menu() -> void:
 	_new_screen("play")
 	_header("RIFLE ARENA / JOUER", "Choisir un mode", "Choisissez une partie solo, un entraînement ou un salon coop.")
-	_play_card(Rect2(57, 217, 574, 168), "Match contre les bots",
-		"Chacun pour soi, équipes,\ncapture et domination.", "reactor", "01  /  MATCH", open_classic, true)
-	_play_card(Rect2(649, 217, 574, 168), "Survie",
-		"Vagues, défis, boss\net ravitaillement.", "cryo", "02  /  VAGUES", select_session)
-	_play_card(Rect2(57, 403, 574, 168), "Entraînement",
-		"Essayez les huit armes\nsur des cibles.", "district", "03  /  STAND DE TIR",
-		func(): begin("training", selected_difficulty, selected_map))
-	_play_card(Rect2(649, 403, 574, 168), "Coop",
-		"Hébergez ou rejoignez\nune partie de 2 à 4.", "skyline", "04  /  EN LIGNE", open_lobby)
+	PlayMenu.new().build(view, {"gungame": open_classic.bind("gungame"), "classic": open_classic,
+		"survival": select_session, "coop": open_lobby,
+		"training": func(): begin("training", selected_difficulty, selected_map)})
 	_home_link(Rect2(57, 593, 166, 53), "Retour", "back", menu)
 	_footer("Parties locales et salons privés")
 
@@ -405,18 +400,21 @@ func _dedicated(arguments: PackedStringArray) -> void:
 		printerr(coop.status)
 		get_tree().quit(2)
 
-func open_classic() -> void:
+func open_classic(variant := "classic") -> void:
 	var initial := {}
-	if Rules.LABELS.has(last_mode):
+	if Rules.LABELS.has(last_mode) and (last_mode == "gungame") == (variant == "gungame"):
 		initial = {"mode": last_mode, "rules": last_rules, "seed": last_seed}
+	elif variant == "gungame":
+		initial = {"mode": "gungame", "rules": {"duration": 180}}
 	_drop_session()
 	_make_backdrop()
 	_free_cursor()
 	_new_screen("classic")
-	_header("Jouer", "Match contre les bots", "Choisissez une carte, un format et le nombre de bots.")
+	_header("Jouer", "Gun Game" if variant == "gungame" else "Match contre les bots",
+		"Huit armes en prêt, huit éliminations pour gagner." if variant == "gungame" else "Choisissez une carte, un format et le nombre de bots.")
 	classic_setup = ClassicSetup.new()
 	classic_setup.build(view, last_map if not initial.is_empty() else selected_map,
-		last_difficulty if not initial.is_empty() else selected_difficulty, initial, _start_classic, play_menu)
+		last_difficulty if not initial.is_empty() else selected_difficulty, initial, _start_classic, play_menu, variant == "gungame")
 	_footer("SCORE LOCAL   /   LES RÈGLES DU MATCH DÉFINISSENT LE CLASSEMENT")
 
 func _start_classic(mode: String, difficulty: String, map_id: String, seed: int, rules: Dictionary) -> void:
@@ -937,7 +935,7 @@ func _result(victory: bool, owner: Node3D) -> void:
 	else:
 		Palette.button(view, Rect2(57, 552, 305, 57), "REJOUER     ›", _restart, true).grab_focus()
 		if Rules.LABELS.has(last_mode) and reward.ok:
-			Palette.button(view, Rect2(642, 552, 280, 57), "Modifier les règles", open_classic)
+			Palette.button(view, Rect2(642, 552, 280, 57), "Modifier les règles", open_classic.bind(last_mode))
 	Palette.button(view, Rect2(377, 552, 246, 57), "Retour au menu", menu)
 	_footer("RAPPORT D’OPÉRATION   /   CLASSEMENT PAR MODE, DIFFICULTÉ ET ARÈNE")
 

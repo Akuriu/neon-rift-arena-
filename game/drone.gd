@@ -7,6 +7,7 @@ signal eliminated(drone: CharacterBody3D, points: int)
 const Catalog := preload("res://game/catalog.gd")
 const Models := preload("res://game/robot_models.gd")
 const Operator := preload("res://art/operator.gd")
+const Arms := preload("res://game/weapons/catalog.gd")
 
 enum State { ARRIVAL, CHASE, TELL, RECOVER, DEAD }
 var state := State.ARRIVAL
@@ -57,6 +58,8 @@ var arena_side := 1
 var last_attacker: CharacterBody3D
 var operator: Operator
 var visual_wait := 0.0
+var match_weapon := -1
+var match_rounds := 0
 
 func major() -> bool:
 	return kind in ["warden", "colossus", "architect"]
@@ -102,7 +105,7 @@ func _ready() -> void:
 		operator.animate(0.016, Vector3.ZERO, 0.0, 0.0, 0, 0.0)
 	paint = lens.material_override.duplicate()
 	lens.material_override = paint
-	if arena_slot >= 0 and session.mode != "classic":
+	if arena_slot >= 0 and session.mode not in ["classic", "gungame"]:
 		var badge := Label3D.new()
 		badge.position.y = 1.8
 		badge.font_size = 21
@@ -115,6 +118,18 @@ func _ready() -> void:
 
 func center() -> Vector3:
 	return global_position + Vector3.UP * (1.53 if major() else 1.02)
+
+func equip_match_weapon(index: int) -> void:
+	match_weapon = index
+	var weapon: Dictionary = Arms.WEAPONS[index]
+	match_rounds = weapon.mag
+	spec = spec.duplicate()
+	spec.damage = weapon.damage
+	spec.range = minf(weapon.range, 32.0)
+	spec.tell = maxf(0.16, weapon.cadence * 0.45)
+	spec.rest = maxf(0.12, weapon.cadence)
+	if operator != null:
+		operator.set_weapon(index)
 
 func aim_point() -> Vector3:
 	return center()
@@ -309,7 +324,7 @@ func _begin_tell() -> void:
 	attack_number += 1
 	timer = spec.tell * tuning.tempo
 	aim_at = target.aim_point()
-	wave_attack = kind in ["disruptor", "artillery"] or (major() and (phase >= 2 or kind == "architect") and attack_number % 2 == 0)
+	wave_attack = match_weapon < 0 and (kind in ["disruptor", "artillery"] or (major() and (phase >= 2 or kind == "architect") and attack_number % 2 == 0))
 	if wave_attack:
 		var floor_at: Vector3 = target.global_position
 		var support: Dictionary = session.ray(floor_at + Vector3.UP * 0.15, floor_at - Vector3.UP * 4.0, 1)
@@ -326,6 +341,9 @@ func _begin_tell() -> void:
 
 func attack() -> void:
 	if training:
+		return
+	if match_weapon >= 0:
+		_match_attack()
 		return
 	fired += 1
 	flash_attack()
@@ -382,6 +400,31 @@ func attack() -> void:
 		session.launch(start, direction.rotated(Vector3.UP, angle), speed, spec.damage * tuning.power,
 			spec.tint, false, 0.0, 0.0, self)
 	session.sound("heavy" if (major() or kind in ["elite", "bulwark"]) else "enemy", start)
+
+func _match_attack() -> void:
+	var weapon: Dictionary = Arms.WEAPONS[match_weapon]
+	if match_rounds <= 0:
+		match_rounds = weapon.mag
+		# The state machine applies this rest after attack returns.
+		spec.rest = weapon.reload
+		return
+	spec.rest = maxf(0.12, weapon.cadence)
+	match_rounds -= 1
+	fired += 1
+	flash_attack()
+	var start := center() + gaze * 0.45
+	var direction := (aim_at - start).normalized()
+	var angles := [-0.094, -0.047, 0.0, 0.047, 0.094, -0.07, 0.07] if weapon.mode == "spread" else [0.0]
+	if weapon.mode == "burst":
+		angles = [-0.015, 0.0, 0.015]
+		match_rounds = maxi(0, match_rounds - 2)
+	for angle in angles:
+		var splash := 2.65 if weapon.mode in ["nova", "mortar"] else 0.0
+		var curve := 12.0 if weapon.mode == "mortar" else 0.0
+		var flight := (direction + Vector3.UP * 0.24).normalized() if curve > 0.0 else direction
+		session.launch(start, flight.rotated(Vector3.UP, angle), 19.0 if curve > 0.0 else 34.0,
+			weapon.damage * tuning.power, weapon.tint, false, splash, curve, self, weapon.id)
+	session.sound(weapon.sound, start)
 
 func _dodge() -> void:
 	var tangent := global_basis.x * strafe

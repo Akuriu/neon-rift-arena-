@@ -61,7 +61,7 @@ func _draw() -> void:
 		draw_rect(Rect2(Vector2(3, 3), size - Vector2(6, 6)), edge, false, 7.0)
 	var objective := "Vague %d / %d" % [director.wave, director.total_waves] if director.total_waves > 0 else "Vague %d" % director.wave
 	if match_mode:
-		objective = {"classic": "Chacun pour soi", "teams": "Équipes", "capture": "Capture",
+		objective = {"gungame": "Gun Game · %d / 8" % mini(8, director.score + 1), "classic": "Chacun pour soi", "teams": "Équipes", "capture": "Capture",
 			"domination": "Domination"}[session.mode]
 	elif session.mode == "training":
 		objective = "Entraînement"
@@ -211,6 +211,11 @@ func _desktop_status(pilot: CharacterBody3D, gun: Node, objective: String, score
 	draw_set_transform(Vector2.ZERO)
 
 func _classic(center: Vector2, match_state: Node, pilot: CharacterBody3D) -> void:
+	if session.mode == "gungame" and match_state.phase == Director.Phase.ACTIVE:
+		var at := Vector2(center.x - 141, 87 if Prefs.mobile() else 25)
+		_frame(Rect2(at, Vector2(282, 53)), signal_ink)
+		_print(at + Vector2(12, 21), "RANG %d / %d  ·  PALIER %d / 8" % [match_state.rank_of(), match_state.bots + 1, mini(8, match_state.score + 1)], 12, Palette.MONO, TEXT)
+		_print(at + Vector2(12, 42), "Suite : " + match_state.next_weapon(), 12, Palette.BODY, AMBER)
 	if match_state.phase == Director.Phase.PREP:
 		_notice(Vector2(center.x, 156), Rules.LABELS[session.mode].to_upper(), "Départ dans %.1f s" % match_state.clock, AMBER)
 	if not pilot.alive and match_state.respawns.has(0):

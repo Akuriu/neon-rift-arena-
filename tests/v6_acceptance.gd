@@ -16,7 +16,7 @@ func run() -> void:
 	var prefs = root.get_node("Prefs")
 	app = load("res://scenes/App.tscn").instantiate()
 	root.add_child(app)
-	check(app.screen == "menu" and app.version_label == "v0.0.6 Alpha" and prefs.profile.data.xp == 0,
+	check(app.screen == "menu" and app.version_label == "v0.0.7 Alpha" and prefs.profile.data.xp == 0,
 		"Premier lancement vierge sur le nouvel accueil")
 	app.show_profile()
 	check(app.screen == "profile", "Progression accessible sur un profil neuf")

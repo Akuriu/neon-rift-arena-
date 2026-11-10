@@ -58,7 +58,13 @@ func configure(session: Node3D, variant: String, raw: Dictionary) -> void:
 		stage.add_child(zone)
 
 func side_for(slot: int) -> int:
-	return slot if mode == "classic" else slot % 2
+	return slot if mode in ["classic", "gungame"] else slot % 2
+
+func bot_kind(slot: int) -> String:
+	return BOTS[(slot - 1) % BOTS.size()]
+
+func equip_actor(_actor: CharacterBody3D) -> void:
+	pass
 
 func remaining() -> int:
 	return stage.units.size()
@@ -141,9 +147,10 @@ func _advance_respawns(delta: float) -> void:
 		respawns.erase(slot)
 		if slot == 0:
 			stage.player.respawn(at)
+			equip_actor(stage.player)
 			stage.show_radio("Pilote redéployé", 1.25)
 		else:
-			stage.spawn_unit(BOTS[(int(slot) - 1) % BOTS.size()], at, false, -1, int(slot))
+			stage.spawn_unit(bot_kind(int(slot)), at, false, -1, int(slot))
 
 func _control(delta: float) -> void:
 	var members := combatants()

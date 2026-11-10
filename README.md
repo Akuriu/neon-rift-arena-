@@ -1,6 +1,6 @@
 # Rifle Arena
 
-**v0.0.6 Alpha en préparation.** [Téléchargements publiés pour Windows et Android](https://github.com/Akuriu/neon-rift-arena-/releases)
+**v0.0.7 Alpha en développement.** [Téléchargements publiés pour Windows et Android](https://github.com/Akuriu/neon-rift-arena-/releases)
 
 FPS d’arène en solo contre des bots, avec un stand d’entraînement et un mode survie en coop. Les sept cartes reprennent des lieux comme un dépôt de fret, une chaufferie, une gare et un quartier en brique. L’arsenal comprend huit armes, dont la carabine AR-24, le pistolet P9 Rafale et le fusil à pompe M7.
 

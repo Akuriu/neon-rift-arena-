@@ -74,6 +74,21 @@ func _ready() -> void:
 func spec() -> Dictionary:
 	return Arms.WEAPONS[active]
 
+func assign_stage(index: int) -> void:
+	# Match-only equipment never writes the permanent profile/loadout.
+	capacity_bonus = 0
+	reserve_bonus = 0
+	reload_boost = 1.0
+	damage_boost = 1.0
+	rack.assign([index])
+	active = index
+	reset_supply()
+	aim_step = 0
+	swap_left = ViewMotion.SWAP
+	cooldown = ViewMotion.SWAP
+	if pilot.local_view and visual_index < 0:
+		show_model(index)
+
 func capacity(index := -1) -> int:
 	return int(Arms.WEAPONS[active if index < 0 else index].mag) + capacity_bonus
 

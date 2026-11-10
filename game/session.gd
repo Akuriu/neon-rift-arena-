@@ -14,6 +14,7 @@ const Hazard := preload("res://game/hazard.gd")
 const Catalog := preload("res://game/catalog.gd")
 const Wallet := preload("res://game/economy/field_wallet.gd")
 const Match := preload("res://game/modes/classic.gd")
+const GunGame := preload("res://game/modes/gun_game.gd")
 const Rules := preload("res://game/modes/rules.gd")
 const Generator := preload("res://game/waves/generator.gd")
 signal intermission_updated
@@ -97,7 +98,7 @@ func _ready() -> void:
 		wallet = wallets[1]
 	upgrades = player.modules
 	if Rules.LABELS.has(mode):
-		classic = Match.new()
+		classic = GunGame.new() if mode == "gungame" else Match.new()
 		director = classic
 		classic.configure(self, mode, match_rules)
 	else:
@@ -268,6 +269,8 @@ func spawn_unit(kind: String, at: Vector3, practice := false, mirror_id := -1, s
 	unit.eliminated.connect(_on_defeated)
 	add_child(unit)
 	units.append(unit)
+	if slot >= 0:
+		classic.equip_actor(unit)
 	effects.sparks(at + Vector3.UP, Catalog.UNITS[kind].tint, 14, 3.2)
 	if kind in Catalog.BOSSES:
 		boss = unit
@@ -424,6 +427,22 @@ func projectile_impact(bolt: Node3D, collider: Object, at: Vector3, direction: V
 				collider.take_damage(bolt.damage, at - direction * 2.0, shooter)
 			elif is_instance_valid(classic) and collider.has_method("take_hit"):
 				collider.take_hit(bolt.damage, at, direction, shooter)
+		if bolt.splash > 0.0:
+			var blast := at - direction * 0.13
+			var actors: Array = classic.combatants() if is_instance_valid(classic) else living_pilots()
+			for actor in actors:
+				if actor == collider or not can_damage(shooter, actor):
+					continue
+				var center: Vector3 = actor.aim_point()
+				var distance := center.distance_to(blast)
+				if distance >= bolt.splash or not ray(blast, center, 1).is_empty():
+					continue
+				var amount: float = bolt.damage * lerpf(0.69, 0.25, distance / bolt.splash)
+				if actor.has_method("take_damage"):
+					actor.take_damage(amount, blast, shooter)
+				else:
+					actor.take_hit(amount, center, (center - blast).normalized(), shooter)
+			effects.wave(blast, bolt.tint, bolt.splash)
 		effects.sparks(at - direction * 0.055, bolt.tint, 9, 2.65)
 		return
 	var sum := 0.0

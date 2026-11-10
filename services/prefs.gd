@@ -6,7 +6,7 @@ signal saved(success: bool)
 const SAVE := "user://pilot_profile.json"
 const BACKUP := "user://pilot_profile.json.bak"
 const TEMP := "user://pilot_profile.json.tmp"
-const VERSION := 5
+const VERSION := 6
 const Profile := preload("res://services/profile.gd")
 const Rules := preload("res://game/modes/rules.gd")
 const TouchLayout := preload("res://ui/mobile/layout.gd")
@@ -55,7 +55,7 @@ const RANGES := {
 	"particles": [0.0, 1.0],
 }
 const BUSES := {"master": "Master", "music": "Musique", "sfx": "SFX", "ambience": "Ambiance"}
-const MODES := ["survival", "short", "endless", "trial", "coop", "boss_rush", "classic", "teams", "capture", "domination"]
+const MODES := ["survival", "short", "endless", "trial", "coop", "boss_rush", "classic", "teams", "capture", "domination", "gungame"]
 const DIFFICULTIES := ["discovery", "standard", "expert"]
 const MAPS := ["reactor", "skyline", "cryo", "bastion", "district", "grove", "station"]
 
@@ -462,7 +462,7 @@ func _write_locked() -> String:
 	if version > VERSION:
 		return "Ce profil appartient à une version plus récente du jeu."
 	var path := profile_file(SAVE)
-	var legacy := profile_file(V2_BACKUP if version == 3 else LEGACY_BACKUP)
+	var legacy := profile_file("user://pilot_profile.v5.json" if version == 5 else (V2_BACKUP if version == 3 else LEGACY_BACKUP))
 	if _recognizable(previous) and version < VERSION and not FileAccess.file_exists(legacy):
 		if DirAccess.copy_absolute(path, legacy) != OK:
 			return "Impossible de copier l’ancien profil avant migration."

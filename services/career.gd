@@ -7,7 +7,7 @@ const Presets := {
 	"move": {"name": "Mobilité", "slots": ["wp_ion", "wp_volt", "wp_pulse", "wp_prism"], "gadget": "gd_dash", "module": "mod_cycle"},
 	"guard": {"name": "Défense", "slots": ["wp_mortar", "wp_nova", "wp_ion", "wp_pulse"], "gadget": "gd_aegis", "module": "mod_rack"},
 }
-const Modes := ["survival", "short", "endless", "trial", "coop", "boss_rush", "classic", "teams", "capture", "domination"]
+const Modes := ["survival", "short", "endless", "trial", "coop", "boss_rush", "classic", "teams", "capture", "domination", "gungame"]
 const Badges := {
 	"sortie": ["Première extraction", "Terminer une opération victorieuse."],
 	"twenty": ["Architecte du retour", "Sécuriser vingt vagues dans la même partie."],

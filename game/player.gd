@@ -62,6 +62,7 @@ var seat := 0
 var arena_slot := 0
 var arena_side := 0
 var last_attacker: CharacterBody3D
+var life_generation := 0
 var gadget_left := 0.0
 var dash_left := 0.0
 var dash_dir := Vector3.ZERO
@@ -231,6 +232,7 @@ func aim_point() -> Vector3:
 	return head.global_position - Vector3.UP * 0.21
 
 func respawn(at: Vector3) -> void:
+	life_generation += 1
 	position = at
 	reset_physics_interpolation()
 	velocity = Vector3.ZERO
