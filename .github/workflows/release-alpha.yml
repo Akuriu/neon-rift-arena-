@@ -106,6 +106,10 @@ jobs:
           export JAVA_HOME="$JAVA_HOME_21_X64"
           sdk_tools="$ANDROID_HOME/cmdline-tools/latest/bin"
           image='system-images;android-35;default;x86_64'
+          # Export has finished. Free the editor archives and templates before creating the emulator disk.
+          rm -f -- "$RUNNER_TEMP/templates.tpz" "$RUNNER_TEMP/godot.zip" "$RUNNER_TEMP/Godot_v${GODOT_VERSION}_linux.x86_64"
+          rm -rf -- "$HOME/.local/share/godot/export_templates/${GODOT_VERSION/-/.}"
+          df -m "$RUNNER_TEMP"
           "$sdk_tools/sdkmanager" emulator "$image"
           printf 'no\n' | "$sdk_tools/avdmanager" create avd --force --name rifle-ci --package "$image"
           avd_config="$HOME/.android/avd/rifle-ci.avd/config.ini"
