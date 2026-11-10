@@ -40,7 +40,19 @@ jobs:
       - name: Install Android SDK components
         run: |
           set -euo pipefail
-          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'platform-tools'
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          export ANDROID_HOME="$RUNNER_TEMP/android-sdk"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          curl -fLsS --retry 3 https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip -o "$RUNNER_TEMP/android-tools.zip"
+          unzip -q "$RUNNER_TEMP/android-tools.zip" -d "$RUNNER_TEMP/android-tools"
+          mv "$RUNNER_TEMP/android-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses > "$RUNNER_TEMP/android-licenses.log" || {
+            test "${PIPESTATUS[1]}" -eq 0 || { cat "$RUNNER_TEMP/android-licenses.log"; exit 1; }
+          }
+          "$sdkmanager" 'platforms;android-36' 'build-tools;36.0.0' 'platform-tools'
+          printf 'ANDROID_HOME=%s\nANDROID_SDK_ROOT=%s\n' "$ANDROID_HOME" "$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
           mkdir -p "$HOME/.config/godot"
           printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/java_sdk_path = "%s"\nexport/android/android_sdk_path = "%s"\n' \
             "$JAVA_HOME_21_X64" "$ANDROID_HOME" > "$HOME/.config/godot/editor_settings-4.6.tres"
@@ -141,7 +153,7 @@ jobs:
           - **Windows 64 bits** — téléchargez le ZIP, extrayez-le, puis ouvrez `NeonRiftArenaV3.exe`.
           - **Android** — téléchargez l’APK debug et ouvrez-le depuis le téléphone. Android peut demander d’autoriser l’installation depuis l’application utilisée pour ouvrir le fichier.
 
-          Le moteur Godot est inclus dans chaque téléchargement. L’APK utilise une clé de débogage CI et s’installe en tant que nouvelle installation si un autre certificat est déjà utilisé par le jeu. Les contrôles automatisés couvrent le démarrage Windows en mode headless et la signature Android. Un essai sur téléphone reste à faire.
+          Le moteur Godot est inclus dans chaque téléchargement. L’APK utilise une clé de débogage CI. Une version déjà installée et signée avec une autre clé bloque la mise à jour directe. Les contrôles automatisés couvrent le démarrage Windows en mode headless et la signature Android. Un essai sur téléphone reste à faire.
           EOF
           gh release create "$tag" "$windows" "$android" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
