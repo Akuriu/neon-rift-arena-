@@ -73,6 +73,10 @@ func host_game() -> void:
 			break
 		await physics_frame
 	check(moved, "Entrées des clients déplacent tous les pilotes côté hôte")
+	Input.action_press("jump")
+	for _frame in 5:
+		await physics_frame
+	Input.action_release("jump")
 	var bosses := {}
 	var attacking := false
 	var before: Dictionary = {}
@@ -143,7 +147,7 @@ func host_game() -> void:
 	await create_timer(0.25).timeout
 
 func rejected() -> void:
-	net.join("127.0.0.1", port, "wrong" if role == "password" else "rift-qa", 1 if role == "version" else net.PROTOCOL)
+	net.join("127.0.0.1", port, "wrong" if role == "password" else "rift-qa", net.PROTOCOL - 1 if role == "version" else net.PROTOCOL)
 	if await until(func(): return not net.active(), "Connexion refusée proprement"):
 		check(("incompatible" if role == "version" else "incorrect") in net.status, "Motif du refus communiqué")
 
@@ -172,18 +176,25 @@ func client_game() -> void:
 	check(stage.map_id == "cryo" and stage.pilots.size() == expected and stage.pilots[1].avatar != null,
 		"Carte commune et avatar 3D de l’hôte")
 	Input.action_press("forward")
+	var host_rig = stage.pilots[1].avatar.rig
+	var seen_host_jump := false
 	var motion_deadline := Time.get_ticks_msec() + 2800
 	while pilot.position.distance_to(initial) <= 1.65 and Time.get_ticks_msec() < motion_deadline:
+		seen_host_jump = seen_host_jump or host_rig.air_weight > 0.24
 		await physics_frame
 	Input.action_release("forward")
 	check(pilot.position.distance_to(initial) > 1.65, "Mouvement retourné par l’hôte")
 	var last_ready := 0
 	var seen_wave6 := false
+	var seen_bot_stride := false
 	var before: int = 0
 	while Time.get_ticks_msec() < deadline and net.in_match() and stage.director.wave < 7:
 		var phase: int = stage.director.phase
 		var wave: int = stage.director.wave
+		seen_host_jump = seen_host_jump or host_rig.air_weight > 0.24
 		if phase == Director.Phase.ACTIVE and wave == 6:
+			for unit in stage.units:
+				seen_bot_stride = seen_bot_stride or (unit.operator != null and unit.operator.movement.length() > 0.30)
 			if not seen_wave6:
 				seen_wave6 = true
 				before = stage.director.kills
@@ -197,6 +208,8 @@ func client_game() -> void:
 			last_ready = wave
 			if wave == 6:
 				check(seen_wave6 and stage.director.kills > before and stage.hits > 0, "Robots, tirs et éliminations reçus en vague 6")
+				check(seen_host_jump, "Le client anime le saut de l’hôte")
+				check(seen_bot_stride, "Le client anime les pas des bots")
 				var initial_balance: int = stage.wallet.balance
 				app._buy_field("barrier")
 				net.request_field.rpc_id(1, net.match_id, wave, net.action_id, "buy", "barrier", -1)

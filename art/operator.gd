@@ -3,90 +3,190 @@ extends RefCounted
 const Fabric := preload("res://game/fabric.gd")
 const Materials := preload("res://art/materials.gd")
 const Weapons := preload("res://game/weapon_models.gd")
+
+const Track := preload("res://network/snapshot_track.gd")
+
+const HIP := 0.883
 const BOOT := Color("#393a34")
 const WEBBING := Color("#585345")
 const PLATE := Color("#666555")
 const FACE := Color("#ac8467")
 const GLASS := Color("#494a43")
+const GRIP_Z := [0.146, 0.130, 0.109, 0.168, 0.158, 0.158, 0.116, 0.168]
+const SUPPORT_Z := [-0.278, -0.321, 0.070, -0.246, -0.267, -0.287, -0.213, -0.196]
+
+# Segments are drawn down the local Y axis. The bend vector selects the knee or elbow plane.
+class Limb:
+	var upper: Node3D
+	var lower: Node3D
+	var tip: Node3D
+	var upper_length: float
+	var lower_length: float
+
+	func place(origin: Vector3, target: Vector3, bend: Vector3) -> void:
+		var reach := target - origin
+		var axis := reach.normalized() if reach.length_squared() > 0.0001 else Vector3.DOWN
+		var length := clampf(reach.length(), absf(upper_length - lower_length) + 0.008,
+			upper_length + lower_length - 0.006)
+		var along := (upper_length * upper_length - lower_length * lower_length + length * length) / (2.0 * length)
+		var sideways := bend - axis * bend.dot(axis)
+		if sideways.length_squared() < 0.0001:
+			sideways = axis.cross(Vector3.RIGHT)
+		var joint := origin + axis * along + sideways.normalized() * sqrt(maxf(0.0, upper_length * upper_length - along * along))
+		tip.position = origin + axis * length
+		upper.position = origin
+		upper.basis = Basis(Quaternion(Vector3.DOWN, (joint - origin).normalized()))
+		lower.position = joint
+		lower.basis = Basis(Quaternion(Vector3.DOWN, (tip.position - joint).normalized()))
 
 static var sections := {}
+var hips: Node3D
 var torso: Node3D
-var left_leg: Node3D
-var right_leg: Node3D
+var legs: Array[Limb] = []
+var arms: Array[Limb] = []
 var weapon: Node3D
 var mark: MeshInstance3D
-var arms: Array[Node3D] = []
 var weapon_models := {}
 var weapon_index := -1
 var gait := 0.0
+var movement := Vector2.ZERO
+var lean := 0.0
+var low_weight := 0.0
+var slide_weight := 0.0
+var air_weight := 0.0
+var landing := 0.0
+var was_airborne := false
+var idle_clock := 0.0
 var recoil := 0.0
+var flash_time := 0.0
+var swap := 0.0
 var skin := ""
 
 func build(parent: Node3D, uniform: Color, band: Color, heavy := false, accessory := "") -> void:
-	var hips := Node3D.new()
+	hips = Node3D.new()
 	parent.add_child(hips)
 	var waist := Fabric.Batch.new()
-	_box(waist, Vector3(0, 0.87, 0.018), Vector3(0.34, 0.24, 0.26), uniform, 0.057)
-	_box(waist, Vector3(0, 0.96, 0.014), Vector3(0.355, 0.056, 0.28), WEBBING, 0.013)
-	_box(waist, Vector3(0.011, 0.96, -0.132), Vector3(0.075, 0.043, 0.029), BOOT, 0.006)
+	_box(waist, Vector3(0, -0.013, 0.018), Vector3(0.34, 0.24, 0.26), uniform, 0.057)
+	_box(waist, Vector3(0, 0.077, 0.014), Vector3(0.355, 0.056, 0.28), WEBBING, 0.013)
+	_box(waist, Vector3(0.011, 0.077, -0.132), Vector3(0.075, 0.043, 0.029), BOOT, 0.006)
 	waist.commit(hips)
-	left_leg = _leg(hips, -0.109, uniform)
-	right_leg = _leg(hips, 0.109, uniform)
 	torso = Node3D.new()
-	parent.add_child(torso)
+	hips.add_child(torso)
+	var body := Node3D.new()
+	body.position.y = -HIP
+	torso.add_child(body)
 	var key := [uniform, heavy, accessory]
 	if sections.has(key):
 		for part in sections[key]:
-			Fabric.place(torso, part[0], part[1], part[2])
+			Fabric.place(body, part[0], part[1], part[2])
 	else:
-		_body(torso, uniform, heavy, accessory)
+		_body(body, uniform, heavy, accessory)
 		var meshes := []
-		for part in torso.get_children():
+		for part in body.get_children():
 			meshes.append([part.mesh, part.material_override, part.position])
 		sections[key] = meshes
 	for side in [-1.0, 1.0]:
-		var arm := Node3D.new()
-		arm.position = Vector3(side * 0.212, 1.349, 0.0)
-		torso.add_child(arm)
-		arms.append(arm)
-		_arm(arm, side, uniform, heavy)
-	mark = Fabric.place(torso, Fabric.bevel(Vector3(0.095, 0.044, 0.012), 0.004),
+		legs.append(_leg(parent, uniform))
+		arms.append(_arm(torso, side, uniform, heavy))
+	mark = Fabric.place(body, Fabric.bevel(Vector3(0.095, 0.044, 0.012), 0.004),
 		Fabric.paint(band), Vector3(0.102, 1.34, -0.157), Vector3.ZERO, false)
 	weapon = Node3D.new()
-	weapon.position = Vector3(0.095, 1.24, -0.23)
-	weapon.scale = Vector3.ONE * 0.73
+	weapon.position = Vector3(0.118, 0.401, -0.30)
+	weapon.scale = Vector3.ONE * 0.71
 	torso.add_child(weapon)
+	hips.position.y = HIP
 
 func set_weapon(index: int) -> void:
-	if index == weapon_index:
+	if index == weapon_index or index < 0 or index >= GRIP_Z.size():
 		return
 	if weapon_models.has(weapon_index):
-		weapon_models[weapon_index].hide()
+		weapon_models[weapon_index].model.hide()
+		swap = 0.23
 	weapon_index = index
 	if not weapon_models.has(index):
 		var model := Node3D.new()
 		weapon.add_child(model)
-		Weapons.build(model, index, skin)
-		weapon_models[index] = model
-	weapon_models[index].show()
+		var parts := Weapons.build(model, index, skin, false, true)
+		parts.model = model
+		weapon_models[index] = parts
+	weapon_models[index].model.show()
 
-func animate(delta: float, speed: float, pitch: float, low: float, run: bool, aiming: bool, reload: float) -> void:
-	gait = fposmod(gait + delta * speed * 4.05, TAU)
-	var blend := 1.0 - exp(-13.0 * delta)
-	var step := sin(gait) * minf(speed * 0.127, 0.70)
-	left_leg.rotation.x = lerpf(left_leg.rotation.x, step - low * 0.46, blend)
-	right_leg.rotation.x = lerpf(right_leg.rotation.x, -step - low * 0.46, blend)
-	torso.position.y = lerpf(torso.position.y, -0.43 * low + absf(step) * 0.021, blend)
-	torso.rotation.x = lerpf(torso.rotation.x, -0.07 * low + (0.17 if run else 0.0), blend)
-	recoil = move_toward(recoil, 0.0, delta * 8.0)
-	var service := sin(reload * PI)
-	var tilt := clampf(pitch, -0.80, 0.80) * 0.66 + recoil * 0.095 - service * 0.29
-	weapon.rotation.x = lerpf(weapon.rotation.x, tilt - (0.10 if run else 0.0), blend)
-	weapon.rotation.z = lerpf(weapon.rotation.z, 0.24 * service, blend)
-	weapon.position.x = lerpf(weapon.position.x, 0.067 if aiming else 0.095, blend)
-	weapon.position.z = -0.23 + recoil * 0.038
-	for arm in arms:
-		arm.rotation.x = lerpf(arm.rotation.x, tilt - 0.075 + step * 0.073, blend)
+func kick(fire := true) -> void:
+	recoil = 1.0
+	flash_time = 0.060 if fire else 0.0
+
+func animate(delta: float, motion: Vector3, pitch: float, crouch: float, flags: int, reload: float) -> void:
+	var running := (flags & (Track.RUN | Track.DASH)) != 0
+	var aiming := (flags & Track.AIM) != 0
+	var airborne := (flags & Track.AIR) != 0
+	var slide := (flags & Track.SLIDE) != 0
+	var blend := 1.0 - exp(-14.0 * delta)
+	movement = movement.lerp(Vector2(motion.x, motion.z).limit_length(14.0), blend)
+	var speed := movement.length()
+	var stride := clampf(speed / 7.0, 0.0, 1.0)
+	var direction := Vector3(movement.x, 0, movement.y).normalized()
+	gait = fposmod(gait + delta * clampf(speed * (0.36 if running else 0.43), 0.0, 3.45), 1.0)
+	idle_clock += delta
+	low_weight = lerpf(low_weight, crouch, blend)
+	slide_weight = lerpf(slide_weight, float(slide), blend)
+	air_weight = lerpf(air_weight, float(airborne), blend)
+	if was_airborne and not airborne:
+		landing = 1.0
+	was_airborne = airborne
+	var bounce := absf(sin(gait * TAU)) * stride * 0.029 * (1.0 - air_weight)
+	hips.position = Vector3(0, HIP - low_weight * 0.30 - slide_weight * 0.095 - landing * 0.107 + bounce, slide_weight * 0.040)
+	lean = lerpf(lean, clampf(-motion.z * 0.018, -0.12, 0.22) - slide_weight * 0.31, blend)
+	torso.rotation.x = lean - landing * 0.15 + sin(idle_clock * 2.0) * 0.014
+	torso.rotation.z = lerpf(torso.rotation.z, clampf(-motion.x * 0.017, -0.17, 0.17), blend)
+	for i in 2:
+		var side := -1.0 if i == 0 else 1.0
+		var phase := fposmod(gait + i * 0.5, 1.0)
+		var travel := lerpf(0.43, -0.48, phase / 0.60) if phase < 0.60 else lerpf(-0.48, 0.43, (phase - 0.60) / 0.40)
+		var lift := 0.0 if phase < 0.60 else sin(PI * (phase - 0.60) / 0.40) * (0.21 if running else 0.14)
+		var foot := Vector3(side * 0.111, 0.090 + lift * stride, 0.023)
+		foot += direction * travel * stride * (1.32 if running else 0.92)
+		foot = foot.lerp(Vector3(side * 0.12, 0.22 + i * 0.068, 0.17 - i * 0.25), air_weight)
+		foot = foot.lerp(Vector3(side * 0.15, 0.092, -0.48 + i * 0.27), slide_weight)
+		var limb := legs[i]
+		limb.place(hips.position + Vector3(side * 0.109, 0, 0.024), foot, Vector3(side * 0.20, 0, -1.0))
+		limb.tip.rotation.x = air_weight * (0.31 - i * 0.24) - slide_weight * 0.19
+	landing = move_toward(landing, 0.0, delta * 4.1)
+	_aim_weapon(delta, pitch, aiming, running, reload, blend)
+
+func _aim_weapon(delta: float, pitch: float, aiming: bool, running: bool, reload: float, blend: float) -> void:
+	if weapon_index < 0:
+		return
+	var data: Dictionary = weapon_models[weapon_index]
+	var service := sin(clampf(reload, 0.0, 1.0) * PI)
+	var holster := sin(swap / 0.23 * PI) if swap > 0.0 else 0.0
+	var pistol := weapon_index == 2
+	var low_ready := 0.14 if running and not aiming else 0.0
+	var at := Vector3(0.078 if aiming else 0.118,
+		0.401 - low_ready * 0.57 - service * 0.11 - holster * 0.12,
+		(-0.36 if pistol else -0.30) + recoil * 0.054)
+	weapon.position = weapon.position.lerp(at, blend)
+	weapon.rotation.x = lerpf(weapon.rotation.x, clampf(pitch, -0.89, 0.89) * 0.78 + recoil * 0.17
+		- service * 0.32 - low_ready - holster * 0.59, blend)
+	weapon.rotation.z = lerpf(weapon.rotation.z, 0.33 * service - low_ready * 0.72, blend)
+	var mag: Node3D = data.magazine
+	var origin: Vector3 = mag.get_meta("home")
+	mag.position = origin + Vector3(-0.031, -0.16, 0.033) * service
+	mag.rotation.z = -service * 0.32
+	data.bolt.position.z = recoil * 0.037
+	for i in 2:
+		var side := -1.0 if i == 0 else 1.0
+		var support := Vector3(-0.042, -0.038, SUPPORT_Z[weapon_index])
+		if i == 0:
+			support = support.lerp(mag.position + Vector3(-0.026, -0.061, 0.010), service)
+		else:
+			support = Vector3(0.024, -0.103, GRIP_Z[weapon_index])
+		var hand: Vector3 = weapon.transform * support
+		arms[i].place(Vector3(side * 0.212, 1.349 - HIP, 0.003), hand, Vector3(side * 0.63, -1.0, 0.2))
+		arms[i].tip.rotation = weapon.rotation
+	data.flash.visible = flash_time > 0.0
+	recoil = move_toward(recoil, 0.0, delta * 7.8)
+	flash_time = maxf(0.0, flash_time - delta)
+	swap = maxf(0.0, swap - delta)
 
 static func _body(node: Node3D, cloth: Color, heavy: bool, accessory: String) -> void:
 	var w := Fabric.Batch.new()
@@ -118,29 +218,47 @@ static func _body(node: Node3D, cloth: Color, heavy: bool, accessory: String) ->
 		_box(w, Vector3(side * 0.107, 1.541, 0.006), Vector3(0.036, 0.097, 0.096), WEBBING, 0.012)
 	w.commit(node)
 
-static func _arm(node: Node3D, side: float, cloth: Color, heavy: bool) -> void:
-	var w := Fabric.Batch.new()
-	_box(w, Vector3(side * 0.025, -0.098, 0.002), Vector3(0.155, 0.265, 0.173), cloth,
-		0.042, Vector3(-0.15, 0, side * 0.13))
-	_box(w, Vector3(side * 0.015, -0.166, -0.131), Vector3(0.132, 0.145, 0.263), cloth,
-		0.040, Vector3(-0.20, 0.33 * side, 0))
-	_box(w, Vector3(-side * 0.048, -0.123, -0.261), Vector3(0.082, 0.083, 0.090), BOOT, 0.020)
+static func _arm(node: Node3D, side: float, cloth: Color, heavy: bool) -> Limb:
+	var limb := _limb(node, 0.262, 0.269)
+	var upper := Fabric.Batch.new()
+	_box(upper, Vector3(0, -0.105, 0.0), Vector3(0.155, 0.263, 0.172), cloth, 0.043)
 	if heavy:
-		_box(w, Vector3(side * 0.058, -0.020, -0.003), Vector3(0.132, 0.127, 0.19), PLATE, 0.029)
-	w.commit(node)
+		_box(upper, Vector3(side * 0.030, -0.026, 0.0), Vector3(0.141, 0.125, 0.198), PLATE, 0.029)
+	upper.commit(limb.upper)
+	var lower := Fabric.Batch.new()
+	_box(lower, Vector3(0, -0.128, 0), Vector3(0.121, 0.266, 0.129), cloth, 0.033)
+	_box(lower, Vector3(0, -0.224, 0), Vector3(0.132, 0.062, 0.142), WEBBING, 0.021)
+	lower.commit(limb.lower)
+	var hand := Fabric.Batch.new()
+	_box(hand, Vector3(0, 0, -0.010), Vector3(0.085, 0.083, 0.103), BOOT, 0.024)
+	hand.commit(limb.tip)
+	return limb
 
-static func _leg(parent: Node3D, x: float, cloth: Color) -> Node3D:
-	var leg := Node3D.new()
-	leg.position = Vector3(x, 0.87, 0.024)
-	parent.add_child(leg)
-	var w := Fabric.Batch.new()
-	_box(w, Vector3(0, -0.17, 0.010), Vector3(0.175, 0.411, 0.204), cloth, 0.049, Vector3(-0.06, 0, 0))
-	_box(w, Vector3(0, -0.435, -0.006), Vector3(0.145, 0.34, 0.159), cloth.darkened(0.07), 0.035)
-	_box(w, Vector3(0, -0.324, -0.089), Vector3(0.152, 0.125, 0.059), WEBBING, 0.018)
-	_box(w, Vector3(0, -0.665, 0.018), Vector3(0.145, 0.200, 0.164), BOOT, 0.027)
-	_box(w, Vector3(0, -0.787, -0.039), Vector3(0.148, 0.112, 0.252), BOOT, 0.026)
-	w.commit(leg)
-	return leg
+static func _leg(parent: Node3D, cloth: Color) -> Limb:
+	var limb := _limb(parent, 0.415, 0.401)
+	var thigh := Fabric.Batch.new()
+	_box(thigh, Vector3(0, -0.178, 0.010), Vector3(0.175, 0.418, 0.204), cloth, 0.049)
+	thigh.commit(limb.upper)
+	var shin := Fabric.Batch.new()
+	_box(shin, Vector3(0, -0.167, -0.006), Vector3(0.145, 0.380, 0.159), cloth.darkened(0.07), 0.035)
+	_box(shin, Vector3(0, -0.045, -0.089), Vector3(0.152, 0.125, 0.059), WEBBING, 0.018)
+	_box(shin, Vector3(0, -0.316, 0.016), Vector3(0.147, 0.165, 0.164), BOOT, 0.027)
+	shin.commit(limb.lower)
+	var boot := Fabric.Batch.new()
+	_box(boot, Vector3(0, -0.047, -0.047), Vector3(0.153, 0.107, 0.257), BOOT, 0.026)
+	boot.commit(limb.tip)
+	return limb
+
+static func _limb(parent: Node3D, upper: float, lower: float) -> Limb:
+	var limb := Limb.new()
+	limb.upper = Node3D.new()
+	limb.lower = Node3D.new()
+	limb.tip = Node3D.new()
+	limb.upper_length = upper
+	limb.lower_length = lower
+	for part in [limb.upper, limb.lower, limb.tip]:
+		parent.add_child(part)
+	return limb
 
 static func _box(w: Fabric.Batch, at: Vector3, size: Vector3, color: Color, cut: float,
 		rotation := Vector3.ZERO) -> void:

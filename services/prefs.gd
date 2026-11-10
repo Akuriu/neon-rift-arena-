@@ -37,7 +37,7 @@ const DEFAULTS := {
 	"hud_tone": 0, "fog": true, "weather": false, "high_contrast": false,
 	"touch_x": 1.05, "touch_y": 0.95, "touch_dead": 0.13, "touch_invert": false,
 	"touch_left": false, "touch_float": true, "touch_haptic": false, "touch_compact": true,
-	"touch_aim_assist": true, "touch_auto_sprint": true,
+	"touch_aim_assist": true, "touch_auto_sprint": false,
 	"particles": 0.85, "audio_alerts": true, "audio_hits": true, "audio_dynamic": true,
 }
 const RANGES := {

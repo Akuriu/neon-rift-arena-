@@ -15,16 +15,50 @@ func run() -> void:
 	root.add_child(app)
 	var prefs = root.get_node("Prefs")
 	check(prefs.values.quality == 3 and prefs.values.fps_limit == 45, "Profil mobile Ultra Léger au premier lancement")
+	await process_frame
+	var extent := root.get_visible_rect().size
+	app._apply_safe_insets(Rect2(Vector2(50, 8), extent - Vector2(50, 8)), extent)
+	await process_frame
+	check(app.matte.size.is_equal_approx(extent) and app.canvas.position.x >= 50.0
+		and app.canvas.size.x < extent.x, "Le fond remplit l’écran quand la zone tactile respecte une encoche")
+	app._safe_canvas()
 	app.begin("training", "standard", "station", 71)
 	layer = app.touch_panel
 	await ticks(4)
 	var pilot = app.session.player
-	check(prefs.values.touch_compact and not layer._available("gadget") and not layer._available("sprint"),
-		"Le HUD tactile démarre en mode simplifié")
+	check(prefs.values.touch_compact and not layer._available("gadget") and layer._available("sprint"),
+		"Le HUD simplifié affiche le sprint")
 	await check_aim(pilot)
 	var stick: Vector2 = layer._center("stick")
 	var fire: Vector2 = layer._center("fire")
 	var look := Vector2(770, 289)
+	var sprint: Vector2 = layer._center("sprint")
+	tap(8, sprint, true)
+	tap(8, sprint, false, true)
+	check(not pilot.down("sprint"), "Un toucher annulé ne bascule pas le sprint")
+	tap(8, sprint, true)
+	tap(8, sprint, false)
+	tap(0, stick, true)
+	drag(0, stick + Vector2(0, -76), Vector2(0, -76))
+	await ticks(14)
+	check(pilot.down("sprint") and pilot.sprinting, "Un toucher active la vraie course")
+	tap(0, stick, false)
+	await ticks(2)
+	check(pilot.down("sprint") and not pilot.sprinting, "La bascule reste active au repos sans déplacement automatique")
+	app.pause()
+	check(not pilot.touch_sprint, "La pause suspend l’entrée tactile")
+	app.hud()
+	await process_frame
+	tap(0, stick, true)
+	drag(0, stick + Vector2(0, -76), Vector2(0, -76))
+	await ticks(5)
+	check(pilot.sprinting, "Le sprint reste actif après reprise et au prochain déplacement")
+	tap(8, sprint, true)
+	tap(8, sprint, false)
+	await ticks(2)
+	check(not pilot.down("sprint") and not pilot.sprinting, "Un deuxième toucher rend la marche même si le joystick reste poussé")
+	tap(0, stick, false)
+	await ticks(10)
 	var start: Vector3 = pilot.position
 	var yaw: float = pilot.rotation.y
 	tap(0, stick, true)
@@ -44,7 +78,7 @@ func run() -> void:
 	check(not Input.is_action_pressed("fire"), "Annulation système relâche le tir")
 	tap(0, stick, false)
 	tap(1, look, false)
-	check(Input.get_vector("left", "right", "forward", "back") == Vector2.ZERO and not Input.is_action_pressed("sprint"),
+	check(Input.get_vector("left", "right", "forward", "back") == Vector2.ZERO and not pilot.down("sprint"),
 		"Relâchement du joystick sans déplacement ni sprint bloqué")
 	former_yaw = pilot.rotation.y
 	tap(2, fire, true)
@@ -80,7 +114,8 @@ func run() -> void:
 		"Pause tactile libère tous les doigts")
 	app.hud()
 	prefs.change_value("touch_left", true)
-	check(layer._center("stick").x > layer.size.x * 0.5, "Disposition gaucher miroite la zone de déplacement")
+	check(layer._center("stick").x > layer.size.x * 0.5 and layer._center("sprint").x > layer.size.x * 0.5,
+		"Disposition gaucher miroite le joystick et le sprint")
 	app.open_settings("pause")
 	app.settings.show_tab(4)
 	app.open_touch_editor()

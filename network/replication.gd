@@ -1,7 +1,6 @@
 extends RefCounted
 
-const Catalog := preload("res://game/catalog.gd")
-const Director := preload("res://game/wave_director.gd")
+const Track := preload("res://network/snapshot_track.gd")
 const KINDS := ["scout", "sentinel", "bulwark", "specter", "elite", "warden",
 	"skimmer", "medic", "disruptor", "artillery", "colossus", "architect"]
 
@@ -13,7 +12,7 @@ static func snapshot(stage: Node3D) -> Array:
 	for id in stage.pilots:
 		var pilot = stage.pilots[id]
 		var gun = pilot.arsenal
-		pilots.append([id, pilot.position, pilot.rotation.y, pilot.head.rotation.x, pilot.velocity.length(), pilot.height,
+		pilots.append([id, pilot.position, pilot.rotation.y, pilot.head.rotation.x, pilot.velocity, pilot.height,
 			pilot.health, pilot.shield, pilot.shield_max, pilot.alive, gun.active, gun.rounds(), gun.reserve(),
 			gun.heat[gun.active], gun.charge, gun.reload_left, gun.cycle_length, gun.capacity_bonus,
 			pilot.gadget_left, stage.wallets[id].balance, pilot.module_selected, pilot.modules.duplicate(),
@@ -21,7 +20,8 @@ static func snapshot(stage: Node3D) -> Array:
 	var units := []
 	for unit in stage.units:
 		units.append([unit.serial, KINDS.find(unit.kind), unit.position, unit.rotation.y, unit.health,
-			unit.maximum, unit.state, unit.phase, unit.timer])
+			unit.maximum, unit.state, unit.phase, unit.timer, unit.velocity, unit.aim_pitch(),
+			unit.pose_flags(), unit.fired, unit.wave_attack])
 	var projectiles := []
 	for index in mini(20, stage.projectiles.get_child_count()):
 		var bolt = stage.projectiles.get_child(index)
@@ -42,11 +42,14 @@ static func valid(data: Variant) -> bool:
 			return false
 	for row in data[1]:
 		if not row is Array or row.size() != 27 or not row[0] is int or not row[1] is Vector3 \
-			or not row[1].is_finite() or not row[21] is Array or row[21].size() != 6 or not row[24] is Dictionary:
+			or not row[1].is_finite() or not row[4] is Vector3 or not row[4].is_finite() \
+			or not row[26] is int or not row[21] is Array or row[21].size() != 6 or not row[24] is Dictionary:
 			return false
 	for row in data[2]:
-		if not row is Array or row.size() != 9 or not row[0] is int or not row[1] is int \
-			or row[1] < 0 or row[1] >= KINDS.size() or not row[2] is Vector3 or not row[2].is_finite():
+		if not row is Array or row.size() != 14 or not row[0] is int or not row[1] is int \
+			or row[1] < 0 or row[1] >= KINDS.size() or not row[2] is Vector3 or not row[2].is_finite() \
+			or not row[9] is Vector3 or not row[9].is_finite() or not _finite_number(row[10]) \
+			or not row[11] is int or not row[12] is int or row[12] < 0 or not row[13] is bool:
 			return false
 	for row in data[3]:
 		if not row is Array or row.size() != 3 or not row[0] is Vector3 or not row[1] is Vector3 or not row[2] is Color:
@@ -56,8 +59,12 @@ static func valid(data: Variant) -> bool:
 			return false
 	return true
 
+static func _finite_number(value: Variant) -> bool:
+	return typeof(value) in [TYPE_FLOAT, TYPE_INT] and is_finite(float(value))
+
 static func apply(stage: Node3D, data: Array, known: Dictionary) -> void:
 	var director = stage.director
+	var now := Time.get_ticks_msec() * 0.001
 	var board: Array = data[0]
 	if int(board[0]) == director.wave:
 		director.live = board[1]
@@ -75,12 +82,14 @@ static func apply(stage: Node3D, data: Array, known: Dictionary) -> void:
 			continue
 		var pilot = stage.pilots[id]
 		pilot.replica_pos = row[1]
-		pilot.replica_speed = row[4]
+		if pilot == stage.player and (pilot.replica_flags & Track.AIR) != 0 and (row[26] & Track.AIR) == 0:
+			pilot.landing = clampf(-pilot.replica_velocity.y * 0.006, 0.012, 0.072)
+		pilot.replica_velocity = row[4]
 		pilot.replica_flags = row[26]
 		pilot.replica_weapon = row[10]
 		pilot.replica_reload = clampf(row[15] / maxf(0.001, row[16]), 0.0, 1.0)
 		if pilot != stage.player:
-			pilot.replica_poses.append(row[1], row[2], row[3], row[4], Time.get_ticks_msec() * 0.001)
+			pilot.replica_poses.append(row[1], row[2], row[3], row[4], now, row[26])
 		pilot.height = row[5]
 		if row[6] < pilot.health:
 			pilot.hull_flash = 1.0
@@ -113,11 +122,15 @@ static func apply(stage: Node3D, data: Array, known: Dictionary) -> void:
 	for row in data[2]:
 		var id: int = row[0]
 		var kind: String = KINDS[row[1]]
-		if not known.has(id):
+		var appeared := not known.has(id)
+		if appeared:
 			known[id] = stage.spawn_unit(kind, row[2], false, id)
 		var unit = known[id]
-		unit.replica_at = row[2]
-		unit.replica_yaw = row[3]
+		unit.replica_poses.append(row[2], row[3], row[10], row[9], now, row[11])
+		unit.wave_attack = row[13]
+		if not appeared and row[12] > unit.fired:
+			unit.flash_attack()
+		unit.fired = row[12]
 		if row[4] < unit.health:
 			unit.hit_flash = 1.0
 		unit.health = row[4]
@@ -131,10 +144,10 @@ static func apply(stage: Node3D, data: Array, known: Dictionary) -> void:
 			var unit: CharacterBody3D = known[id]
 			stage.effects.sparks(unit.center(), unit.spec.tint, 12, 3.1)
 			stage.units.erase(unit)
-			unit.queue_free()
+			unit.collapse()
 			known.erase(id)
 	for bolt in data[3]:
-		stage.effects.beam(bolt[0], bolt[0] - bolt[1] * 0.73, bolt[2], 0.065, 0.077)
+		stage.effects.beam(bolt[0], bolt[0] - bolt[1] * 0.73, bolt[2], 0.016, 0.065)
 	var present := {}
 	for row in data[4]:
 		present[row[0]] = row

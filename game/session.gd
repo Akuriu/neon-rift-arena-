@@ -258,7 +258,6 @@ func spawn_unit(kind: String, at: Vector3, practice := false, mirror_id := -1, s
 	unit.arena_slot = slot
 	unit.arena_side = classic.side_for(slot) if slot >= 0 else 1
 	unit.replica = mirror_id >= 0
-	unit.replica_at = at
 	unit.session = self
 	unit.position = at
 	unit.serial = mirror_id if mirror_id >= 0 else spawn_index
@@ -531,7 +530,7 @@ func _wave_secured(_wave: int, bonus: int) -> void:
 			pilot.alive = true
 			pilot.collision_layer = 2
 			if is_instance_valid(pilot.avatar):
-				pilot.avatar.show()
+				pilot.avatar.present_alive(true)
 		pilot.health = minf(100.0, pilot.health + 9)
 		pilot.shield = pilot.shield_max
 		pilot.shield_wait = 0.0

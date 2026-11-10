@@ -4,12 +4,13 @@ const Session := preload("res://scenes/Session.tscn")
 const Arena := preload("res://game/arena.gd")
 const Depot := preload("res://game/skyline.gd")
 const FRAME := Vector2(1280, 720)
-const VERSION_LABEL := "v0.0.4 Alpha"
+const VERSION_LABEL := "v0.0.5 Alpha"
 const Director := preload("res://game/wave_director.gd")
 const Catalog := preload("res://game/catalog.gd")
 const Palette := preload("res://ui/skin.gd")
 const Hud := preload("res://ui/hud.gd")
 const Livery := preload("res://ui/livery.gd")
+const Glyph := preload("res://ui/glyph.gd")
 const Options := preload("res://ui/settings.gd")
 const Hub := preload("res://ui/hub.gd")
 const Profile := preload("res://services/profile.gd")
@@ -136,7 +137,8 @@ func _new_screen(name: String, treatment := "page") -> void:
 	view.name = "Screen_" + name
 	matte = Livery.new()
 	matte.mode = treatment
-	canvas.add_child(matte)
+	layer.add_child(matte)
+	layer.move_child(matte, 0)
 	canvas.add_child(view)
 	view.size = FRAME
 	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -151,13 +153,17 @@ func _drop_menu_view() -> void:
 		view.queue_free()
 		view = null
 	if is_instance_valid(matte):
-		canvas.remove_child(matte)
+		layer.remove_child(matte)
 		matte.queue_free()
 		matte = null
 
 func _footer(copy: String) -> void:
+	var line := Palette.rule(view, Rect2(57, 660, 1166, 1), Color(Palette.MUTED, 0.25))
+	line.anchor_right = 1.0
+	line.offset_right = -57.0
 	Palette.label(view, Rect2(57, 671, 1030, 35), copy, 13, Palette.MUTED)
-	Palette.label(view, Rect2(1050, 671, 172, 35), VERSION_LABEL, 13, Palette.MUTED, Palette.BOLD, HORIZONTAL_ALIGNMENT_RIGHT)
+	var version := _right_block(172.0, 35.0, 671.0)
+	Palette.label(version, Rect2(0, 0, 172, 35), VERSION_LABEL, 13, Palette.MUTED, Palette.MONO, HORIZONTAL_ALIGNMENT_RIGHT)
 
 func _safe_canvas() -> void:
 	canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -168,20 +174,41 @@ func _safe_canvas() -> void:
 			var inverse := get_window().get_final_transform().affine_inverse()
 			var allowed := Rect2(Vector2.ZERO, extent).intersection(inverse * Rect2(safe))
 			if allowed.has_area():
-				var x := maxf(allowed.position.x, extent.x - allowed.end.x) + 4.0
-				var y := maxf(allowed.position.y, extent.y - allowed.end.y) + 4.0
-				canvas.offset_left = x
-				canvas.offset_right = -x
-				canvas.offset_top = y
-				canvas.offset_bottom = -y
+				_apply_safe_insets(allowed, extent)
 	_fit_menu()
+
+func _apply_safe_insets(allowed: Rect2, extent: Vector2) -> void:
+	var x := minf(maxf(allowed.position.x, extent.x - allowed.end.x) + 4.0, extent.x * 0.24)
+	var y := minf(maxf(allowed.position.y, extent.y - allowed.end.y) + 4.0, extent.y * 0.24)
+	canvas.offset_left = x
+	canvas.offset_right = -x
+	canvas.offset_top = y
+	canvas.offset_bottom = -y
 
 func _fit_menu() -> void:
 	if not is_instance_valid(view):
 		return
 	var factor := minf(canvas.size.x / FRAME.x, canvas.size.y / FRAME.y)
 	view.scale = Vector2.ONE * factor
-	view.position = (canvas.size - FRAME * factor) * 0.5
+	view.size = Vector2(canvas.size.x / maxf(factor, 0.001), FRAME.y) if screen == "menu" else FRAME
+	view.position = (canvas.size - view.size * factor) * 0.5
+
+func _right_block(width: float, height: float, y: float) -> Control:
+	var block := Control.new()
+	block.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	view.add_child(block)
+	block.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	block.offset_left = -58.0 - width
+	block.offset_right = -58.0
+	block.offset_top = y
+	block.offset_bottom = y + height
+	return block
+
+func _glyph(parent: Control, rect: Rect2, mark: String, ink: Color) -> void:
+	var icon := Glyph.new()
+	icon.mark = mark
+	icon.ink = ink
+	Palette.at(parent, icon, rect)
 
 func _header(index: String, name: String, description: String) -> void:
 	Palette.label(view, Rect2(57, 27, 840, 27), index, 15, Palette.AMBER, Palette.BOLD)
@@ -229,39 +256,67 @@ func menu() -> void:
 	mark.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	mark.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Palette.at(view, mark, Rect2(56, 46, 48, 48))
-	Palette.label(view, Rect2(118, 45, 278, 48), VERSION_LABEL, 16, Palette.MUTED, Palette.BOLD)
-	Palette.label(view, Rect2(52, 122, 615, 113), "RIFLE ARENA", 104, Palette.TEXT, Palette.BRAND)
-	Palette.label(view, Rect2(58, 245, 475, 38), "FPS d’arène  •  Solo et coop", 22, Palette.MUTED)
-	var start := Palette.button(view, Rect2(57, 306, 355, 66), "Jouer", play_menu, true)
-	start.add_theme_font_size_override("font_size", 23)
-	Palette.button(view, Rect2(57, 384, 355, 52), "Arsenal", open_hub.bind("arsenal"))
-	Palette.button(view, Rect2(57, 447, 355, 52), "Progression", show_profile.bind("profile"))
-	Palette.button(view, Rect2(57, 510, 355, 52), "Paramètres", open_settings.bind("menu"))
-	Palette.button(view, Rect2(57, 594, 157, 45), "Crédits", credits)
-	Palette.button(view, Rect2(225, 594, 187, 45), "Quitter", _quit)
-	var plate := Palette.panel(view, Rect2(1004, 571, 216, 69), Color(0.093, 0.106, 0.088, 0.76))
-	Palette.label(plate, Rect2(13, 7, 189, 22), "ARÈNE", 12, Palette.MUTED, Palette.BOLD)
-	Palette.label(plate, Rect2(12, 27, 191, 31), Catalog.MAPS.skyline.name, 22, Palette.TEXT, Palette.HEAD)
+	Palette.at(view, mark, Rect2(53, 29, 46, 46))
+	Palette.rule(view, Rect2(107, 40, 1, 25))
+	Palette.label(view, Rect2(120, 30, 282, 44), "FPS D’ARÈNE", 14, Palette.MUTED, Palette.MONO)
+	var edition := _right_block(158.0, 32.0, 36.0)
+	Palette.panel(edition, Rect2(0, 0, 158, 32), Color("#242823"), Color(Palette.AMBER, 0.41))
+	Palette.rule(edition, Rect2(13, 13, 6, 6), Palette.AMBER)
+	Palette.label(edition, Rect2(28, 0, 119, 32), "ALPHA PUBLIQUE", 12, Palette.TEXT, Palette.MONO)
+	Palette.rule(view, Rect2(58, 107, 30, 2), Palette.AMBER)
+	Palette.label(view, Rect2(99, 93, 297, 30), "SOLO  /  COOP", 14, Palette.AMBER, Palette.MONO)
+	Palette.label(view, Rect2(52, 121, 670, 110), "RIFLE ARENA", 113, Palette.TEXT, Palette.BRAND)
+	Palette.label(view, Rect2(58, 251, 520, 31), "Affrontez les bots en solo ou jouez jusqu’à quatre en coop.", 19, Palette.MUTED)
+	var start := _home_link(Rect2(57, 302, 389, 70), "Jouer", "play", play_menu, true)
+	_home_link(Rect2(57, 386, 389, 51), "Arsenal", "target", open_hub.bind("arsenal"))
+	_home_link(Rect2(57, 448, 389, 51), "Progression", "progress", show_profile.bind("profile"))
+	_home_link(Rect2(57, 510, 389, 51), "Paramètres", "settings", open_settings.bind("menu"))
+	_home_link(Rect2(57, 590, 187, 46), "Crédits", "info", credits)
+	_home_link(Rect2(255, 590, 191, 46), "Quitter", "quit", _quit)
+	var map := _right_block(312.0, 99.0, 536.0)
+	var plate := Palette.panel(map, Rect2(0, 0, 312, 99), Color(0.090, 0.104, 0.085, 0.88), Color(Palette.MUTED, 0.29))
+	Palette.rule(plate, Rect2(0, 14, 3, 69), Palette.AMBER)
+	Palette.label(plate, Rect2(18, 12, 206, 21), "APERÇU DE L’ARÈNE", 12, Palette.AMBER, Palette.MONO)
+	Palette.label(plate, Rect2(16, 34, 235, 37), Catalog.MAPS.skyline.name, 29, Palette.TEXT, Palette.HEAD)
+	Palette.label(plate, Rect2(18, 71, 210, 17), "Cour de chargement", 12, Palette.MUTED)
+	Palette.rule(plate, Rect2(246, 18, 1, 62))
+	_glyph(plate, Rect2(263, 35, 31, 31), "target", Palette.AMBER)
 	start.grab_focus()
 	_footer("Commandes tactiles" if Prefs.mobile() else "Clavier et souris")
 
+func _home_link(rect: Rect2, title: String, icon: String, action: Callable, primary := false) -> Button:
+	var button := Palette.button(view, rect, "", action, primary)
+	button.accessibility_name = title
+	var ink := Palette.BASE if primary else Palette.TEXT
+	if not primary:
+		button.add_theme_stylebox_override("normal", Palette.box(Color("#252922"), Palette.LINE, 4))
+	var icon_size := 29.0 if primary else 22.0
+	_glyph(button, Rect2(16.0, (rect.size.y - icon_size) * 0.5, icon_size, icon_size),
+		icon, ink if primary else Palette.AMBER)
+	Palette.label(button, Rect2(52, 0, rect.size.x - 90, rect.size.y), title,
+		31 if primary else 19, ink, Palette.HEAD if primary else Palette.BOLD)
+	if rect.size.x > 200.0:
+		_glyph(button, Rect2(rect.size.x - 41.0, (rect.size.y - 23.0) * 0.5, 23, 23),
+			"arrow", ink if primary else Palette.QUIET)
+	return button
+
 func play_menu() -> void:
 	_new_screen("play")
-	_header("Menu", "Jouer", "Choisissez votre type de partie.")
+	_header("RIFLE ARENA / JOUER", "Choisir un mode", "Choisissez une partie solo, un entraînement ou un salon coop.")
 	_play_card(Rect2(57, 217, 574, 168), "Match contre les bots",
-		"Chacun pour soi, équipes, capture et domination.", "reactor", open_classic, true)
+		"Chacun pour soi, équipes,\ncapture et domination.", "reactor", "01  /  MATCH", open_classic, true)
 	_play_card(Rect2(649, 217, 574, 168), "Survie",
-		"Vagues, défis, boss et ravitaillement.", "cryo", select_session)
+		"Vagues, défis, boss\net ravitaillement.", "cryo", "02  /  VAGUES", select_session)
 	_play_card(Rect2(57, 403, 574, 168), "Entraînement",
-		"Essayez les huit armes sur des cibles.", "district",
+		"Essayez les huit armes\nsur des cibles.", "district", "03  /  STAND DE TIR",
 		func(): begin("training", selected_difficulty, selected_map))
 	_play_card(Rect2(649, 403, 574, 168), "Coop",
-		"Hébergez ou rejoignez une partie de 2 à 4.", "skyline", open_lobby)
-	Palette.button(view, Rect2(57, 593, 166, 53), "Retour", menu)
+		"Hébergez ou rejoignez\nune partie de 2 à 4.", "skyline", "04  /  EN LIGNE", open_lobby)
+	_home_link(Rect2(57, 593, 166, 53), "Retour", "back", menu)
 	_footer("Parties locales et salons privés")
 
-func _play_card(rect: Rect2, title: String, description: String, map_id: String, action: Callable, featured := false) -> void:
+func _play_card(rect: Rect2, title: String, description: String, map_id: String, index: String,
+		action: Callable, featured := false) -> void:
 	var button := Palette.button(view, rect, "", action)
 	button.accessibility_name = title
 	var picture := TextureRect.new()
@@ -269,10 +324,20 @@ func _play_card(rect: Rect2, title: String, description: String, map_id: String,
 	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Palette.at(button, picture, Rect2(351, 12, 211, 144))
-	Palette.label(button, Rect2(22, 32, 320, 47), title, 31, Palette.TEXT, Palette.HEAD)
-	Palette.label(button, Rect2(23, 82, 303, 55), description, 16, Palette.MUTED, Palette.BODY,
-		HORIZONTAL_ALIGNMENT_LEFT, true)
+	var crop := Control.new()
+	crop.clip_contents = true
+	crop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	Palette.at(button, crop, Rect2(270, 5, 299, 158))
+	crop.add_child(picture)
+	picture.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var veil := Livery.new()
+	veil.mode = "tile"
+	crop.add_child(veil)
+	Palette.label(button, Rect2(22, 15, 275, 24), index, 13, Palette.AMBER, Palette.MONO)
+	Palette.label(button, Rect2(20, 48, 339, 47), title, 35, Palette.TEXT, Palette.HEAD)
+	Palette.label(button, Rect2(22, 99, 248, 50), description, 16, Palette.MUTED)
+	Palette.panel(button, Rect2(517, 111, 39, 39), Color("#252922"), Color(Palette.MUTED, 0.32))
+	_glyph(button, Rect2(524, 118, 25, 25), "arrow", Palette.AMBER)
 	if featured:
 		button.grab_focus()
 
@@ -786,7 +851,7 @@ func controls() -> void:
 	]
 	if Prefs.mobile():
 		lines = [
-			["Se déplacer", "Joystick. Pousser vers l’avant à fond pour sprinter."],
+			["Se déplacer", "Joystick. Le bouton Sprint active ou coupe la course."],
 			["Orienter la caméra", "Glisser dans la moitié droite ou sur le bouton de tir."],
 			["Tirer et viser", "Garder le bouton de tir enfoncé. Toucher l’icône de visée pour basculer."],
 			["Sauter et glisser", "Toucher la flèche pour sauter. Glisser vers le bas pour s’accroupir."],

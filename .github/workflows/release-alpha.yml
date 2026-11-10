@@ -90,7 +90,7 @@ jobs:
           grep -Fx 'lib/arm64-v8a/libgodot_android.so' "$RUNNER_TEMP/apk-files.txt"
           grep -Fx 'assets/project.binary' "$RUNNER_TEMP/apk-files.txt"
           {
-            printf 'Rifle Arena v0.0.4 Alpha - Windows x64\n\nExtraire le ZIP et ouvrir RifleArena.exe.\nGodot est inclus dans le jeu.\n\n'
+            printf 'Rifle Arena v0.0.5 Alpha - Windows x64\n\nExtraire le ZIP et ouvrir RifleArena.exe.\nGodot est inclus dans le jeu.\n\n'
             cat README.md
           } > "$windows/LISEZ_MOI.txt"
           source="https://raw.githubusercontent.com/godotengine/godot/$GODOT_VERSION"
@@ -134,9 +134,10 @@ jobs:
           done
           if [[ $booted != true ]]; then cat "$RUNNER_TEMP/emulator.log"; exit 1; fi
           apk="$RUNNER_TEMP/dist/RifleArena_Android_alpha.apk"
-          package=com.riflearena.game
+          package=com.riflearena.alpha
           "$adb" install "$apk"
           "$adb" shell wm dismiss-keyguard
+          "$adb" shell wm size 1080x2400
           activity=$("$adb" shell cmd package resolve-activity --brief "$package" | tail -n1 | tr -d '\r')
           [[ "$activity" == "$package/"* ]]
           "$adb" logcat -c
@@ -147,7 +148,7 @@ jobs:
           "$adb" shell dumpsys activity activities > "$RUNNER_TEMP/android-activity.log"
           "$adb" logcat -d -s AndroidRuntime godot > "$RUNNER_TEMP/android-runtime.log"
           cat "$RUNNER_TEMP/android-runtime.log"
-          grep -E "(topResumedActivity|mResumedActivity).*com[.]riflearena[.]game" "$RUNNER_TEMP/android-activity.log"
+          grep -E '(topResumedActivity|mResumedActivity)' "$RUNNER_TEMP/android-activity.log" | grep -F "$package/"
           if grep -E 'FATAL EXCEPTION|SCRIPT ERROR:' "$RUNNER_TEMP/android-runtime.log"; then exit 1; fi
       - uses: actions/upload-artifact@v4
         with:
@@ -191,7 +192,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag=v0.0.4-alpha
+          tag=v0.0.5-alpha
           windows=RifleArena_Windows_x64.zip
           android=RifleArena_Android_alpha.apk
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -201,15 +202,19 @@ jobs:
             exit
           fi
           cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
-          ## Installer Rifle Arena v0.0.4 Alpha
+          ## Installer Rifle Arena v0.0.5 Alpha
 
           - **Windows 64 bits** — téléchargez le ZIP, extrayez-le, puis ouvrez `RifleArena.exe`.
           - **Android** — téléchargez l’APK debug et ouvrez-le depuis le téléphone. Android peut demander d’autoriser l’installation depuis l’application utilisée pour ouvrir le fichier.
 
-          Les huit armes, les personnages et les sept arènes adoptent une direction réaliste stylisée. Les menus et le HUD sont simplifiés. Sur mobile, l’aide à la visée ralentit le geste près d’une cible visible et se désactive dans Paramètres → Tactile.
+          ## Changements
 
-          Le moteur Godot est inclus. L’APK alpha utilise un nouveau nom de paquet et une clé de débogage. Il s’installe à côté de Neon Rift et démarre avec un profil local séparé. La suite de tests, le démarrage Windows et le lancement sur émulateur Android ont été vérifiés avant publication.
+          - Accueil plein écran sur mobile, menus illustrés et HUD plus lisible.
+          - Sprint tactile en bascule. Touchez le bouton pour courir dès que vous bougez. Retouchez-le pour marcher.
+          - Marche, course, sauts, glissades, tirs, recharges et chutes animés en coop. Les bots ont une démarche articulée et les drones des hélices animées.
+
+          Godot est inclus. L’APK s’installe sous le nom **Rifle Arena Alpha**, à côté de la v0.0.4, avec un profil local séparé. En coop, tous les joueurs doivent utiliser la v0.0.5. La suite de tests, le démarrage Windows et le lancement sur émulateur Android ont été vérifiés avant publication.
           EOF
           gh release create "$tag" "$windows" "$android" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --prerelease --title 'Rifle Arena v0.0.4 Alpha' --notes-file "$RUNNER_TEMP/release-notes.md"
+            --prerelease --title 'Rifle Arena v0.0.5 Alpha' --notes-file "$RUNNER_TEMP/release-notes.md"

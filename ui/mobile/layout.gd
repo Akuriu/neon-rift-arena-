@@ -12,11 +12,11 @@ const CONTROLS := {
 	"zoom": [0.792, 0.522, 28.0, "Grossissement", "×2"],
 	"pause": [0.950, 0.082, 32.0, "Pause", ""],
 	"crouch": [0.964, 0.799, 26.0, "S’accroupir", "Bas"],
-	"sprint": [0.203, 0.593, 30.0, "Sprint", "Sprint"],
+	"sprint": [0.205, 0.581, 35.0, "Sprint", ""],
 	"gadget": [0.709, 0.764, 30.0, "Gadget", "Kit"],
 	"stats": [0.056, 0.220, 27.0, "Bilan", "Bilan"],
 }
-const SECONDARY := ["crouch", "sprint", "gadget", "stats"]
+const SECONDARY := ["crouch", "gadget", "stats"]
 
 static func defaults() -> Dictionary:
 	var layout := {}

@@ -82,12 +82,13 @@ func run() -> void:
 		print("ECONOMIE ", mode, " cas=20 moyenne_pieces=", pieces / 20.0, " moyenne_xp=", xp / 20.0)
 		check(pieces > 0 and xp > 0, "Simulation économique bornée · " + mode)
 	var track := Track.new()
-	track.append(Vector3.ZERO, 3.13, 0.0, 2.0, 1.0)
-	track.append(Vector3(2.0, 0, 0), -3.13, 0.3, 5.0, 1.20)
+	track.append(Vector3.ZERO, 3.13, 0.0, Vector3(2, 0, 0), 1.0)
+	track.append(Vector3(2.0, 0, 0), -3.13, 0.3, Vector3(5, 2, 0), 1.20, 16)
 	var pose := track.pose(1.22)
-	check(absf(pose.at.x - 1.0) < 0.002 and absf(pose.yaw) > 3.0 and track.pose(4).at.x == 2.0,
+	check(absf(pose.at.x - 1.0) < 0.002 and absf(pose.yaw) > 3.0 and absf(pose.velocity.y - 1.0) < 0.01
+		and pose.flags == 0 and track.pose(4).flags == 16 and track.pose(4).at.x == 2.0,
 		"Interpolation, angles courts et stabilisation après perte de snapshots")
-	track.append(Vector3(20.0, 0, 0), 0.0, 0.0, 0.0, 4.0)
+	track.append(Vector3(20.0, 0, 0), 0.0, 0.0, Vector3.ZERO, 4.0)
 	check(track.samples.size() == 1 and track.pose(4).at.x == 20.0, "Déplacement discontinu réinitialise le tampon")
 	check(not Replication.valid([0, [], [], [], []]) and not Replication.valid([[0], [], [], [], []]),
 		"Enveloppes réseau mal formées rejetées avant lecture")

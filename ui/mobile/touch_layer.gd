@@ -23,6 +23,8 @@ var ads_latched := false
 var gesture_start := Vector2.ZERO
 var gesture_action := ""
 var auto_sprinting := false
+var sprint_latched := false
+var sprint_manual := false
 var pulses := {}
 
 func _ready() -> void:
@@ -39,9 +41,10 @@ func _process(delta: float) -> void:
 	if preview:
 		return
 	if not is_visible_in_tree() or not is_instance_valid(pilot) or not pilot.alive or pilot.input_blocked:
-		if not fingers.is_empty() or not actions.is_empty():
+		if not fingers.is_empty() or not actions.is_empty() or (is_instance_valid(pilot) and pilot.touch_sprint):
 			release_all()
 		return
+	_sync_sprint()
 	redraw_left -= delta
 	if redraw_left <= 0.0:
 		redraw_left = 0.075
@@ -67,8 +70,13 @@ func release_all() -> void:
 	ads_latched = false
 	gesture_action = ""
 	auto_sprinting = false
+	if is_instance_valid(pilot):
+		pilot.touch_sprint = false
 	pulses.clear()
 	queue_redraw()
+
+func _sync_sprint() -> void:
+	pilot.touch_sprint = sprint_latched or auto_sprinting
 
 func _radius(id: String) -> float:
 	return Layout.CONTROLS[id][2] * Prefs.touch_layout[id].size * minf(size.x / 1280.0, size.y / 720.0)
@@ -154,7 +162,7 @@ func _begin(index: int, at: Vector2) -> void:
 		"stick":
 			joystick_at = at if Prefs.values.touch_float else _center(id)
 			_move(at)
-		"look":
+		"look", "sprint":
 			pass
 		"ads":
 			ads_latched = not ads_latched
@@ -201,9 +209,8 @@ func _end(index: int, canceled: bool) -> void:
 		analog = Vector2.ZERO
 		for action in AXES:
 			_strength(action, 0.0)
-		if auto_sprinting:
-			_strength("sprint", 0.0)
 		auto_sprinting = false
+		_sync_sprint()
 	elif id == "jump" and Prefs.values.touch_compact:
 		if gesture_action == "crouch" or (canceled and gesture_action == "gadget"):
 			pulses.erase(gesture_action)
@@ -215,6 +222,11 @@ func _end(index: int, canceled: bool) -> void:
 		if canceled:
 			ads_latched = false
 			_strength("ads", 0.0)
+	elif id == "sprint" and not canceled and pilot.alive:
+		sprint_manual = true
+		sprint_latched = not sprint_latched
+		auto_sprinting = false
+		_sync_sprint()
 	elif actions.has(id) and (canceled or not pulses.has(id)):
 		pulses.erase(id)
 		_strength(id, 0.0)
@@ -228,11 +240,9 @@ func _move(at: Vector2) -> void:
 	_strength("right", maxf(0.0, scaled.x))
 	_strength("forward", maxf(0.0, -scaled.y))
 	_strength("back", maxf(0.0, scaled.y))
-	if Prefs.values.touch_compact and Prefs.values.touch_auto_sprint and not Prefs.values.sprint_toggle:
-		var should_sprint := scaled.y < (-0.69 if auto_sprinting else -0.89)
-		if should_sprint != auto_sprinting:
-			auto_sprinting = should_sprint
-			_strength("sprint", 1.0 if should_sprint else 0.0)
+	if Prefs.values.touch_auto_sprint and not sprint_manual:
+		auto_sprinting = scaled.y < (-0.69 if auto_sprinting else -0.89)
+		_sync_sprint()
 	queue_redraw()
 
 func _pulse(action: String) -> void:
@@ -276,14 +286,19 @@ func _draw() -> void:
 		if not _available(id):
 			continue
 		var opacity: float = Prefs.touch_layout[id].opacity
-		var hot: bool = id in held or (id == "ads" and ads_latched) or (preview and id == active_edit)
+		var sprint_on: bool = id == "sprint" and (sprint_latched or auto_sprinting)
+		var hot: bool = id in held or (id == "ads" and ads_latched) or sprint_on or (preview and id == active_edit)
 		var at := joystick_at if id == "stick" and id in held else _center(id)
 		var radius := _radius(id)
 		var ink := Color(Palette.AMBER if hot else INK, opacity)
 		if id == "reload":
 			_ammo(at, radius, ink, opacity)
 			continue
-		draw_circle(at, radius, Color(0.072, 0.081, 0.067, (0.80 if hot else 0.49) * opacity), true, -1, true)
+		var fill := Color(0.072, 0.081, 0.067, (0.80 if hot else 0.49) * opacity)
+		if sprint_on:
+			fill = Color(Palette.AMBER, opacity)
+			ink = Color(Palette.BASE, 0.96)
+		draw_circle(at, radius, fill, true, -1, true)
 		draw_arc(at, radius, 0.0, TAU, 40, Color(ink, opacity * (0.83 if hot or id == "fire" else 0.55)), 1.65, true)
 		if id == "stick":
 			draw_circle(at + analog * radius * 0.59, radius * 0.31, Color(ink, opacity * 0.48), true, -1, true)
@@ -314,6 +329,12 @@ func _icon(id: String, at: Vector2, radius: float, ink: Color) -> void:
 		"pause":
 			for x in [-step * 0.38, step * 0.38]:
 				draw_line(at + Vector2(x, -step), at + Vector2(x, step), ink, maxf(2.0, step * 0.29), true)
+		"sprint":
+			for y in [-step * 0.73, 0.0]:
+				var tip := at + Vector2(0, y - step * 0.73)
+				draw_polyline(PackedVector2Array([tip + Vector2(-step, step), tip,
+					tip + Vector2(step, step)]), ink, 2.0, true)
+			_caption(at + Vector2(0, radius * 0.45), "SPRINT", maxi(8, roundi(radius * 0.34)), ink)
 		_:
 			var label: String = Layout.CONTROLS[id][4]
 			if id == "zoom" and not preview:

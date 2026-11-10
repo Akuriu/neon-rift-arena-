@@ -4,8 +4,9 @@ const Fabric := preload("res://game/fabric.gd")
 const Materials := preload("res://art/materials.gd")
 
 static var quad := []
+static var blade: Mesh
 
-static func drone(root: Node3D) -> MeshInstance3D:
+static func drone(root: Node3D, rotors: Array[Node3D]) -> MeshInstance3D:
 	if quad.is_empty():
 		var w := Fabric.Batch.new()
 		var nylon := Materials.finish(Color("#535a51"), "steel", 4.0)
@@ -21,14 +22,19 @@ static func drone(root: Node3D) -> MeshInstance3D:
 				var axis := Vector3(side * 0.339, 0.999, end * 0.249)
 				w.put(Fabric.tube(0.054, 0.090, 10), steel, axis, Vector3.ZERO, false)
 				w.put(Fabric.ring(0.145, 0.014, 13), nylon, axis + Vector3.UP * 0.025, Vector3.ZERO, false)
-				w.put(Fabric.bevel(Vector3(0.25, 0.012, 0.032), 0.013), carbon,
-					axis + Vector3.UP * 0.060, Vector3(0, side * 0.68, 0), false)
 		w.commit(root)
 		for part in root.get_children():
 			quad.append([part.mesh, part.material_override, part.position])
 	else:
 		for part in quad:
 			Fabric.place(root, part[0], part[1], part[2])
+	if blade == null:
+		blade = Fabric.bevel(Vector3(0.25, 0.012, 0.032), 0.013)
+	for side in [-1.0, 1.0]:
+		for end in [-1.0, 1.0]:
+			var rotor := Fabric.place(root, blade, Materials.finish(Color("#3b403b"), "steel", 4.0, 0.28),
+				Vector3(side * 0.339, 1.059, end * 0.249), Vector3.ZERO, false)
+			rotors.append(rotor)
 	return Fabric.place(root, Fabric.orb(0.045, 0.090, 10), Fabric.paint(Color("#838076")),
 		Vector3(0, 0.862, -0.268), Vector3.ZERO, false)
 

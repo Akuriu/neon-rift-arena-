@@ -1,5 +1,7 @@
 extends CharacterBody3D
 
+const Track := preload("res://network/snapshot_track.gd")
+
 signal eliminated(drone: CharacterBody3D, points: int)
 
 const Catalog := preload("res://game/catalog.gd")
@@ -44,13 +46,16 @@ var check_left := 0.6
 var stuck := 0.0
 var relocations := 0
 var replica := false
-var replica_at := Vector3.ZERO
-var replica_yaw := 0.0
+var replica_poses := Track.new()
+var visual_velocity := Vector3.ZERO
+var visual_pitch := 0.0
+var visual_flags := 0
+var fired := 0
+var rotors: Array[Node3D] = []
 var arena_slot := -1
 var arena_side := 1
 var last_attacker: CharacterBody3D
 var operator: Operator
-var last_visual_at := Vector3.ZERO
 var visual_wait := 0.0
 
 func major() -> bool:
@@ -80,7 +85,7 @@ func _ready() -> void:
 	hull = Node3D.new()
 	add_child(hull)
 	if kind == "skimmer":
-		lens = Models.drone(hull)
+		lens = Models.drone(hull, rotors)
 	elif training:
 		lens = Models.target(hull)
 	else:
@@ -94,7 +99,7 @@ func _ready() -> void:
 		operator.set_weapon(int({"scout": 2, "sentinel": 0, "bulwark": 1, "specter": 6, "elite": 0,
 			"warden": 7, "medic": 2, "disruptor": 6, "artillery": 3, "colossus": 1, "architect": 4}[kind]))
 		lens = operator.mark
-	last_visual_at = position
+		operator.animate(0.016, Vector3.ZERO, 0.0, 0.0, 0, 0.0)
 	paint = lens.material_override.duplicate()
 	lens.material_override = paint
 	if arena_slot >= 0 and session.mode != "classic":
@@ -120,8 +125,17 @@ func _physics_process(delta: float) -> void:
 	age += delta
 	hit_flash = maxf(0.0, hit_flash - delta * 6.0)
 	if replica:
-		position = position.lerp(replica_at, 1.0 - exp(-17.0 * delta))
-		rotation.y = lerp_angle(rotation.y, replica_yaw, 1.0 - exp(-17.0 * delta))
+		var pose := replica_poses.pose(Time.get_ticks_msec() * 0.001)
+		if not pose.is_empty():
+			var teleported := position.distance_squared_to(pose.at) > Track.DISCONTINUITY_SQUARED
+			position = pose.at
+			rotation.y = pose.yaw
+			visual_velocity = pose.velocity
+			visual_pitch = pose.pitch
+			visual_flags = pose.flags
+			if teleported:
+				reset_physics_interpolation()
+		timer = maxf(0.0, timer - delta)
 		_animate(delta)
 		return
 	if not is_instance_valid(target) or not target.alive:
@@ -169,25 +183,53 @@ func _animate(delta: float) -> void:
 	var step := visual_wait
 	visual_wait = 0.0
 	var time := age + serial * 0.57
-	var travel := Vector2(velocity.x, velocity.z).length()
-	if replica:
-		travel = minf(Vector2(position.x - last_visual_at.x, position.z - last_visual_at.z).length() / maxf(step, 0.001), spec.speed)
-	last_visual_at = position
+	var motion := visual_velocity if replica else velocity
+	var local := basis.inverse() * motion
 	var telling := state == State.TELL
 	var prep := 1.0 - clampf(timer / maxf(0.01, spec.tell * tuning.tempo), 0.0, 1.0) if telling else 0.0
 	var weight := 1.0 - exp(-14.0 * step)
 	if operator != null:
-		hull.position.y = absf(sin(time * 9.0)) * minf(travel * 0.006, 0.029)
-		operator.animate(step, travel, -prep * 0.16, prep * 0.13, travel > 5.0, telling, 0.0)
+		var flags := visual_flags if replica else pose_flags()
+		var pitch := visual_pitch if replica else aim_pitch()
+		operator.animate(step, local, pitch, prep * 0.18, flags, 0.0)
 	elif kind == "skimmer":
 		hull.position.y = sin(time * 4.3) * 0.055
-		hull.rotation.z = lerpf(hull.rotation.z, -velocity.dot(global_basis.x) * 0.036, weight)
+		hull.rotation.z = lerpf(hull.rotation.z, -local.x * 0.036, weight)
+		for i in rotors.size():
+			rotors[i].rotate_y(step * (27.0 if i % 2 == 0 else -27.0))
 	hull.rotation.x = lerpf(hull.rotation.x, -prep * 0.065 + hit_flash * 0.052, weight)
 	var base := Color("#95a9b2") if arena_side == 0 else Color("#a8775d")
 	var color := base.lerp(Color("#e6c79a"), maxf(prep * 0.61, hit_flash * 0.45))
 	if color != lens_color:
 		lens_color = color
 		paint.albedo_color = color
+
+func pose_flags() -> int:
+	var running := Vector2(velocity.x, velocity.z).length_squared() > 25.0
+	return (Track.RUN if running else 0) | (Track.DASH if dodge_left > 0.0 else 0) \
+		| (Track.AIM if state == State.TELL else 0)
+
+func aim_pitch() -> float:
+	if state != State.TELL:
+		return 0.0
+	var aim := aim_at - center()
+	return clampf(atan2(aim.y, Vector2(aim.x, aim.z).length()), -0.80, 0.80)
+
+func flash_attack() -> void:
+	if operator != null:
+		operator.kick(kind not in ["scout", "medic"] and not wave_attack and Prefs.values.flashes > 0.15)
+
+func collapse() -> void:
+	alive = false
+	state = State.DEAD
+	collision_layer = 0
+	collision_mask = 0
+	var shutdown := create_tween().set_parallel(true).set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	shutdown.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	shutdown.tween_property(hull, "rotation", Vector3(-PI * 0.48, 0.12, strafe * 0.20), 0.40)
+	shutdown.tween_property(hull, "position:y", -0.12, 0.40)
+	shutdown.chain().tween_interval(0.27)
+	shutdown.tween_callback(queue_free)
 
 func _check_stall(delta: float, distance: float) -> void:
 	check_left -= delta
@@ -283,10 +325,10 @@ func _begin_tell() -> void:
 	session.telegraph(self)
 
 func attack() -> void:
-	if operator != null:
-		operator.recoil = 0.9
 	if training:
 		return
+	fired += 1
+	flash_attack()
 	if kind == "medic" and is_instance_valid(patient) and patient.alive and repairs_left > 0:
 		if center().distance_to(patient.center()) < 12.0 and session.ray(center(), patient.center(), 1).is_empty():
 			patient.health = minf(patient.maximum, patient.health + 37.0)
@@ -373,13 +415,7 @@ func take_hit(amount: float, at: Vector3, direction: Vector3, attacker: Characte
 			session.effects.sparks(center(), spec.tint, 36, 4.6)
 			session.sound("phase", center())
 	if health == 0.0:
-		alive = false
-		state = State.DEAD
 		last_attacker = attacker
-		collision_layer = 0
+		collapse()
 		eliminated.emit(self, spec.points)
-		var shutdown := create_tween().set_parallel(true).set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
-		shutdown.tween_property(hull, "rotation:x", -PI * 0.48, 0.28)
-		shutdown.tween_property(hull, "position:y", -0.12, 0.28)
-		shutdown.chain().tween_callback(queue_free)
 	return amount

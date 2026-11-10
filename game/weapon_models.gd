@@ -15,7 +15,7 @@ const SIGHT_HEIGHTS := [0.092, 0.063, 0.062, 0.104, 0.146, 0.150, 0.089, 0.099]
 
 static var cache := {}
 
-static func build(root: Node3D, index: int, skin := "", first_person := false) -> Dictionary:
+static func build(root: Node3D, index: int, skin := "", first_person := false, firing_fx := false) -> Dictionary:
 	var key := [index, skin]
 	if cache.has(key):
 		for part in cache[key]:
@@ -46,7 +46,7 @@ static func build(root: Node3D, index: int, skin := "", first_person := false) -
 	var muzzle := Node3D.new()
 	muzzle.position = Vector3(0, 0.018 if index != 2 else 0.025, MUZZLES[index] - 0.017)
 	root.add_child(muzzle)
-	var flare := _muzzle_flash(muzzle) if first_person else null
+	var flare := _muzzle_flash(muzzle) if first_person or firing_fx else null
 	if first_person:
 		_hands(root, index)
 	return {"muzzle": muzzle, "flash": flare, "magazine": magazine, "bolt": bolt}

@@ -6,7 +6,7 @@ func _initialize() -> void:
 	call_deferred("run")
 
 func run() -> void:
-	check(ProjectSettings.get_setting("application/config/version") == "0.0.4-alpha", "Version exportée 0.0.4-alpha")
+	check(ProjectSettings.get_setting("application/config/version") == "0.0.5-alpha", "Version exportée 0.0.5-alpha")
 	var app = load("res://scenes/App.tscn").instantiate()
 	root.add_child(app)
 	check(app.screen == "menu" and app.coop != null, "Scène d’entrée et gestionnaire coop dans le paquet")

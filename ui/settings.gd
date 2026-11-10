@@ -136,7 +136,8 @@ func show_tab(index: int) -> void:
 			_toggle("Joystick flottant", "touch_float")
 			_toggle("Sprint au bout du joystick", "touch_auto_sprint")
 			_toggle("Vibrations facultatives", "touch_haptic")
-			_note("L’aide ralentit légèrement le glissement près d’un adversaire visible. Glissez sur la flèche vers le bas pour vous accroupir, ou sur le côté pour utiliser le gadget.")
+			_note("Touchez Sprint pour l’activer, puis touchez-le à nouveau pour marcher. Le bouton prend la main sur le sprint automatique du joystick jusqu’à la fin de la partie.")
+			_note("Glissez sur la flèche vers le bas pour vous accroupir, ou sur le côté pour utiliser le gadget. L’aide à la visée ralentit légèrement le glissement près d’un adversaire visible.")
 
 func _row(caption: String) -> HBoxContainer:
 	var line := HBoxContainer.new()

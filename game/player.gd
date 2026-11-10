@@ -44,6 +44,7 @@ var wall_pull := 0.0
 var wall_target := 0.0
 var landing := 0.0
 var sprint_latched := false
+var touch_sprint := false
 var crouch_latched := false
 var round_lock := false
 var input_blocked := false
@@ -67,7 +68,7 @@ var pilot_name := "Pilote"
 var avatar: Node3D
 var replica := false
 var replica_pos := Vector3.ZERO
-var replica_speed := 0.0
+var replica_velocity := Vector3.ZERO
 var replica_poses := Track.new()
 var replica_flags := 0
 var replica_weapon := 0
@@ -172,7 +173,7 @@ func _physics_process(delta: float) -> void:
 		session.interact(self)
 	net_edges = 0
 	if is_instance_valid(avatar):
-		avatar.animate(delta, Vector2(velocity.x, velocity.z).length(), head.rotation.x, height,
+		avatar.animate(delta, velocity, head.rotation.x, height,
 			pose_flags(), arsenal.active, reload_progress())
 
 func _client_step(delta: float) -> void:
@@ -186,10 +187,18 @@ func _client_step(delta: float) -> void:
 			if teleport:
 				reset_physics_interpolation()
 			if is_instance_valid(avatar):
-				avatar.visible = alive
-				avatar.animate(delta, pose.speed, pose.pitch, height, replica_flags, replica_weapon, replica_reload)
+				avatar.present_alive(alive)
+				avatar.animate(delta, pose.velocity, pose.pitch, height, pose.flags, replica_weapon, replica_reload)
 		return
-	position = position.lerp(replica_pos, 1.0 - exp(-20.0 * delta))
+	var gap := position.distance_squared_to(replica_pos)
+	if gap > Track.DISCONTINUITY_SQUARED:
+		position = replica_pos
+		reset_physics_interpolation()
+	else:
+		position = position.lerp(replica_pos, 1.0 - exp(-20.0 * delta))
+	var planar := Vector2(replica_velocity.x, replica_velocity.z)
+	if (replica_flags & Track.AIR) == 0:
+		walk_phase = fposmod(walk_phase + planar.length() * delta * 2.55, TAU)
 	shield_flash = move_toward(shield_flash, 0.0, delta * 3.6)
 	hull_flash = move_toward(hull_flash, 0.0, delta * 2.8)
 	if not alive:
@@ -201,7 +210,9 @@ func _client_step(delta: float) -> void:
 	head.position.y = height - 0.16
 
 func pose_flags() -> int:
-	return int(sprinting) | (int(slide > 0.0) << 1) | (int(dash_left > 0.0) << 2) | (int(arsenal.aiming()) << 3)
+	return (Track.RUN if sprinting else 0) | (Track.SLIDE if slide > 0.0 else 0) \
+		| (Track.DASH if dash_left > 0.0 else 0) | (Track.AIM if arsenal.aiming() else 0) \
+		| (Track.AIR if not is_on_floor() and absf(velocity.y) > 0.10 else 0)
 
 func reload_progress() -> float:
 	return clampf(arsenal.reload_left / maxf(0.001, arsenal.cycle_length), 0.0, 1.0)
@@ -227,6 +238,8 @@ func respawn(at: Vector3) -> void:
 	slide = 0.0
 	last_attacker = null
 	arsenal.reset_supply()
+	if is_instance_valid(avatar):
+		avatar.present_alive(true)
 
 func take_damage(amount: float, source := Vector3.INF, attacker: CharacterBody3D = null) -> void:
 	if not alive or replica or damage_lock > 0.0 or session.mode == "training":
@@ -249,7 +262,7 @@ func take_damage(amount: float, source := Vector3.INF, attacker: CharacterBody3D
 		collision_layer = 0
 		arsenal.cancel_trigger()
 		if is_instance_valid(avatar):
-			avatar.hide()
+			avatar.present_alive(false)
 		eliminated.emit()
 
 func steering() -> Vector2:
@@ -261,8 +274,11 @@ func down(action: String) -> bool:
 	if input_blocked:
 		return false
 	if local_view:
-		if action == "sprint" and Prefs.values.sprint_toggle:
-			return sprint_latched
+		if action == "sprint":
+			if touch_sprint:
+				return true
+			if Prefs.values.sprint_toggle:
+				return sprint_latched
 		if action == "crouch" and Prefs.values.crouch_toggle:
 			return crouch_latched
 	return (net_buttons & int(INPUT_BITS.get(action, 0))) != 0 if remote_input else Input.is_action_pressed(action)

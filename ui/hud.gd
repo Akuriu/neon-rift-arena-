@@ -19,6 +19,8 @@ var render_wait := 0.0
 var scope_mesh: ArrayMesh
 var scope_extent := Vector2.ZERO
 var signal_ink := CYAN
+var status_panel := Palette.box(INK, Color("#626357"), 5)
+var status_contrast := Palette.box(Color("#141611"), Color("#77776a"), 5)
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -128,20 +130,26 @@ func _mobile_status(pilot: CharacterBody3D, objective: String, score: String, ti
 	var width := 184.0 * factor
 	var corner := Vector2(size.x - 24.0 - width if left_handed else 24.0, 21.0)
 	draw_set_transform(corner, 0, Vector2.ONE * factor)
-	_frame(Rect2(0, 0, 184, 63), signal_ink)
-	_print(Vector2(12, 24), Catalog.MAPS[session.map_id].name, 16, Palette.BOLD, TEXT)
-	_print(Vector2(12, 47), objective, 14, Palette.BODY, MUTE)
-	draw_set_transform(Vector2(size.x * 0.5 - 93.0 * factor, 18), 0, Vector2.ONE * factor)
-	_frame(Rect2(0, 0, 186, 46), AMBER)
-	_mid(Vector2(55, 29), score, 21, Palette.BOLD, TEXT)
-	_mid(Vector2(137, 28), Palette.clock(time), 16, Palette.MONO, MUTE)
-	draw_set_transform(Vector2(corner.x, size.y - 24.0 - 58.0 * factor), 0, Vector2.ONE * factor)
-	_frame(Rect2(0, 0, 184, 58), signal_ink)
-	_print(Vector2(11, 25), "+", 21, Palette.BOLD, TEXT)
-	_print(Vector2(31, 25), str(ceili(pilot.health)), 19, Palette.BOLD, TEXT)
-	_meter(Vector2(81, 14), Vector2(90, 6), pilot.health / 100.0, TEXT)
-	_meter(Vector2(81, 27), Vector2(90, 5), pilot.shield / pilot.shield_max, Color("#a7b2a3"))
-	_print(Vector2(12, 47), "Protection %d" % ceili(pilot.shield), 12, Palette.BODY, MUTE)
+	var plate := status_contrast if Prefs.values.high_contrast else status_panel
+	draw_style_box(plate, Rect2(0, 0, 184, 61))
+	draw_rect(Rect2(0, 11, 3, 39), AMBER)
+	_print(Vector2(14, 22), Catalog.MAPS[session.map_id].name.to_upper(), 11, Palette.MONO, MUTE)
+	_print(Vector2(13, 47), objective, 21, Palette.HEAD, TEXT)
+	draw_set_transform(Vector2(size.x * 0.5 - 112.0 * factor, 18), 0, Vector2.ONE * factor)
+	draw_style_box(plate, Rect2(0, 0, 224, 54))
+	draw_line(Vector2(123, 9), Vector2(123, 45), Color(MUTE, 0.34), 1.0)
+	_mid(Vector2(62, 17), "SCORE", 10, Palette.MONO, AMBER)
+	_mid(Vector2(174, 17), "TEMPS", 10, Palette.MONO, MUTE)
+	_mid(Vector2(62, 42), score, 23, Palette.HEAD, TEXT)
+	_mid(Vector2(174, 41), Palette.clock(time), 17, Palette.MONO, TEXT)
+	draw_set_transform(Vector2(corner.x, size.y - 24.0 - 65.0 * factor), 0, Vector2.ONE * factor)
+	draw_style_box(plate, Rect2(0, 0, 184, 65))
+	_mid(Vector2(47, 17), "SANTÉ", 10, Palette.MONO, MUTE)
+	_mid(Vector2(136, 17), "PROTECTION", 10, Palette.MONO, MUTE)
+	_mid(Vector2(47, 44), str(ceili(pilot.health)), 26, Palette.HEAD, TEXT)
+	_mid(Vector2(136, 44), str(ceili(pilot.shield)), 26, Palette.HEAD, Color("#b3c1b1"))
+	_meter(Vector2(13, 52), Vector2(69, 4), pilot.health / 100.0, TEXT)
+	_meter(Vector2(102, 52), Vector2(69, 4), pilot.shield / pilot.shield_max, Color("#a7b2a3"))
 	draw_set_transform(Vector2.ZERO)
 	if Prefs.values.fps_counter:
 		_mid(Vector2(size.x * 0.5, 80), "%d FPS" % Engine.get_frames_per_second(), 12, Palette.MONO, TEXT)
