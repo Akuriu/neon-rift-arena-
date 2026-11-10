@@ -34,6 +34,8 @@ python3 tools/run_tests.py --suite all
 
 [Les vérifications GitHub Actions](.github/workflows/test.yml) testent le jeu et préparent un APK de revue et un ZIP Windows. [La publication](.github/workflows/release-alpha.yml) exige le tag correspondant à `project.godot` et valide les deux installateurs avant de rendre la release visible.
 
+L’APK de revue apparaît sous le nom **Rifle Arena Preview**. Il s’installe à côté de l’Alpha avec son propre profil, pour permettre les essais sur téléphone.
+
 Pour la publication Android, les secrets du dépôt `RIFLE_ANDROID_KEYSTORE` (keystore encodé en Base64), `RIFLE_ANDROID_ALIAS` et `RIFLE_ANDROID_PASSWORD` doivent désigner la clé d’origine. La CI compare les certificats et vérifie l’installation par-dessus l’APK précédente. Gardez le fichier de clé hors du dépôt.
 
 Après les essais matériels du [suivi QA](docs/V0.0.6_QA.md), renseigner la variable GitHub Actions `RIFLE_HARDWARE_QA_TAG` avec le tag validé. Le contrôle de publication exige cette valeur pour chaque nouvelle version.

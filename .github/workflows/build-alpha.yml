@@ -115,7 +115,11 @@ jobs:
             export GODOT_ANDROID_KEYSTORE_DEBUG_PATH="$signing_file"
             export GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey
             export GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android
+            cp export_presets.cfg "$RUNNER_TEMP/export-presets.original"
+            sed -i 's|^package/unique_name="com\.riflearena\.alpha"$|package/unique_name="com.riflearena.preview"|;
+              s|^package/name="Rifle Arena Alpha"$|package/name="Rifle Arena Preview"|' export_presets.cfg
             godot --headless --export-debug Android "$apk"
+            mv "$RUNNER_TEMP/export-presets.original" export_presets.cfg
           fi
           file "$exe" | grep -E 'PE32\+.*x86-64'
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
@@ -207,9 +211,10 @@ jobs:
             sleep 2
           done
           if [[ $booted != true ]]; then cat "$RUNNER_TEMP/emulator.log"; exit 1; fi
-          package=com.riflearena.alpha
+          package=com.riflearena.preview
           sha256sum --check SHA256SUMS
           if [[ "$RIFLE_SIGNED" == true ]]; then
+            package=com.riflearena.alpha
             test -s prior/previous.apk
             "$adb" install --no-incremental prior/previous.apk
             "$adb" install --no-incremental -r RifleArena_Android_alpha.apk
