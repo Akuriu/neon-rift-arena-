@@ -1,0 +1,8 @@
+PASS Version exportée 2.0.0
+PASS Scène d’entrée et gestionnaire coop dans le paquet
+PASS Interface coop dans le paquet
+PASS Boutique et aperçu dans le paquet
+PASS Cryo Foundry et cibles chargées
+PASS Eclipse Rail équipé
+PASS Le paquet tire et ouvre sa lunette
+PASS 41 échantillons audio chargés depuis le paquet

@@ -1,0 +1,15 @@
+PASS Clic dans la fenêtre sur Jouer
+PASS Démarrage et capture souris
+PASS La souris contrôle le lacet et la hauteur de visée
+PASS Échap libère la souris et suspend la simulation
+PASS La fenêtre et la surface rendue passent à 960 × 540
+PASS Le mode plein écran est demandé au pilote d’affichage
+PASS Retour au fenêtré 1280 × 720
+PASS Signal audio réellement mixé
+AUDIO frames=4096 peak=0.4528680741787
+PASS Reprise et nouvelle capture du curseur
+PASS Image de jeu 1280 × 720 rendue
+PASS Le lobby coop est accessible à la souris
+PASS La boutique du hub est accessible à la souris
+PASS Cryo Foundry et lunette rendues dans la fenêtre
+PASS Ravitaillement et monnaie visibles en 720p

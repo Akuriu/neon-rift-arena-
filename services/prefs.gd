@@ -1,0 +1,415 @@
+extends Node
+
+signal changed(key: String)
+signal saved(success: bool)
+
+const SAVE := "user://pilot_profile.json"
+const BACKUP := "user://pilot_profile.json.bak"
+const TEMP := "user://pilot_profile.json.tmp"
+const VERSION := 3
+const Profile := preload("res://services/profile.gd")
+const LEGACY_BACKUP := "user://pilot_profile.v1.json"
+const RESET_BACKUP := "user://pilot_profile.before_reset.json"
+const LOCK := "user://pilot_profile.lock"
+const RESOLUTIONS := [Vector2i(960, 540), Vector2i(1280, 720), Vector2i(1600, 900), Vector2i(1920, 1080)]
+const FPS_OPTIONS := [30, 60, 90, 120, 0]
+const SCALES := [0.76, 0.89, 1.0, 0.64]
+const AZERTY := {
+	"forward": KEY_Z, "back": KEY_S, "left": KEY_Q, "right": KEY_D,
+	"jump": KEY_SPACE, "sprint": KEY_SHIFT, "crouch": KEY_CTRL, "reload": KEY_R,
+	"interact": KEY_E, "stats": KEY_TAB, "slot_1": KEY_1, "slot_2": KEY_2,
+	"slot_3": KEY_3, "slot_4": KEY_4, "gadget": KEY_G, "inspect": KEY_I,
+}
+const DEFAULTS := {
+	"layout": 0, "sensitivity": 0.18, "fov": 82.0, "invert_y": false,
+	"head_bob": false, "sprint_fov": true, "recoil": true, "damage_numbers": true,
+	"flashes": 0.8, "quality": 0, "resolution": 1, "fullscreen": false,
+	"ads_sensitivity": 0.66, "scope_overlay": true, "vsync": true, "borderless": false,
+	"telemetry": false, "reticle": 0, "reticle_tint": 0,
+	"fps_limit": 60, "fps_counter": false, "hud_scale": 1.0,
+	"master": 0.8, "music": 0.45, "sfx": 0.8, "ambience": 0.6,
+}
+const RANGES := {
+	"layout": [0, 1], "sensitivity": [0.035, 0.70], "fov": [66.0, 108.0],
+	"ads_sensitivity": [0.25, 1.0], "reticle": [0, 2], "reticle_tint": [0, 3], "flashes": [0.0, 1.0], "quality": [0, 3], "resolution": [0, 3], "hud_scale": [0.80, 1.20],
+	"master": [0.0, 1.0], "music": [0.0, 1.0], "sfx": [0.0, 1.0], "ambience": [0.0, 1.0],
+}
+const BUSES := {"master": "Master", "music": "Musique", "sfx": "SFX", "ambience": "Ambiance"}
+const MODES := ["survival", "short", "endless", "trial", "coop", "boss_rush"]
+const DIFFICULTIES := ["discovery", "standard", "expert"]
+const MAPS := ["reactor", "skyline", "cryo"]
+
+var values := DEFAULTS.duplicate()
+var keys := AZERTY.duplicate()
+var records: Dictionary = {}
+var profile := Profile.new()
+var disk_stamp := ""
+var save_error := ""
+var dirty := false
+var save_in := 0.0
+var test_profile_dir := ""
+
+func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	if OS.has_feature("editor") and OS.get_environment("NEON_QA_ISOLATED") == "1":
+		var candidate := OS.get_environment("NEON_QA_PROFILE_PATH")
+		if candidate.is_absolute_path() and DirAccess.dir_exists_absolute(candidate):
+			test_profile_dir = candidate
+	load_disk()
+	apply_video()
+
+func _process(delta: float) -> void:
+	if dirty:
+		save_in -= delta
+		if save_in <= 0.0:
+			save_disk()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and dirty:
+		save_disk()
+
+func keyboard(layout: int) -> Dictionary:
+	var result := AZERTY.duplicate()
+	if layout == 1:
+		result.forward = KEY_W
+		result.left = KEY_A
+	return result
+
+func change_value(key: String, value: Variant) -> void:
+	if not DEFAULTS.has(key):
+		return
+	var next: Variant = _valid_value(key, value)
+	if next == values[key]:
+		return
+	values[key] = next
+	if key == "layout":
+		keys = keyboard(next)
+		apply_keys()
+	if key in ["quality", "resolution", "fullscreen", "borderless", "vsync", "fps_limit"]:
+		apply_video()
+	if BUSES.has(key):
+		apply_audio()
+	queue_save()
+	changed.emit(key)
+
+func bind_key(action: String, code: int) -> bool:
+	if not keys.has(action) or not _key_ok(code):
+		return false
+	for other in keys:
+		if other != action and keys[other] == code:
+			keys[other] = keys[action]
+	keys[action] = code
+	apply_keys()
+	queue_save()
+	changed.emit("keys")
+	return true
+
+func _key_ok(code: int) -> bool:
+	return code > 0 and code != KEY_ESCAPE and code != KEY_UNKNOWN and OS.get_keycode_string(code) != ""
+
+func apply_keys() -> void:
+	for action in keys:
+		if not InputMap.has_action(action):
+			InputMap.add_action(action)
+		InputMap.action_erase_events(action)
+		var event := InputEventKey.new()
+		event.keycode = keys[action]
+		InputMap.action_add_event(action, event)
+		if action.begins_with("slot_") and event.keycode == AZERTY[action]:
+			var physical := InputEventKey.new()
+			physical.physical_keycode = event.keycode
+			InputMap.action_add_event(action, physical)
+			var keypad := InputEventKey.new()
+			keypad.keycode = KEY_KP_1 + (event.keycode - KEY_1)
+			InputMap.action_add_event(action, keypad)
+	for action in ["fire", "ads"]:
+		if not InputMap.has_action(action):
+			InputMap.add_action(action)
+			var click := InputEventMouseButton.new()
+			click.button_index = MOUSE_BUTTON_LEFT if action == "fire" else MOUSE_BUTTON_RIGHT
+			InputMap.action_add_event(action, click)
+
+func apply_video() -> void:
+	Engine.max_fps = values.fps_limit
+	var window := get_tree().root
+	window.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+	window.scaling_3d_scale = SCALES[values.quality]
+	window.msaa_3d = Viewport.MSAA_2X if values.quality == 2 else Viewport.MSAA_DISABLED
+	if DisplayServer.get_name() == "headless":
+		return
+	var desired_mode := Window.MODE_FULLSCREEN if values.fullscreen else Window.MODE_WINDOWED
+	if DisplayServer.window_get_vsync_mode() != (DisplayServer.VSYNC_ENABLED if values.vsync else DisplayServer.VSYNC_DISABLED):
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if values.vsync else DisplayServer.VSYNC_DISABLED)
+	window.borderless = values.borderless
+	if window.mode != desired_mode:
+		window.mode = desired_mode
+	if desired_mode == Window.MODE_WINDOWED:
+		var bounds := DisplayServer.screen_get_usable_rect()
+		var requested: Vector2i = RESOLUTIONS[values.resolution]
+		if bounds.size.x >= 640 and bounds.size.y >= 360:
+			var ratio := minf(1.0, minf(float(bounds.size.x) / requested.x, float(bounds.size.y - 30) / requested.y))
+			requested = Vector2i(Vector2(requested) * ratio)
+		if window.size != requested or DisplayServer.window_get_size() != requested:
+			window.size = requested
+			if bounds.size != Vector2i.ZERO:
+				window.position = bounds.position + (bounds.size - requested) / 2
+
+func apply_audio() -> void:
+	for key in BUSES:
+		var bus := AudioServer.get_bus_index(BUSES[key])
+		if bus >= 0:
+			AudioServer.set_bus_mute(bus, values[key] <= 0.001)
+			AudioServer.set_bus_volume_db(bus, linear_to_db(maxf(0.0001, values[key])))
+
+func reset_settings() -> void:
+	values = DEFAULTS.duplicate()
+	keys = keyboard(0)
+	apply_keys()
+	apply_audio()
+	apply_video()
+	changed.emit("all")
+	save_disk()
+
+func _valid_value(key: String, value: Variant) -> Variant:
+	var fallback: Variant = DEFAULTS[key]
+	if typeof(fallback) == TYPE_BOOL:
+		return value if typeof(value) == TYPE_BOOL else fallback
+	if typeof(value) not in [TYPE_FLOAT, TYPE_INT] or not is_finite(float(value)):
+		return fallback
+	if key == "fps_limit":
+		return int(value) if int(value) in FPS_OPTIONS else fallback
+	var range_for_key: Array = RANGES[key]
+	var number := clampf(float(value), range_for_key[0], range_for_key[1])
+	return roundi(number) if typeof(fallback) == TYPE_INT else number
+
+func profile_file(filename: String) -> String:
+	return test_profile_dir.path_join(filename.get_file()) if not test_profile_dir.is_empty() else filename
+
+func _read(filename: String) -> Dictionary:
+	var path := profile_file(filename)
+	if not FileAccess.file_exists(path):
+		return {}
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null or file.get_length() > 1048576:
+		return {}
+	var parser := JSON.new()
+	if parser.parse(file.get_as_text()) != OK or typeof(parser.data) != TYPE_DICTIONARY:
+		return {}
+	return parser.data
+
+func load_disk() -> void:
+	disk_stamp = _stamp()
+	var document := _read(SAVE)
+	if not _recognizable(document):
+		document = _read(BACKUP)
+	profile.restore(document.get("progression", {}))
+	values = DEFAULTS.duplicate()
+	var stored: Variant = document.get("settings", document.get("prefs", {}))
+	if stored is Dictionary:
+		for key in DEFAULTS:
+			values[key] = _valid_value(key, stored.get(key, DEFAULTS[key]))
+	keys = keyboard(values.layout)
+	var bindings: Variant = document.get("bindings", {})
+	if bindings is Dictionary:
+		_load_bindings(bindings)
+	records = {}
+	var stored_records: Variant = document.get("records", {})
+	if stored_records is Dictionary:
+		for mode in MODES:
+			for difficulty in DIFFICULTIES:
+				for map_id in MAPS:
+					var key := category(mode, difficulty, map_id)
+					var entry: Variant = stored_records.get(key, stored_records.get(mode + "|" + difficulty, []))
+					var rows := _record_rows(entry)
+					if not rows.is_empty():
+						records[key] = rows
+	dirty = false
+	apply_keys()
+	apply_audio()
+
+func _load_bindings(stored: Dictionary) -> void:
+	var assigned := {}
+	var used := {}
+	for action in keys:
+		var code: Variant = stored.get(action)
+		if typeof(code) in [TYPE_FLOAT, TYPE_INT] and is_finite(float(code)) and _key_ok(int(code)) and not used.has(int(code)):
+			assigned[action] = int(code)
+			used[int(code)] = true
+	var alternatives := keys.values() + [KEY_X, KEY_V, KEY_K, KEY_U, KEY_Y, KEY_O, KEY_M, KEY_N,
+		KEY_P, KEY_B, KEY_C, KEY_F, KEY_H, KEY_J, KEY_L, KEY_T, KEY_5, KEY_6]
+	for action in keys:
+		if assigned.has(action):
+			continue
+		var code: int = keys[action]
+		if used.has(code):
+			for candidate in alternatives:
+				if not used.has(candidate):
+					code = candidate
+					break
+		assigned[action] = code
+		used[code] = true
+	keys = assigned
+
+func _record_rows(raw: Variant) -> Array[Dictionary]:
+	var rows: Array[Dictionary] = []
+	if typeof(raw) in [TYPE_INT, TYPE_FLOAT]:
+		raw = [{"score": raw}]
+	if not raw is Array:
+		return rows
+	for entry in raw.slice(0, 20):
+		if not entry is Dictionary:
+			continue
+		var score: int = _bounded_number(entry.get("score"), 1000000000)
+		var win: Variant = entry.get("victory", false)
+		var wave := _bounded_number(entry.get("wave"), 1000000)
+		if score > 0 or wave > 0:
+			rows.append({"score": score, "wave": wave, "seconds": _bounded_number(entry.get("seconds"), 86400),
+				"kills": _bounded_number(entry.get("kills"), 9999),
+				"accuracy": _bounded_number(entry.get("accuracy"), 100),
+				"victory": typeof(win) == TYPE_BOOL and win})
+	rows.sort_custom(_better)
+	if rows.size() > 5:
+		rows.resize(5)
+	return rows
+
+func _bounded_number(value: Variant, limit: int) -> int:
+	if typeof(value) in [TYPE_INT, TYPE_FLOAT] and is_finite(float(value)):
+		return roundi(clampf(float(value), 0.0, limit))
+	return 0
+
+func _better(a: Dictionary, b: Dictionary) -> bool:
+	var left: int = a.get("wave", 0)
+	var right: int = b.get("wave", 0)
+	if left != right and left > 0 and right > 0:
+		return left > right
+	if a.score != b.score:
+		return a.score > b.score
+	if a.victory != b.victory:
+		return a.victory
+	return a.seconds < b.seconds
+
+func category(mode: String, difficulty: String, map_id: String) -> String:
+	return "%s|%s|%s" % [mode, difficulty, map_id]
+
+func leaderboard(mode: String, difficulty: String, map_id: String) -> Array:
+	return records.get(category(mode, difficulty, map_id), [])
+
+func log_result(mode: String, difficulty: String, map_id: String, report: Dictionary) -> bool:
+	if not mode in MODES or not difficulty in DIFFICULTIES or not map_id in MAPS or report.score <= 0:
+		return false
+	var key := category(mode, difficulty, map_id)
+	var rows: Array = records.get(key, []).duplicate()
+	var best := rows.is_empty() or _better(report, rows[0])
+	rows.append(report)
+	records[key] = _record_rows(rows)
+	save_disk()
+	return best
+
+func queue_save() -> void:
+	dirty = true
+	save_in = 0.42
+
+func profile_action(action: Callable) -> Dictionary:
+	var before := profile.data.duplicate(true)
+	var pending := dirty
+	var result: Dictionary = action.call()
+	if not result.ok:
+		return result
+	if not save_disk():
+		profile.restore(before)
+		dirty = pending
+		return {"ok": false, "message": save_error}
+	changed.emit("profile")
+	return result
+
+func complete_run(id: String, mode: String, difficulty: String, map_id: String, report: Dictionary) -> Dictionary:
+	if mode not in MODES or difficulty not in DIFFICULTIES or map_id not in MAPS:
+		return {"ok": false, "message": "Session hors classement."}
+	var old_records := records.duplicate(true)
+	var before := profile.data.duplicate(true)
+	var pending := dirty
+	var result := profile.settle(id, mode, difficulty, report)
+	if not result.ok:
+		return result
+	var key := category(mode, difficulty, map_id)
+	var rows: Array = records.get(key, []).duplicate()
+	result.best = report.score > 0 and (rows.is_empty() or _better(report, rows[0]))
+	if report.score > 0:
+		rows.append(report)
+		records[key] = _record_rows(rows)
+	if not save_disk():
+		records = old_records
+		profile.restore(before)
+		dirty = pending
+		return {"ok": false, "message": save_error}
+	changed.emit("profile")
+	return result
+
+func reset_progression() -> Dictionary:
+	if _recognizable(_read(SAVE)) and DirAccess.copy_absolute(profile_file(SAVE), profile_file(RESET_BACKUP)) != OK:
+		return {"ok": false, "message": "Impossible de créer la copie de sécurité."}
+	return profile_action(func() -> Dictionary:
+		profile.restore({"id": profile.data.id, "name": profile.data.name})
+		return {"ok": true, "message": "Progression réinitialisée. Réglages et records conservés."})
+
+func _recognizable(document: Dictionary) -> bool:
+	return document.get("settings") is Dictionary or document.get("prefs") is Dictionary or document.get("records") is Dictionary
+
+func _stamp() -> String:
+	var path := profile_file(SAVE)
+	return FileAccess.get_sha256(path) if FileAccess.file_exists(path) else ""
+
+func save_disk() -> bool:
+	dirty = false
+	var lock_path := profile_file(LOCK)
+	var locked := DirAccess.make_dir_absolute(lock_path)
+	if locked != OK:
+		var modified := FileAccess.get_modified_time(lock_path)
+		if modified > 0 and Time.get_unix_time_from_system() - modified > 30.0:
+			DirAccess.remove_absolute(lock_path)
+			locked = DirAccess.make_dir_absolute(lock_path)
+	if locked != OK:
+		return _failed_save("Profil occupé. Réessayez dans un instant.")
+	var result := _write_locked()
+	DirAccess.remove_absolute(lock_path)
+	if not result.is_empty():
+		return _failed_save(result)
+	disk_stamp = _stamp()
+	save_error = ""
+	saved.emit(true)
+	return true
+
+func _write_locked() -> String:
+	if _stamp() != disk_stamp:
+		return "Profil modifié par une autre instance. Rouvrez le jeu."
+	var previous := _read(SAVE)
+	var version := Profile.number(previous.get("version"), 1000)
+	if version > VERSION:
+		return "Ce profil appartient à une version plus récente du jeu."
+	var path := profile_file(SAVE)
+	var legacy := profile_file(LEGACY_BACKUP)
+	if _recognizable(previous) and version < VERSION and not FileAccess.file_exists(legacy):
+		if DirAccess.copy_absolute(path, legacy) != OK:
+			return "Impossible de copier le profil 1.0 avant migration."
+	var temporary := profile_file(TEMP)
+	var file := FileAccess.open(temporary, FileAccess.WRITE)
+	if file == null:
+		return "Impossible d’ouvrir le fichier temporaire."
+	file.store_string(JSON.stringify({"version": VERSION, "settings": values, "bindings": keys,
+		"records": records, "progression": profile.data}, "\t"))
+	file.flush()
+	var error := file.get_error()
+	file.close()
+	if error != OK or _read(TEMP).get("version") != VERSION:
+		return "Écriture incomplète du profil."
+	if _recognizable(previous) and DirAccess.copy_absolute(path, profile_file(BACKUP)) != OK:
+		return "Impossible de créer la copie de secours."
+	if DirAccess.rename_absolute(temporary, path) != OK:
+		return "Impossible de remplacer le profil."
+	return ""
+
+func _failed_save(message: String) -> bool:
+	save_error = message
+	push_warning("NEON RIFT • " + message)
+	saved.emit(false)
+	return false

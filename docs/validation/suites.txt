@@ -1,0 +1,258 @@
+--- import ---
+--- regression ---
+PASS Menu au démarrage
+PASS Jouer ouvre les protocoles
+PASS Démarrer charge l’arène
+PASS Déplacement AZERTY avec la touche Z
+PASS Échap suspend et ouvre la pause
+PASS Le chrono ne s’écoule pas pendant la pause
+PASS Paramètres accessibles pendant la partie
+PASS Onglet Audio et bouton d’écoute
+PASS Le volume général agit sur la sortie
+PASS Le volume est appliqué en dB
+PASS Élevée active ombres et résolution native
+PASS Faible réduit l’échelle 3D et coupe les ombres
+PASS La limite FPS est appliquée
+PASS QWERTY et affectation de touche
+PASS Retour des réglages vers la pause
+PASS Reprise et déplacement WASD
+PASS Le sprint ne traverse pas le mur d’enceinte
+PASS Accroupissement et glissade pendant le sprint
+PASS Saut avec la touche réassignée
+PASS Rampe et accès à la passerelle
+PASS Défaite et bilan
+PASS Relance depuis le bilan
+PASS Confirmation du redémarrage 1
+PASS Un seul directeur au redémarrage 1
+PASS Confirmation du redémarrage 2
+PASS Un seul directeur au redémarrage 2
+PASS Confirmation du redémarrage 3
+PASS Un seul directeur au redémarrage 3
+PASS La confirmation peut être annulée
+PASS Retour au menu confirmé
+PASS Quatre cibles actives en entraînement
+PASS Les cibles d’entraînement se déplacent
+PASS Entraînement sans défaite
+PASS Pulse-7 touche une vraie collision
+PASS Recharge active
+PASS Changer d’équipement annule la recharge
+PASS Volt Arc dépense une charge par éventail
+PASS Prism Burst tire une rafale de trois
+PASS Les cibles neutralisées réapparaissent
+PASS Nova monte en charge avant de tirer
+PASS Nova balistique, impact et retrait du projectile
+PASS Les tirs sont arrêtés par le décor
+PASS Console E et réarmement en entraînement
+PASS Le défi démarre avec 15 cibles
+PASS Le chrono déclenche un résultat à 90 secondes
+PASS Écriture de la première révision du profil
+PASS Relecture des réglages, des touches et du record
+PASS Profil corrompu récupéré depuis la révision précédente
+PASS Retour aux valeurs d’origine si le profil est absent
+PASS Banque locale et boucle audio intégrale de 13,44 secondes
+PASS Menu sans ancienne session active
+--- v2_wave_generation ---
+PASS 3 000 vagues générées, budget/caps/archétypes/paliers valides
+PASS Composition reproductible à seed, difficulté et équipe identiques
+PASS Transition réelle vers 7
+PASS Transition réelle vers 10
+PASS Transition réelle vers 20
+PASS Vague 20 permet de poursuivre avant règlement
+PASS Transition réelle vers 21
+PASS Transition réelle vers 50
+PASS Transition réelle vers 100
+PASS 100 transitions de suite, sans plafond
+PASS Règlement et défaite concurrents ne terminent qu’une fois
+--- v2_systems ---
+PASS Achat de terrain annulé sans perte de crédits
+PASS Transaction atomique, rejeu rejeté
+PASS Solde insuffisant rejeté
+PASS Solde entier borné
+PASS Migration v2 → v3 préserve réglages, mute et touches
+PASS Ancien record conservé
+PASS La nouvelle touche Gadget respecte une ancienne affectation de G
+PASS Nouveaux champs initialisés
+PASS Bilan et progression payés une seule fois
+PASS Copie v1 conservée octet pour octet
+PASS Temporaire tronqué ignoré
+PASS Contrat quotidien encaissé une fois
+PASS Bouton de boutique permanente visible
+PASS Confirmation du déblocage
+PASS Validation via l’interface
+PASS Achat du sniper appliqué après confirmation
+PASS Équipement via l’arsenal
+PASS Achat et emplacement conservés après relecture du profil
+PASS Huit définitions d’armes
+PASS Eclipse Rail en visée
+PASS Rail avec zoom ×4
+PASS Eclipse Rail touche le robot
+PASS Sortie de la lunette après changement
+PASS Stellar Lance en visée
+PASS Lance avec zoom progressif en charge
+PASS Stellar Lance touche le robot
+PASS Sortie de la lunette après changement
+PASS Huit armes avec tir, viewmodel et audio en entraînement
+PASS Cryo Foundry · chaque spawn a une route vers le pilote
+PASS Boutique en jeu applique réellement l’achat à l’intermission
+PASS 101 vagues Infini accélérées dans la scène
+PASS Entités temporaires bornées après 101 vagues
+ENDURANCE engine_static_bytes={ 20: 51033754.0, 50: 51240362.0, 75: 51374600.0, 100: 51375878.0 }
+PASS Extraction volontaire et pièces créditées
+PASS Retour au hub après la partie Infini
+--- survival ---
+PASS Survie complète, victoire en 20 vagues
+PASS Toutes les intermissions ont été jouées
+PASS Paliers de boss rencontrés
+PASS Trois phases du Warden atteintes
+PASS Score, crédits et tirs réels comptabilisés
+PASS Achats de terrain et bilan validés
+MATCH survival / cryo / discovery kills=164 shots=594 hits=579 time=144.53333333334 HP minimum=100.0 score=80601
+--- short ---
+PASS Survie complète, victoire en 10 vagues
+PASS Toutes les intermissions ont été jouées
+PASS Paliers de boss rencontrés
+PASS Trois phases du Warden atteintes
+PASS Score, crédits et tirs réels comptabilisés
+PASS Achats de terrain et bilan validés
+MATCH short / skyline / discovery kills=65 shots=234 hits=215 time=69.9333333333307 HP minimum=100.0 score=24654
+--- trial ---
+PASS Défi complet, les 15 cibles avant 90 secondes
+PASS Tirs et impacts réels du défi
+MATCH trial / reactor / discovery kills=15 shots=93 hits=93 time=19.3166666666669 HP minimum=100.0 score=5262
+--- boss_rush ---
+PASS Boss Rush complet et récompenses enregistrées
+PASS Les quatre boss et les trois ravitaillements ont été joués
+MATCH boss_rush / reactor / discovery kills=19 shots=191 hits=186 time=39.2166666666657 HP minimum=100.0 score=13444
+--- version ---
+PASS Connexion refusée proprement
+PASS Motif du refus communiqué
+--- password ---
+PASS Connexion refusée proprement
+PASS Motif du refus communiqué
+--- coop-2-host ---
+PASS Port invalide rejeté
+PASS Hébergement ouvert depuis le lobby
+PASS Pilotes prêts
+PASS Même arène et pilotes autoritaires
+PASS Entrées des clients déplacent tous les pilotes côté hôte
+PASS Les achats distants restent personnels
+PASS Un débit et un seul effet par client
+PASS Vague 6 réellement combattue, mini-boss franchi
+PASS Le pilote a réellement touché un robot côté serveur
+PASS Le pilote a réellement touché un robot côté serveur
+PASS Reprise de la vague 7
+PASS Client retiré en plein combat
+PASS Reconnexion pendant la boutique
+PASS La reconnexion restitue les crédits et l’amélioration au bon pilote
+PASS Bilan de l’hôte
+PASS Progression coop enregistrée sur l’hôte
+NET_METRICS pilots=2 snapshot_peak=456 snapshot_avg=326 engine_static_bytes=55289332 kills=44
+PASS Fermeture par l’hôte
+--- coop-2-version ---
+PASS Connexion refusée proprement
+PASS Motif du refus communiqué
+--- coop-2-password ---
+PASS Connexion refusée proprement
+PASS Motif du refus communiqué
+--- coop-2-rejoin ---
+PASS Connexion via l’interface
+PASS Lancement reçu
+PASS Carte commune et avatar 3D de l’hôte
+PASS Mouvement retourné par l’hôte
+PASS Robots, tirs et éliminations reçus en vague 6
+PASS Reçu et portefeuille synchronisés
+PASS Vague 7 synchronisée
+PASS Connexion via l’interface
+PASS Retour dans la même partie et amélioration conservée
+PASS Bilan reçu de l’hôte
+PASS Bilan autoritaire et progression locale
+PASS Fin de connexion de l’hôte
+PASS Retour au salon sans état résiduel
+--- version ---
+PASS Connexion refusée proprement
+PASS Motif du refus communiqué
+--- password ---
+PASS Connexion refusée proprement
+PASS Motif du refus communiqué
+--- coop-4-host ---
+PASS Port invalide rejeté
+PASS Hébergement ouvert depuis le lobby
+PASS Pilotes prêts
+PASS Même arène et pilotes autoritaires
+PASS Entrées des clients déplacent tous les pilotes côté hôte
+PASS Les achats distants restent personnels
+PASS Un débit et un seul effet par client
+PASS Un débit et un seul effet par client
+PASS Un débit et un seul effet par client
+PASS Vague 6 réellement combattue, mini-boss franchi
+PASS Le pilote a réellement touché un robot côté serveur
+PASS Le pilote a réellement touché un robot côté serveur
+PASS Le pilote a réellement touché un robot côté serveur
+PASS Le pilote a réellement touché un robot côté serveur
+PASS Reprise de la vague 7
+PASS Client retiré en plein combat
+PASS Reconnexion pendant la boutique
+PASS La reconnexion restitue les crédits et l’amélioration au bon pilote
+PASS Bilan de l’hôte
+PASS Progression coop enregistrée sur l’hôte
+NET_METRICS pilots=4 snapshot_peak=575 snapshot_avg=417 engine_static_bytes=55650654 kills=64
+PASS Fermeture par l’hôte
+--- coop-4-version ---
+PASS Connexion refusée proprement
+PASS Motif du refus communiqué
+--- coop-4-password ---
+PASS Connexion refusée proprement
+PASS Motif du refus communiqué
+--- coop-4-rejoin ---
+PASS Connexion via l’interface
+PASS Lancement reçu
+PASS Carte commune et avatar 3D de l’hôte
+PASS Mouvement retourné par l’hôte
+PASS Robots, tirs et éliminations reçus en vague 6
+PASS Reçu et portefeuille synchronisés
+PASS Vague 7 synchronisée
+PASS Connexion via l’interface
+PASS Retour dans la même partie et amélioration conservée
+PASS Bilan reçu de l’hôte
+PASS Bilan autoritaire et progression locale
+PASS Fin de connexion de l’hôte
+PASS Retour au salon sans état résiduel
+--- coop-4-client-2 ---
+PASS Connexion via l’interface
+PASS Lancement reçu
+PASS Carte commune et avatar 3D de l’hôte
+PASS Mouvement retourné par l’hôte
+PASS Robots, tirs et éliminations reçus en vague 6
+PASS Reçu et portefeuille synchronisés
+PASS Vague 7 synchronisée
+PASS Bilan reçu de l’hôte
+PASS Bilan autoritaire et progression locale
+PASS Fin de connexion de l’hôte
+PASS Retour au salon sans état résiduel
+--- coop-4-client-3 ---
+PASS Connexion via l’interface
+PASS Lancement reçu
+PASS Carte commune et avatar 3D de l’hôte
+PASS Mouvement retourné par l’hôte
+PASS Robots, tirs et éliminations reçus en vague 6
+PASS Reçu et portefeuille synchronisés
+PASS Vague 7 synchronisée
+PASS Bilan reçu de l’hôte
+PASS Bilan autoritaire et progression locale
+PASS Fin de connexion de l’hôte
+PASS Retour au salon sans état résiduel
+--- dedicated-host ---
+COOP dedicated UDP 46225 · { "map": "skyline", "mode": "short", "difficulty": "discovery", "seed": 0 }
+MATCH started with 2 players
+MATCH complete wave=0 score=0
+COOP dedicated ready
+--- dedicated-client-1 ---
+PASS Connexion via l’interface
+PASS Démarrage du serveur headless sans joueur hôte
+PASS Deux pilotes connectés à Skyline, partie courte
+PASS Apparition d’un robot sur le serveur dédié
+--- dedicated-client-2 ---
+PASS Connexion via l’interface
+PASS Démarrage du serveur headless sans joueur hôte
+PASS Deux pilotes connectés à Skyline, partie courte
+PASS Apparition d’un robot sur le serveur dédié
