@@ -4,6 +4,11 @@
 
 - Gun Game local : huit équipements en prêt, progression des bots, victoire au dernier palier, bilan et classement séparé.
 - Parkour local : trois parcours physiques, checkpoints ordonnés, pénalités, records et HUD mobile dédié.
+- Atelier interactif solo au Dépôt de fret (Exploration/Entraînement), avec fermeture suspendue si le passage est occupé.
+- Protection d’apparition des bots, séparation locale et cache des combattants.
+- Animations de changement d’arme/recharge prioritaires, ressorts réinitialisés au respawn, attribution des tirs posthumes en Gun Game.
+- Aperçus d’armes manipulables par glissement et pincement/molette.
+- Ouverture des menus : masquage du HUD et libération des commandes.
 - Descriptions des menus corrigées, avec une largeur minimale pour le retour à la ligne.
 - Menu Jouer en cartes et palette Classic Sand.
 - Profil schéma 6 avec copie v5 avant migration.

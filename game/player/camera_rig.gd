@@ -21,6 +21,9 @@ func _ready() -> void:
 	make_current()
 
 func present(delta: float) -> void:
+	# Keep elapsed-time smoothing at low FPS; only discard a suspension-sized gap.
+	if delta > 0.25:
+		delta = 0.05
 	var stable: bool = Prefs.values.steady_cam
 	var strength: float = 0.0 if stable else Prefs.values.motion_strength
 	var velocity: Vector3 = pilot.replica_velocity if pilot.replica else pilot.velocity
@@ -51,3 +54,13 @@ func present(delta: float) -> void:
 	pilot.head.fov = fov
 	pilot.wall_pull = lerpf(pilot.wall_pull, pilot.wall_target, 1.0 - exp(-19.0 * delta))
 	pilot.arsenal.pose(delta, travel, running, pilot.wall_pull)
+
+func resync() -> void:
+	eye_height = pilot.head.position.y
+	travel = 0.0
+	lean = 0.0
+	spring = 0.0
+	step_weight = 0.0
+	sprint_weight = 0.0
+	global_transform = pilot.head.global_transform
+	fov = pilot.arsenal.aim_fov(Prefs.values.fov)

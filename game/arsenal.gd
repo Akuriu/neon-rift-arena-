@@ -120,7 +120,7 @@ func select(index: int) -> void:
 	inspecting = 0.0
 	held = pilot.down("fire")
 	swap_left = ViewMotion.SWAP
-	cooldown = maxf(cooldown, 0.23)
+	cooldown = maxf(cooldown, ViewMotion.SWAP)
 	pilot.session.sound("switch", Vector3.INF if pilot.local_view else pilot.global_position)
 
 func _cache_model(index: int) -> void:
@@ -165,7 +165,7 @@ func aim_fov(normal: float) -> float:
 	return rad_to_deg(2.0 * atan(tan(deg_to_rad(normal) * 0.5) / magnification()))
 
 func cycle() -> void:
-	if reload_left > 0.0 or (reserve() == 0 and heat[active] < 0.12):
+	if swap_left > 0.0 or reload_left > 0.0 or (reserve() == 0 and heat[active] < 0.12):
 		return
 	if rounds() == capacity() and heat[active] < 0.12:
 		return
@@ -224,6 +224,8 @@ func tick(delta: float) -> void:
 	var pressed := trigger and not held
 	var released := not trigger and held
 	held = trigger
+	if swap_left > 0.0:
+		return
 	if pilot.just("inspect") and not trigger and not aiming() and not pilot.sprinting and reload_left <= 0.0:
 		inspecting = ViewMotion.inspection_time(active)
 	if trigger or aiming() or pilot.sprinting:

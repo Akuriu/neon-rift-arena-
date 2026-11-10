@@ -20,7 +20,7 @@ func equip_actor(actor: CharacterBody3D) -> void:
 	else:
 		actor.equip_match_weapon(index)
 
-func eliminated(victim: CharacterBody3D, source: CharacterBody3D) -> void:
+func eliminated(victim: CharacterBody3D, source: CharacterBody3D, credit := -1) -> void:
 	if phase != Wave.Phase.ACTIVE or victim.alive:
 		return
 	var life := "%s:%s" % [victim.get_instance_id(), victim.life_generation if victim == stage.player else victim.serial]
@@ -32,9 +32,9 @@ func eliminated(victim: CharacterBody3D, source: CharacterBody3D) -> void:
 	if slot == 0:
 		deaths += 1
 		stage.show_radio("Hors combat · votre palier est conservé", 2.6)
-	if not enemies(victim, source) or not scores.has(source.arena_slot):
+	var attacker: int = source.arena_slot if is_instance_valid(source) else credit
+	if attacker == slot or not scores.has(attacker):
 		return
-	var attacker: int = source.arena_slot
 	scores[attacker] = mini(ORDER.size(), int(scores[attacker]) + 1)
 	if attacker == 0:
 		kills += 1
@@ -43,7 +43,13 @@ func eliminated(victim: CharacterBody3D, source: CharacterBody3D) -> void:
 		winner = attacker
 		finish(attacker == 0)
 		return
-	equip_actor(source)
+	if attacker == 0:
+		equip_actor(stage.player)
+	else:
+		for actor in stage.units:
+			if actor.alive and actor.arena_slot == attacker:
+				equip_actor(actor)
+				break
 	if attacker == 0:
 		stage.sound("upgrade")
 		stage.show_radio("Palier %d / 8 · %s" % [score + 1, Arms.WEAPONS[ORDER[score]].name], 2.1)

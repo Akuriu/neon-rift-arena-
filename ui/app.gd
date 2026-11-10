@@ -130,6 +130,8 @@ func _process(delta: float) -> void:
 	title_cam.look_at(Vector3(-3.5, 2.82, -5.6), Vector3.UP)
 
 func _new_screen(name: String, treatment := "page") -> void:
+	if is_instance_valid(session):
+		_freeze()
 	if Prefs.mobile():
 		Input.emulate_mouse_from_touch = true
 	_drop_menu_view()

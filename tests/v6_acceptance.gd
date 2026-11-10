@@ -32,6 +32,8 @@ func run() -> void:
 		"XP, achat, HUD, sensibilité et record du profil v0.0.5 chargés")
 	prefs.change_value("touch_response", 0.45)
 	check(prefs.save_disk(), "Réécriture sûre du profil antérieur")
+	check(FileAccess.get_file_as_string(prefs.profile_file("user://pilot_profile.v5.json")) == FileAccess.get_file_as_string(FIXTURE),
+		"Copie de sécurité exacte du profil v5 avant migration du schéma")
 	prefs.load_disk()
 	check(prefs.profile.data.xp == 725 and prefs.touch_layout.fire == expected_fire
 		and is_equal_approx(prefs.values.touch_response, 0.45), "Relecture des anciens et nouveaux réglages")

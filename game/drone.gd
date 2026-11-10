@@ -56,10 +56,12 @@ var rotors: Array[Node3D] = []
 var arena_slot := -1
 var arena_side := 1
 var last_attacker: CharacterBody3D
+var last_credit_slot := -1
 var operator: Operator
 var visual_wait := 0.0
 var match_weapon := -1
 var match_rounds := 0
+var spawn_guard := 0.0
 
 func major() -> bool:
 	return kind in ["warden", "colossus", "architect"]
@@ -72,6 +74,7 @@ func _ready() -> void:
 		position.y = hover_home
 	last_check = position
 	health = maximum
+	spawn_guard = 0.85 if arena_slot >= 0 else 0.0
 	strafe = -1.0 if serial % 2 == 0 else 1.0
 	decision = float(serial % 8) * 0.034
 	collision_layer = 0 if replica else 4
@@ -139,6 +142,7 @@ func _physics_process(delta: float) -> void:
 		return
 	age += delta
 	hit_flash = maxf(0.0, hit_flash - delta * 6.0)
+	spawn_guard = maxf(0.0, spawn_guard - delta)
 	if replica:
 		var pose := replica_poses.pose(Time.get_ticks_msec() * 0.001)
 		if not pose.is_empty():
@@ -183,6 +187,17 @@ func _physics_process(delta: float) -> void:
 		step = dodge_direction * 8.4
 	if kind == "skimmer":
 		step.y = clampf((hover_home + sin(age * 1.7) * 0.28 - position.y) * 4.0, -2.0, 2.0)
+	if not training and not step.is_zero_approx():
+		var separation := Vector3.ZERO
+		for other in session.units:
+			if other == self or not other.alive:
+				continue
+			var gap: Vector3 = position - other.position
+			gap.y = 0.0
+			var square := gap.length_squared()
+			if square > 0.001 and square < 2.25:
+				separation += gap.normalized() * (1.5 - sqrt(square)) * 2.0
+		step += separation.limit_length(2.0)
 	velocity = velocity.move_toward(step, delta * 29.0)
 	move_and_slide()
 	if not training:
@@ -279,6 +294,8 @@ func _pursuit(delta: float, distance: float, toward: Vector3) -> Vector3:
 				return Vector3.ZERO
 		var target_at: Vector3 = target.aim_point()
 		var clear: bool = session.ray(center(), target_at, 1).is_empty()
+		if is_instance_valid(session.classic) and session.classic.protected(target):
+			clear = false
 		var elevation: float = absf(target_at.y - center().y)
 		var withdraw := kind in ["sentinel", "medic", "artillery"] and distance < 5.8
 		if not training and not withdraw and distance < spec.range and (kind != "scout" or elevation < 1.65) and clear:
@@ -434,8 +451,8 @@ func _dodge() -> void:
 		dodge_direction = tangent
 		dodge_left = 0.23
 
-func take_hit(amount: float, at: Vector3, direction: Vector3, attacker: CharacterBody3D = null) -> float:
-	if not alive or replica:
+func take_hit(amount: float, at: Vector3, direction: Vector3, attacker: CharacterBody3D = null, credit := -1) -> float:
+	if not alive or replica or spawn_guard > 0.0:
 		return 0.0
 	hit_flash = 1.0
 	if kind in ["bulwark", "elite", "warden", "colossus"]:
@@ -459,6 +476,7 @@ func take_hit(amount: float, at: Vector3, direction: Vector3, attacker: Characte
 			session.sound("phase", center())
 	if health == 0.0:
 		last_attacker = attacker
+		last_credit_slot = attacker.arena_slot if is_instance_valid(attacker) else credit
 		collapse()
 		eliminated.emit(self, spec.points)
 	return amount

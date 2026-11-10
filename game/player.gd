@@ -62,6 +62,7 @@ var seat := 0
 var arena_slot := 0
 var arena_side := 0
 var last_attacker: CharacterBody3D
+var last_credit_slot := -1
 var life_generation := 0
 var gadget_left := 0.0
 var dash_left := 0.0
@@ -246,11 +247,15 @@ func respawn(at: Vector3) -> void:
 	dash_left = 0.0
 	slide = 0.0
 	last_attacker = null
+	last_credit_slot = -1
 	arsenal.reset_supply()
+	arsenal.animator = Arsenal.ViewMotion.new()
+	if is_instance_valid(presentation):
+		presentation.resync()
 	if is_instance_valid(avatar):
 		avatar.present_alive(true)
 
-func take_damage(amount: float, source := Vector3.INF, attacker: CharacterBody3D = null) -> void:
+func take_damage(amount: float, source := Vector3.INF, attacker: CharacterBody3D = null, credit := -1) -> void:
 	if not alive or replica or damage_lock > 0.0 or session.mode == "training":
 		return
 	damage_lock = 0.16
@@ -268,6 +273,7 @@ func take_damage(amount: float, source := Vector3.INF, attacker: CharacterBody3D
 	if health <= 0.0:
 		alive = false
 		last_attacker = attacker
+		last_credit_slot = attacker.arena_slot if is_instance_valid(attacker) else credit
 		collision_layer = 0
 		arsenal.cancel_trigger()
 		if is_instance_valid(avatar):

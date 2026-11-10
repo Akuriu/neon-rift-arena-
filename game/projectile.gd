@@ -14,6 +14,7 @@ var trail_timer := 0.0
 var gravity := 0.0
 var shooter: CharacterBody3D
 var weapon := ""
+var credit_slot := -1
 var model: MeshInstance3D
 
 func _ready() -> void:
@@ -34,6 +35,7 @@ func arm(at: Vector3, impulse: Vector3, power: float, color: Color, allied: bool
 	splash = radius
 	gravity = curve
 	shooter = owner_pilot
+	credit_slot = owner_pilot.arena_slot if is_instance_valid(owner_pilot) else -1
 	weapon = equipment
 	life = 2.8 if gravity > 0.0 else 4.0
 	trail_timer = 0.0
@@ -47,6 +49,7 @@ func sleep() -> void:
 	hide()
 	set_physics_process(false)
 	shooter = null
+	credit_slot = -1
 
 func _physics_process(delta: float) -> void:
 	var start := global_position

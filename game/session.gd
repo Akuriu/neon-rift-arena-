@@ -18,6 +18,7 @@ const GunGame := preload("res://game/modes/gun_game.gd")
 const Parkour := preload("res://game/modes/parkour.gd")
 const ParkourYard := preload("res://game/maps/parkour_yard.gd")
 const Courses := preload("res://game/modes/parkour_routes.gd")
+const Workshop := preload("res://game/world/workshop.gd")
 const Rules := preload("res://game/modes/rules.gd")
 const Generator := preload("res://game/waves/generator.gd")
 signal intermission_updated
@@ -72,6 +73,7 @@ var relay_progress := 0.0
 var relay_state := 0
 var training_options := {"targets": "moving", "distance": 0, "time": 0}
 var training_ended := false
+var workshop: Workshop
 
 func _ready() -> void:
 	if run_seed < 0:
@@ -126,6 +128,10 @@ func _ready() -> void:
 	director.finished.connect(_match_finished)
 	if mode == "training":
 		_reset_training()
+	if mode in ["training", "explore"] and map_id == "skyline" and not is_instance_valid(net):
+		workshop = Workshop.new()
+		workshop.stage = self
+		add_child(workshop)
 
 func _group(label: String) -> Node3D:
 	var holder := Node3D.new()
@@ -283,6 +289,7 @@ func spawn_unit(kind: String, at: Vector3, practice := false, mirror_id := -1, s
 	add_child(unit)
 	units.append(unit)
 	if slot >= 0:
+		classic.invalidate_combatants()
 		classic.equip_actor(unit)
 	effects.sparks(at + Vector3.UP, Catalog.UNITS[kind].tint, 14, 3.2)
 	if kind in Catalog.BOSSES:
@@ -297,7 +304,8 @@ func _on_defeated(unit: CharacterBody3D, points: int) -> void:
 	effects.sparks(unit.center(), unit.spec.tint, 30, 6.0)
 	sound("kill", unit.center())
 	if is_instance_valid(classic):
-		classic.eliminated(unit, unit.last_attacker)
+		classic.invalidate_combatants()
+		classic.eliminated(unit, unit.last_attacker, unit.last_credit_slot)
 		if director.phase == Director.Phase.ACTIVE and random.randf() < 0.20:
 			_drop_pickup("energy", unit.position)
 		return
@@ -435,16 +443,16 @@ func recycle_bolt(bolt: Node3D) -> void:
 func projectile_impact(bolt: Node3D, collider: Object, at: Vector3, direction: Vector3) -> void:
 	var shooter: CharacterBody3D = bolt.shooter if is_instance_valid(bolt.shooter) else null
 	if not bolt.friendly:
-		if is_instance_valid(collider) and can_damage(shooter, collider):
+		if is_instance_valid(collider) and _bolt_can_damage(bolt, shooter, collider):
 			if collider.has_method("take_damage"):
-				collider.take_damage(bolt.damage, at - direction * 2.0, shooter)
+				collider.take_damage(bolt.damage, at - direction * 2.0, shooter, bolt.credit_slot)
 			elif is_instance_valid(classic) and collider.has_method("take_hit"):
-				collider.take_hit(bolt.damage, at, direction, shooter)
+				collider.take_hit(bolt.damage, at, direction, shooter, bolt.credit_slot)
 		if bolt.splash > 0.0:
 			var blast := at - direction * 0.13
 			var actors: Array = classic.combatants() if is_instance_valid(classic) else living_pilots()
 			for actor in actors:
-				if actor == collider or not can_damage(shooter, actor):
+				if actor == collider or not _bolt_can_damage(bolt, shooter, actor):
 					continue
 				var center: Vector3 = actor.aim_point()
 				var distance := center.distance_to(blast)
@@ -452,9 +460,9 @@ func projectile_impact(bolt: Node3D, collider: Object, at: Vector3, direction: V
 					continue
 				var amount: float = bolt.damage * lerpf(0.69, 0.25, distance / bolt.splash)
 				if actor.has_method("take_damage"):
-					actor.take_damage(amount, blast, shooter)
+					actor.take_damage(amount, blast, shooter, bolt.credit_slot)
 				else:
-					actor.take_hit(amount, center, (center - blast).normalized(), shooter)
+					actor.take_hit(amount, center, (center - blast).normalized(), shooter, bolt.credit_slot)
 			effects.wave(blast, bolt.tint, bolt.splash)
 		effects.sparks(at - direction * 0.055, bolt.tint, 9, 2.65)
 		return
@@ -479,6 +487,11 @@ func projectile_impact(bolt: Node3D, collider: Object, at: Vector3, direction: V
 			effects.beam(blast, end, bolt.tint, 0.041, 0.17)
 		sound("nova_impact", at)
 	_confirm_hit(sum, false, shooter)
+
+func _bolt_can_damage(bolt: Node3D, shooter: CharacterBody3D, victim: Object) -> bool:
+	if mode == "gungame" and victim is CharacterBody3D and classic.scores.has(bolt.credit_slot):
+		return bolt.credit_slot != victim.arena_slot
+	return can_damage(shooter, victim)
 
 func make_hazard(at: Vector3, radius: float, duration: float, damage: float,
 		source: CharacterBody3D = null, slow := false) -> void:
@@ -722,6 +735,8 @@ func _scan_pickups(authority := true) -> void:
 			pickup_hint = "Réarmer et réinitialiser les cibles"
 		elif director.phase == Director.Phase.PREP:
 			pickup_hint = "Lancer le match" if is_instance_valid(classic) else ("Lancer le chrono" if mode == "trial" else "Lancer la vague maintenant")
+	elif is_instance_valid(workshop) and workshop.can_reach(player):
+		pickup_hint = workshop.hint()
 	if authority and is_instance_valid(net):
 		for pilot in living_pilots():
 			if pilot == player:
@@ -736,6 +751,9 @@ func interact(actor: CharacterBody3D = null) -> void:
 		return
 	if not is_instance_valid(actor):
 		actor = player
+	if is_instance_valid(workshop) and workshop.can_reach(actor):
+		workshop.activate(actor)
+		return
 	if actor != player:
 		for item in pickups.get_children():
 			if item.global_position.distance_squared_to(actor.global_position) < 5.5 and ray(actor.head.global_position, item.global_position + Vector3.UP * 0.22, 1).is_empty():
@@ -905,7 +923,8 @@ func restore_pilot(pilot: CharacterBody3D, state: Dictionary) -> void:
 
 func _pilot_eliminated(_id: int) -> void:
 	if is_instance_valid(classic):
-		classic.eliminated(player, player.last_attacker)
+		classic.invalidate_combatants()
+		classic.eliminated(player, player.last_attacker, player.last_credit_slot)
 		return
 	if (not is_instance_valid(net) or net.hosting) and living_pilots().is_empty():
 		director.finish(false)

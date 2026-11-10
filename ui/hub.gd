@@ -5,6 +5,7 @@ const Arms := preload("res://game/weapons/catalog.gd")
 const Profile := preload("res://services/profile.gd")
 const Models := preload("res://game/weapon_models.gd")
 const Career := preload("res://services/career.gd")
+const WeaponPreview := preload("res://ui/weapon_preview.gd")
 const GROUPS := ["Armes", "Gadgets", "Modules", "Apparences", "Améliorations"]
 
 var app: Node
@@ -216,35 +217,10 @@ func _equip(id: String) -> void:
 	_rebuild()
 
 func _preview(index: int) -> void:
-	var surface := SubViewportContainer.new()
-	surface.stretch = true
-	surface.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Palette.at(detail, surface, Rect2(466, 69, 254, 190))
-	var viewport := SubViewport.new()
-	viewport.own_world_3d = true
-	viewport.transparent_bg = true
-	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	surface.add_child(viewport)
-	preview = Node3D.new()
-	viewport.add_child(preview)
-	Models.build(preview, index, Prefs.profile.data.skin)
-	preview.rotation.y = 1.14
-	var camera := Camera3D.new()
-	camera.fov = 39
-	var distance := [1.0, 1.12, 0.49, 0.87, 1.15, 1.21, 0.86, 1.05][index] as float
-	camera.position = Vector3(0.74, 0.28, 1.03) * distance
-	viewport.add_child(camera)
-	camera.look_at(Vector3(0, -0.022, -0.075 if index != 2 else -0.032))
-	var light := DirectionalLight3D.new()
-	light.rotation_degrees = Vector3(-44, 27, 0)
-	light.light_energy = 1.5
-	viewport.add_child(light)
-	var fill := DirectionalLight3D.new()
-	fill.rotation_degrees = Vector3(-20, 150, 0)
-	fill.light_color = Color("#cac4ab")
-	fill.light_energy = 0.8
-	viewport.add_child(fill)
-
-func _process(delta: float) -> void:
-	if is_instance_valid(preview):
-		preview.rotate_y(delta * 0.27)
+	var viewer := WeaponPreview.new()
+	viewer.name = "WeaponPreview"
+	viewer.equipment = index
+	viewer.skin = Prefs.profile.data.skin
+	Palette.at(detail, viewer, Rect2(466, 69, 254, 172))
+	preview = viewer.model
+	Palette.label(detail, Rect2(466, 242, 254, 25), "Glisser · pincer / molette", 12, Palette.MUTED)

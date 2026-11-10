@@ -27,6 +27,8 @@ static func inspection_time(index: int) -> float:
 	return TUNES[index].z
 
 func tick(gun: Node, delta: float, motion: float, running: bool, wall: float, settings: Dictionary) -> void:
+	if delta > 0.25:
+		delta = 0.05
 	gun.scope = lerpf(gun.scope, 1.0 if gun.aiming() else 0.0, 1.0 - exp(-14.0 * delta))
 	gun.shot_kick = move_toward(gun.shot_kick, 0.0, delta * 8.9)
 	if not gun.pilot.alive:
@@ -42,7 +44,8 @@ func tick(gun: Node, delta: float, motion: float, running: bool, wall: float, se
 	if settings.steady_cam:
 		kick *= 0.32
 	stride = lerpf(stride, motion, 1.0 - exp(-10.0 * delta))
-	sprint = lerpf(sprint, 1.0 if running else 0.0, 1.0 - exp(-12.0 * delta))
+	var sprint_pose: bool = running and not gun.aiming() and gun.reload_left <= 0.0 and gun.swap_left <= 0.0
+	sprint = lerpf(sprint, 1.0 if sprint_pose else 0.0, 1.0 - exp(-12.0 * delta))
 	var walk: float = gun.pilot.rendered_step_phase()
 	var base := REST + Vector3(0.0, -0.009, -0.10) if gun.visual_index == 2 else REST
 	var target := base + Vector3(sin(walk) * 0.016, (absf(cos(walk)) - 0.58) * 0.016, 0.0) * stride * comfort
@@ -73,7 +76,7 @@ func tick(gun: Node, delta: float, motion: float, running: bool, wall: float, se
 		target += Vector3(-0.036, -0.148, 0.036) * opening
 		angle += Vector3(-0.62, 0.23, -0.29) * opening
 		state = Pose.RELOAD_OPEN if phase < 0.21 else (Pose.RELOAD_CELL if phase < 0.72 else Pose.RELOAD_CLOSE)
-	if gun.scope > 0.01:
+	if gun.scope > 0.01 and gun.reload_left <= 0.0 and gun.swap_left <= 0.0:
 		var aim_weight: float = gun.scope
 		var sight: float = gun.sight_height()
 		var aim := Vector3(0.0, -sight * gun.view.scale.y - 0.007, base.z)

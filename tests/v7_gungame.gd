@@ -31,6 +31,7 @@ func run() -> void:
 			match_state._advance_respawns(3.2)
 		var victim = stage.units[0]
 		victim.set_physics_process(false)
+		victim.spawn_guard = 0.0
 		seen.append(stage.player.arsenal.active)
 		check(victim.match_weapon == 0 and victim.spec.damage == 24.0, "Le bot démarre avec les caractéristiques de sa vraie arme")
 		stage.player.arsenal.reload_left = 0.5
@@ -81,6 +82,36 @@ func run() -> void:
 	check(match_state.winner == 1 and match_state.outcome == "défaite" and match_state.deaths == 8,
 		"Le bot peut terminer les huit paliers et gagner")
 	await ticks(4)
+	app.begin("gungame", "standard", "reactor", 780, "", false, {"bots": 1})
+	stage = app.session
+	match_state = stage.classic
+	match_state.open_wave()
+	match_state._advance_respawns(0.1)
+	bot = stage.units[0]
+	bot.spawn_guard = 0.0
+	bot.set_physics_process(false)
+	stage.launch(bot.center(), Vector3.UP, 1, 2000, Color.WHITE, false, 0, 0, bot, "wp_pulse")
+	var first_bolt = stage.projectiles.get_child(-1)
+	first_bolt.set_physics_process(false)
+	stage.launch(bot.center(), Vector3.UP, 1, 2000, Color.WHITE, false, 0, 0, bot, "wp_pulse")
+	var second_bolt = stage.projectiles.get_child(-1)
+	second_bolt.set_physics_process(false)
+	bot.take_hit(2000, bot.center(), Vector3.FORWARD, stage.player)
+	await ticks(48)
+	check(not is_instance_valid(bot) and first_bolt.credit_slot == 1, "Un projectile conserve l’identité du bot après libération de son nœud")
+	stage.player.damage_lock = 0.0
+	stage.projectile_impact(first_bolt, stage.player, stage.player.aim_point(), Vector3.FORWARD)
+	stage.recycle_bolt(first_bolt)
+	check(match_state.scores[1] == 1 and match_state.deaths == 1, "Une élimination posthume est attribuée au bon bot")
+	match_state._advance_respawns(3.2)
+	bot = stage.units[0]
+	bot.set_physics_process(false)
+	check(bot.match_weapon == match_state.ORDER[1], "Le bot réapparaît au palier obtenu après sa mort")
+	stage.player.damage_lock = 0.0
+	stage.projectile_impact(second_bolt, stage.player, stage.player.aim_point(), Vector3.FORWARD)
+	stage.recycle_bolt(second_bolt)
+	check(match_state.scores[1] == 2 and bot.match_weapon == match_state.ORDER[2],
+		"Un second projectile ancien équipe le nouveau corps du bot au bon palier")
 	app.begin("gungame", "standard", "bastion", 779, "", false, {"bots": 0, "duration": 180})
 	stage = app.session
 	match_state = stage.classic

@@ -95,6 +95,11 @@ func v2_views(directory: String) -> void:
 	await sleep(0.40)
 	Input.action_press("ads")
 	await sleep(0.45)
+	# Software renderers can spend several frames compiling a fresh map's shaders.
+	var scope_deadline := Time.get_ticks_msec() + 2500
+	while app.session.player.arsenal.scope <= 0.95 and Time.get_ticks_msec() < scope_deadline:
+		await process_frame
+	print("SCOPE factor=", app.session.player.arsenal.scope, " software_fps=", Engine.get_frames_per_second())
 	check(app.session.map_id == "cryo" and app.session.player.arsenal.scope > 0.95, "Chaufferie et lunette rendues dans la fenêtre")
 	await screenshot(directory, "cryo_scope")
 	Input.action_release("ads")
