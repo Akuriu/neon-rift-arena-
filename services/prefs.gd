@@ -9,6 +9,7 @@ const TEMP := "user://pilot_profile.json.tmp"
 const VERSION := 6
 const Profile := preload("res://services/profile.gd")
 const Rules := preload("res://game/modes/rules.gd")
+const Courses := preload("res://game/modes/parkour_routes.gd")
 const TouchLayout := preload("res://ui/mobile/layout.gd")
 const LEGACY_BACKUP := "user://pilot_profile.v1.json"
 const V2_BACKUP := "user://pilot_profile.v2.json"
@@ -419,6 +420,26 @@ func complete_run(id: String, mode: String, difficulty: String, map_id: String, 
 		return {"ok": false, "message": save_error}
 	changed.emit("profile")
 	return result
+
+func complete_parkour(id: String, report: Dictionary) -> Dictionary:
+	if report.get("valid") != true or report.get("route") not in Courses.IDS:
+		return {"ok": true, "best": false, "message": "Parcours hors record · recommencez sans raccourci."}
+	var route: String = report.route
+	var duration := Profile.number(report.get("milliseconds"), 7200000)
+	if id.is_empty() or id.length() > 64 or duration < 1000 \
+		or report.get("checkpoints") != Courses.ROUTES[route].points.size():
+		return {"ok": false, "best": false, "message": "Parcours incomplet."}
+	if id in profile.data.settled:
+		return {"ok": true, "best": false, "message": "Parcours déjà enregistré."}
+	return profile_action(func() -> Dictionary:
+		var times: Dictionary = profile.data.career.parkour
+		var best := not times.has(route) or duration < int(times[route])
+		if best:
+			times[route] = duration
+		profile.data.settled.append(id)
+		if profile.data.settled.size() > 128:
+			profile.data.settled.pop_front()
+		return {"ok": true, "best": best, "message": "Nouveau record personnel." if best else "Parcours enregistré."})
 
 func reset_progression() -> Dictionary:
 	if _recognizable(_read(SAVE)) and DirAccess.copy_absolute(profile_file(SAVE), profile_file(RESET_BACKUP)) != OK:

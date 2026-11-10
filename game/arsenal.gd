@@ -151,7 +151,7 @@ func sight_height() -> float:
 	return Models.SIGHT_HEIGHTS[visual_index]
 
 func aiming() -> bool:
-	return pilot.down("ads") and reload_left <= 0.0 and swap_left <= 0.0
+	return pilot.session.mode != "parkour" and pilot.down("ads") and reload_left <= 0.0 and swap_left <= 0.0
 
 func magnification() -> float:
 	if not aiming():
@@ -343,5 +343,8 @@ func _check_supply() -> void:
 		pilot.session.sound("low", Vector3.INF if pilot.local_view else pilot.global_position)
 
 func pose(delta: float, motion: float, running: bool, wall_pull: float) -> void:
+	if pilot.session.mode == "parkour":
+		view.hide()
+		return
 	pose_clock = fmod(pose_clock + delta, TAU * 10.0)
 	animator.tick(self, delta, motion, running, wall_pull, Prefs.values)

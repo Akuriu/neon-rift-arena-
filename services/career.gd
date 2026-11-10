@@ -1,6 +1,7 @@
 extends RefCounted
 
 const Arms := preload("res://game/weapons/catalog.gd")
+const Courses := preload("res://game/modes/parkour_routes.gd")
 const Presets := {
 	"poly": {"name": "Polyvalent", "slots": ["wp_pulse", "wp_volt", "wp_prism", "wp_nova"], "gadget": "gd_dash", "module": ""},
 	"range": {"name": "Précision", "slots": ["wp_eclipse", "wp_stellar", "wp_prism", "wp_pulse"], "gadget": "gd_dash", "module": "mod_cycle"},
@@ -79,7 +80,15 @@ static func sanitize(raw: Variant, owned: Array, parse_number: Callable) -> Dict
 		own = {"slots": Arms.normalize_slots(saved.get("slots"), owned),
 			"gadget": saved.get("gadget") if saved.get("gadget") in owned and String(saved.gadget).begins_with("gd_") else "gd_dash",
 			"module": saved.get("module") if saved.get("module") in owned and String(saved.module).begins_with("mod_") else ""}
-	return {"history": list, "ledger": receipts, "badges": badges, "maps": maps, "weekly": current, "saved": own}
+	var parkour := {}
+	var times: Variant = input.get("parkour")
+	if times is Dictionary:
+		for route in Courses.IDS:
+			var duration: int = parse_number.call(times.get(route), 7200000)
+			if duration >= 1000:
+				parkour[route] = duration
+	return {"history": list, "ledger": receipts, "badges": badges, "maps": maps, "weekly": current, "saved": own,
+		"parkour": parkour}
 
 static func refresh(career: Dictionary) -> void:
 	var now := week()

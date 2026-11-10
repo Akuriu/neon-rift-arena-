@@ -3,6 +3,8 @@
 ## v0.0.7-alpha
 
 - Gun Game local : huit équipements en prêt, progression des bots, victoire au dernier palier, bilan et classement séparé.
+- Parkour local : trois parcours physiques, checkpoints ordonnés, pénalités, records et HUD mobile dédié.
+- Descriptions des menus corrigées, avec une largeur minimale pour le retour à la ligne.
 - Menu Jouer en cartes et palette Classic Sand.
 - Profil schéma 6 avec copie v5 avant migration.
 - Build Preview uniquement : les validations matérielles et la signature stable restent requises avant publication.

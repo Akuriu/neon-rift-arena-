@@ -4,6 +4,7 @@ const Palette := preload("res://ui/skin.gd")
 const Catalog := preload("res://game/catalog.gd")
 const Director := preload("res://game/wave_director.gd")
 const Rules := preload("res://game/modes/rules.gd")
+const Courses := preload("res://game/modes/parkour_routes.gd")
 const CYAN := Palette.CYAN
 const AMBER := Palette.AMBER
 const TEXT := Palette.TEXT
@@ -45,6 +46,9 @@ func _draw() -> void:
 	if not is_instance_valid(session) or not is_instance_valid(session.player):
 		return
 	var pilot = session.player
+	if session.mode == "parkour":
+		_parkour()
+		return
 	var gun = pilot.arsenal
 	signal_ink = Art.hud_color()
 	var director = session.director
@@ -132,6 +136,34 @@ func _draw() -> void:
 		var accuracy := roundi(100.0 * session.hits / maxi(1, session.shots))
 		var hint := "%d NEUTRALISÉS  /  %d %% DE PRÉCISION  /  %d TIRS" % [director.kills, accuracy, session.shots]
 		_mid(Vector2(center.x, size.y - 41), hint, 13, Palette.BODY, TEXT)
+
+func _parkour() -> void:
+	var run: Node = session.director
+	var course: Dictionary = Courses.ROUTES[run.route]
+	var center := Vector2(size.x * 0.5, 35)
+	_frame(Rect2(center.x - 200, center.y, 400, 101), signal_ink)
+	_mid(center + Vector2(0, 24), course.name.to_upper(), 15, Palette.BOLD, MUTE)
+	_mid(center + Vector2(0, 72), Courses.clock(run.milliseconds()), 38, Palette.MONO, TEXT)
+	_mid(center + Vector2(0, 96), "CHECKPOINT %d / %d" % [mini(run.next, run.checkpoints.size()), run.checkpoints.size()], 12, Palette.MONO, AMBER)
+	if not run.started:
+		_mid(Vector2(size.x * 0.5, 174), "Traversez le portique DÉPART", 20, Palette.BOLD, TEXT)
+	elif not run.eligible:
+		_mid(Vector2(size.x * 0.5, 174), "Hors record · recommencez le parcours", 18, Palette.BOLD, AMBER)
+	var best: int = Prefs.profile.data.career.parkour.get(run.route, 0)
+	var at := Vector2(26, 31)
+	_frame(Rect2(at, Vector2(230, 60)), signal_ink)
+	_print(at + Vector2(12, 23), "PERSONNEL", 12, Palette.MONO, MUTE)
+	_print(at + Vector2(12, 48), Courses.clock(best) if best > 0 else "Premier passage", 18, Palette.MONO, TEXT)
+	var hint := "Checkpoint : +2 s" if run.started else "Le chrono attend votre départ"
+	if run.retries > 0:
+		hint += "  ·  %d retour(s)  /  +%.0f s" % [run.retries, run.penalty]
+	_mid(Vector2(size.x * 0.5, size.y - 36), hint, 15, Palette.BOLD, TEXT)
+	if not Prefs.mobile():
+		_mid(Vector2(size.x * 0.5, size.y - 66), "[%s] Revenir au checkpoint    ·    Échap Pause" % OS.get_keycode_string(Prefs.keys.interact), 14, Palette.BODY, MUTE)
+	if session.radio_time > 0.0 and run.started:
+		_mid(Vector2(size.x * 0.5, 207), session.radio, 16, Palette.BOLD, AMBER)
+	if Prefs.values.fps_counter:
+		_print(Vector2(26, 116), "%d FPS" % Engine.get_frames_per_second(), 13, Palette.MONO, TEXT)
 
 func _mobile_status(pilot: CharacterBody3D, objective: String, score: String, time: float, compact: bool) -> void:
 	var factor: float = Prefs.values.hud_scale

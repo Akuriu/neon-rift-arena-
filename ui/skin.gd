@@ -85,6 +85,7 @@ static func label(parent: Node, rect: Rect2, value: String, pixels := 16,
 	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if wrap:
 		node.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		node.custom_minimum_size.x = rect.size.x
 	node.add_theme_font_override("font", font)
 	node.add_theme_font_size_override("font_size", pixels)
 	node.add_theme_color_override("font_color", color)

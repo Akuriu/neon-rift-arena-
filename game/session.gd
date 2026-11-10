@@ -15,6 +15,9 @@ const Catalog := preload("res://game/catalog.gd")
 const Wallet := preload("res://game/economy/field_wallet.gd")
 const Match := preload("res://game/modes/classic.gd")
 const GunGame := preload("res://game/modes/gun_game.gd")
+const Parkour := preload("res://game/modes/parkour.gd")
+const ParkourYard := preload("res://game/maps/parkour_yard.gd")
+const Courses := preload("res://game/modes/parkour_routes.gd")
 const Rules := preload("res://game/modes/rules.gd")
 const Generator := preload("res://game/waves/generator.gd")
 signal intermission_updated
@@ -75,11 +78,16 @@ func _ready() -> void:
 		run_seed = randi()
 	run_id = net.match_id if is_instance_valid(net) else Crypto.new().generate_random_bytes(16).hex_encode()
 	random.seed = run_seed
-	match map_id:
-		"skyline": arena = Skyline.new()
-		"cryo": arena = Cryo.new()
-		"bastion", "district", "grove", "station": arena = Frontiers.new(map_id)
-		_: arena = Arena.new()
+	if mode == "parkour":
+		var yard := ParkourYard.new()
+		yard.route = Courses.normalize(match_rules.get("route"))
+		arena = yard
+	else:
+		match map_id:
+			"skyline": arena = Skyline.new()
+			"cryo": arena = Cryo.new()
+			"bastion", "district", "grove", "station": arena = Frontiers.new(map_id)
+			_: arena = Arena.new()
 	add_child(arena)
 	effects = Effects.new()
 	add_child(effects)
@@ -97,7 +105,10 @@ func _ready() -> void:
 		player = add_pilot(1, {"name": Prefs.profile.data.name, "gear": pilot_gear()}, true)
 		wallet = wallets[1]
 	upgrades = player.modules
-	if Rules.LABELS.has(mode):
+	if mode == "parkour":
+		director = Parkour.new()
+		director.configure(self, mode, match_rules)
+	elif Rules.LABELS.has(mode):
 		classic = GunGame.new() if mode == "gungame" else Match.new()
 		director = classic
 		classic.configure(self, mode, match_rules)
@@ -126,6 +137,8 @@ func _physics_process(delta: float) -> void:
 	last_hit = maxf(last_hit - delta, 0.0)
 	radio_time = maxf(radio_time - delta, 0.0)
 	if not is_instance_valid(player) or director.phase == Director.Phase.DONE:
+		return
+	if mode == "parkour":
 		return
 	if is_instance_valid(net) and not net.hosting:
 		director.notice = maxf(0.0, director.notice - delta)
@@ -718,6 +731,9 @@ func _scan_pickups(authority := true) -> void:
 					_collect(item, pilot)
 
 func interact(actor: CharacterBody3D = null) -> void:
+	if mode == "parkour":
+		director.retry_checkpoint()
+		return
 	if not is_instance_valid(actor):
 		actor = player
 	if actor != player:

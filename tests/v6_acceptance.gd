@@ -74,7 +74,7 @@ func run() -> void:
 func screens() -> void:
 	var screens_to_open := [
 		["Accueil", app.menu], ["Jouer", app.play_menu], ["Survie", app.select_session],
-		["Classique", app.open_classic], ["Coop", app.open_lobby],
+		["Gun Game", app.open_classic.bind("gungame")], ["Parkour", app.open_parkour], ["Classique", app.open_classic], ["Coop", app.open_lobby],
 		["Arsenal", app.open_hub.bind("arsenal")], ["Boutique", app.open_hub.bind("shop")],
 		["Progression", app.show_profile], ["Historique", app.show_career],
 		["Options", app.open_settings.bind("menu")], ["Disposition", app.open_touch_editor],

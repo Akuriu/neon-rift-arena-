@@ -163,7 +163,7 @@ func _physics_process(delta: float) -> void:
 		return
 	gadget_left = maxf(0.0, gadget_left - delta)
 	slowed = maxf(0.0, slowed - delta)
-	if not round_lock and just("gadget"):
+	if session.mode != "parkour" and not round_lock and just("gadget"):
 		use_gadget()
 	move_pilot(delta)
 	damage_lock = maxf(damage_lock - delta, 0.0)
@@ -172,7 +172,7 @@ func _physics_process(delta: float) -> void:
 	hull_flash = move_toward(hull_flash, 0.0, delta * 2.8)
 	if shield_wait == 0.0:
 		shield = minf(shield_max, shield + 11.0 * delta)
-	if not round_lock:
+	if session.mode != "parkour" and not round_lock:
 		arsenal.tick(delta)
 	if just("interact"):
 		session.interact(self)
