@@ -119,10 +119,13 @@ jobs:
           export JAVA_HOME="$JAVA_HOME_21_X64"
           sdk_tools="$ANDROID_HOME/cmdline-tools/latest/bin"
           image='system-images;android-35;default;x86_64'
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/rifle-avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           df -m "$RUNNER_TEMP"
           "$sdk_tools/sdkmanager" emulator "$image"
-          printf 'no\n' | "$sdk_tools/avdmanager" create avd --force --name rifle-ci --package "$image"
-          avd_config="$HOME/.android/avd/rifle-ci.avd/config.ini"
+          printf 'no\n' | "$sdk_tools/avdmanager" create avd --force --name rifle-ci --package "$image" \
+            --path "$ANDROID_AVD_HOME/rifle-ci.avd"
+          avd_config="$ANDROID_AVD_HOME/rifle-ci.avd/config.ini"
           sed -i '/^disk.dataPartition.size=/d' "$avd_config"
           printf 'disk.dataPartition.size=2048M\n' >> "$avd_config"
           sudo chown "$USER" /dev/kvm
