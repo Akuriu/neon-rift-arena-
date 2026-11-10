@@ -1,0 +1,35 @@
+.godot/
+build/
+*.tmp
+
+# Livraisons et états locaux
+builds/
+dist/
+exports/
+*.exe
+*.pck
+*.apk
+*.aab
+*.zip
+*.bundle
+*.translation
+.qa/
+qa-logs/
+pilot_profile*.json*
+export_credentials.cfg
+__pycache__/
+*.pyc
+
+# Clés et configuration privée
+*.keystore
+*.jks
+*.p12
+*.pem
+.env
+.env.*
+
+# Système et éditeurs
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
