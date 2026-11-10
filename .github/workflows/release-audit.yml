@@ -1,0 +1,75 @@
+name: Rifle Arena v0.0.6 release prerequisites
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feature/v0.0.6']
+    paths: ['.github/workflows/release-audit.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Inspect the published certificate and configured signing key
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RIFLE_ANDROID_KEYSTORE: ${{ secrets.RIFLE_ANDROID_KEYSTORE }}
+          RIFLE_ANDROID_ALIAS: ${{ secrets.RIFLE_ANDROID_ALIAS }}
+          RIFLE_ANDROID_PASSWORD: ${{ secrets.RIFLE_ANDROID_PASSWORD }}
+          RIFLE_HARDWARE_QA_TAG: ${{ vars.RIFLE_HARDWARE_QA_TAG }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release-audit"
+          prior="$RUNNER_TEMP/release-audit/alpha5.apk"
+          key="$RUNNER_TEMP/release-audit/private.keystore"
+          trap 'rm -f -- "$key" "$prior"' EXIT
+          gh release download v0.0.5-alpha --repo "$GITHUB_REPOSITORY" \
+            --pattern RifleArena_Android_alpha.apk --output "$prior"
+          signer="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          test -x "$signer"
+          export RIFLE_PUBLISHED_CERT=$("$signer" verify --print-certs "$prior" |
+            awk -F ': ' '/^Signer #1 certificate SHA-256 digest:/ {print tolower($2)}')
+          test -n "$RIFLE_PUBLISHED_CERT"
+          export RIFLE_SIGNING_PRESENT=false RIFLE_SIGNING_MATCH=unknown
+          if [[ -n "$RIFLE_ANDROID_KEYSTORE" && -n "$RIFLE_ANDROID_ALIAS" && -n "$RIFLE_ANDROID_PASSWORD" ]]; then
+            export RIFLE_SIGNING_PRESENT=true
+            (umask 077; printf '%s' "$RIFLE_ANDROID_KEYSTORE" | base64 -d > "$key")
+            if configured=$(keytool -exportcert -keystore "$key" -alias "$RIFLE_ANDROID_ALIAS" \
+              -storepass:env RIFLE_ANDROID_PASSWORD 2>/dev/null |
+              openssl x509 -inform DER -noout -fingerprint -sha256 2>/dev/null); then
+              configured=$(printf '%s' "${configured#*=}" | tr -d ':' | tr '[:upper:]' '[:lower:]')
+              export RIFLE_SIGNING_MATCH=false
+              if [[ "$configured" == "$RIFLE_PUBLISHED_CERT" ]]; then export RIFLE_SIGNING_MATCH=true; fi
+            else
+              export RIFLE_SIGNING_MATCH=false
+            fi
+          fi
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = {
+              "candidate": "v0.0.6-alpha",
+              "published_certificate_sha256": os.environ["RIFLE_PUBLISHED_CERT"],
+              "signing_secrets_present": os.environ["RIFLE_SIGNING_PRESENT"] == "true",
+              "signing_key_matches": {"true": True, "false": False, "unknown": None}[os.environ["RIFLE_SIGNING_MATCH"]],
+              "hardware_gate_matches": os.environ.get("RIFLE_HARDWARE_QA_TAG") == "v0.0.6-alpha",
+              "physical_tests_attested_by_this_job": False,
+              "release_authorized_by_this_job": False,
+          }
+          path = Path(os.environ["RUNNER_TEMP"]) / "release-audit/signing-report.json"
+          path.write_text(json.dumps(report, indent=2) + "\n")
+          print(json.dumps(report, indent=2))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("## Conditions de publication v0.0.6\n\n")
+              summary.write("Ce rapport vérifie le certificat public et la configuration des secrets. ")
+              summary.write("Les essais matériels et la publication nécessitent leurs validations propres.\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rifle-v0.0.6-release-audit
+          path: ${{ runner.temp }}/release-audit/signing-report.json
+          if-no-files-found: error
