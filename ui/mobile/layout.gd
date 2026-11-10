@@ -17,6 +17,8 @@ const CONTROLS := {
 	"stats": [0.056, 0.220, 27.0, "Bilan", "Bilan"],
 }
 const SECONDARY := ["crouch", "gadget", "stats"]
+const PRIMARY := ["stick", "fire", "ads", "jump", "sprint", "next"]
+const AMMO_WIDTH := 1.65
 
 static func defaults() -> Dictionary:
 	var layout := {}
@@ -42,3 +44,25 @@ static func normalize(raw: Variant) -> Dictionary:
 				"size": layout[id][key] = clampf(value, 0.70, 1.48)
 				"opacity": layout[id][key] = clampf(value, 0.35, 1.0)
 	return layout
+
+static func radius(id: String, entry: Dictionary, extent: Vector2) -> float:
+	return CONTROLS[id][2] * entry.size * minf(extent.x / 1280.0, extent.y / 720.0)
+
+static func center(id: String, entry: Dictionary, extent: Vector2, left_handed: bool) -> Vector2:
+	var size := radius(id, entry, extent)
+	var margin := Vector2(size * AMMO_WIDTH if id == "reload" else size, size)
+	var x: float = 1.0 - entry.x if left_handed else entry.x
+	return (Vector2(x, entry.y) * extent).clamp(margin, extent - margin)
+
+static func hit_distance(id: String, offset: Vector2, size: float) -> float:
+	var local := offset / maxf(1.0, size)
+	return maxf(absf(local.x) / AMMO_WIDTH, absf(local.y)) if id == "reload" else local.length()
+
+static func overlaps(a: String, a_center: Vector2, a_radius: float, b: String, b_center: Vector2, b_radius: float) -> bool:
+	if a == "reload" or b == "reload":
+		var offset := (a_center - b_center).abs()
+		var ammo_radius := a_radius if a == "reload" else b_radius
+		var other_radius := b_radius if a == "reload" else a_radius
+		var nearest := (offset - Vector2(AMMO_WIDTH, 1.0) * ammo_radius).max(Vector2.ZERO)
+		return nearest.length_squared() < other_radius * other_radius
+	return a_center.distance_squared_to(b_center) < pow(a_radius + b_radius, 2.0)

@@ -4,7 +4,6 @@ const Session := preload("res://scenes/Session.tscn")
 const Arena := preload("res://game/arena.gd")
 const Depot := preload("res://game/skyline.gd")
 const FRAME := Vector2(1280, 720)
-const VERSION_LABEL := "v0.0.5 Alpha"
 const Director := preload("res://game/wave_director.gd")
 const Catalog := preload("res://game/catalog.gd")
 const Palette := preload("res://ui/skin.gd")
@@ -82,8 +81,11 @@ var field_notice := ""
 var coop: Coop
 var lobby: Lobby
 var shop_clock: Label
+var version_label := ""
 
 func _ready() -> void:
+	var version: String = ProjectSettings.get_setting("application/config/version")
+	version_label = "v" + version.trim_suffix("-alpha") + " Alpha" if version.ends_with("-alpha") else "v" + version
 	layer = CanvasLayer.new()
 	add_child(layer)
 	canvas = Control.new()
@@ -163,7 +165,7 @@ func _footer(copy: String) -> void:
 	line.offset_right = -57.0
 	Palette.label(view, Rect2(57, 671, 1030, 35), copy, 13, Palette.MUTED)
 	var version := _right_block(172.0, 35.0, 671.0)
-	Palette.label(version, Rect2(0, 0, 172, 35), VERSION_LABEL, 13, Palette.MUTED, Palette.MONO, HORIZONTAL_ALIGNMENT_RIGHT)
+	Palette.label(version, Rect2(0, 0, 172, 35), version_label, 13, Palette.MUTED, Palette.MONO, HORIZONTAL_ALIGNMENT_RIGHT)
 
 func _safe_canvas() -> void:
 	canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -190,7 +192,7 @@ func _fit_menu() -> void:
 		return
 	var factor := minf(canvas.size.x / FRAME.x, canvas.size.y / FRAME.y)
 	view.scale = Vector2.ONE * factor
-	view.size = Vector2(canvas.size.x / maxf(factor, 0.001), FRAME.y) if screen == "menu" else FRAME
+	view.size = Vector2(canvas.size.x / maxf(factor, 0.001), FRAME.y) if screen in ["menu", "touch_editor"] else FRAME
 	view.position = (canvas.size - view.size * factor) * 0.5
 
 func _right_block(width: float, height: float, y: float) -> Control:
@@ -768,6 +770,10 @@ func _show_pause() -> void:
 		ceili(session.player.health), ceili(session.player.shield)], 17, Palette.TEXT, Palette.MONO)
 	Palette.label(view, Rect2(560, 384, 634, 67), "Arme   %s" % session.player.arsenal.spec().name, 17, Palette.TEXT, Palette.MONO)
 	Palette.label(view, Rect2(560, 451, 634, 54), "Durée   %s" % Palette.clock(session.director.elapsed), 17, Palette.MUTED, Palette.MONO)
+	if Prefs.mobile():
+		var accuracy := roundi(100.0 * session.hits / maxi(1, session.shots))
+		Palette.label(view, Rect2(560, 505, 634, 24), "%d neutralisations  ·  %d %% de précision" % [
+			session.director.kills, accuracy], 15, Palette.MUTED)
 	if last_mode == "training":
 		Palette.button(view, Rect2(534, 551, 344, 53), "Configurer les cibles", open_training)
 	resume.grab_focus()
@@ -828,8 +834,6 @@ func open_touch_editor() -> void:
 	var editor := TouchEditor.new()
 	editor.back = func(): open_settings(options_origin)
 	view.add_child(editor)
-	_footer("DISPOSITION LOCALE   /   ENREGISTREMENT AUTOMATIQUE")
-	_footer("ÉCHAP  /  RETOUR    •    TAB  /  PARCOURIR LES RÉGLAGES")
 
 func _close_settings() -> void:
 	if options_origin == "pause":
@@ -939,7 +943,7 @@ func _result(victory: bool, owner: Node3D) -> void:
 
 func credits() -> void:
 	_new_screen("credits")
-	_header("DOSSIER DE VOL", "Crédits", "Rifle Arena · " + VERSION_LABEL)
+	_header("DOSSIER DE VOL", "Crédits", "Rifle Arena · " + version_label)
 	Palette.panel(view, Rect2(57, 225, 1167, 298), Color("#272b24"))
 	var credit := [
 		["DÉVELOPPEMENT", "Conçu et réalisé avec Codex"],

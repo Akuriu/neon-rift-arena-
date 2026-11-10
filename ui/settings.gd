@@ -127,12 +127,19 @@ func show_tab(index: int) -> void:
 			edit.pressed.connect(edit_touch)
 			entries.add_child(edit)
 			_toggle("Aide légère à la visée", "touch_aim_assist")
-			_toggle("Interface tactile simplifiée", "touch_compact")
+			_choice("Disposition", "touch_preset", ["Personnalisé", "Simple", "Complet", "Gaucher"], [0, 1, 2, 3])
+			if Prefs.values.touch_preset == 0:
+				_toggle("Interface tactile simplifiée", "touch_compact")
+				_toggle("Disposition gaucher", "touch_left")
 			_slider("Sensibilité horizontale", "touch_x", 0.25, 3.0, 0.05, true)
 			_slider("Sensibilité verticale", "touch_y", 0.25, 3.0, 0.05, true)
+			_slider("Courbe de visée", "touch_look_curve", 0.0, 0.75, 0.05, true)
+			_choice("Vitesse maximale de visée", "touch_look_limit",
+				["Sans limite", "360 °/s", "540 °/s", "720 °/s", "900 °/s"], [0, 360, 540, 720, 900])
 			_slider("Zone morte du joystick", "touch_dead", 0.04, 0.35, 0.01, true)
+			_slider("Course du joystick", "touch_travel", 0.75, 1.25, 0.05, true)
+			_slider("Douceur du joystick", "touch_response", 0.0, 0.75, 0.05, true)
 			_toggle("Inverser l’axe vertical", "touch_invert")
-			_toggle("Disposition gaucher", "touch_left")
 			_toggle("Joystick flottant", "touch_float")
 			_toggle("Sprint au bout du joystick", "touch_auto_sprint")
 			_toggle("Vibrations facultatives", "touch_haptic")
@@ -163,6 +170,8 @@ func _choice(caption: String, key: String, names: Array, values: Array) -> void:
 		Prefs.change_value(key, values[index])
 		if key == "layout":
 			_refresh_keys()
+		elif key == "touch_preset":
+			show_tab.call_deferred(active)
 	)
 	row.add_child(option)
 

@@ -8,6 +8,7 @@ const Avatar := preload("res://network/avatar.gd")
 const Motion := preload("res://game/player/locomotion.gd")
 const CameraRig := preload("res://game/player/camera_rig.gd")
 const TouchAim := preload("res://game/player/touch_aim.gd")
+const TouchResponse := preload("res://ui/mobile/response.gd")
 const WALK := Motion.WALK
 const RUN := Motion.RUN
 const STAND := Motion.STAND
@@ -45,6 +46,8 @@ var wall_target := 0.0
 var landing := 0.0
 var sprint_latched := false
 var touch_sprint := false
+var touch_move := Vector2.ZERO
+var previous_walk_phase := 0.0
 var crouch_latched := false
 var round_lock := false
 var input_blocked := false
@@ -130,7 +133,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func look_input(movement: Vector2, scale := Vector2.ONE, tactile := false) -> void:
 	if not local_view or not alive or input_blocked:
 		return
-	var sensitivity: float = 0.16 if tactile else Prefs.values.sensitivity
+	var sensitivity: float = TouchResponse.LOOK_DEGREES if tactile else Prefs.values.sensitivity
 	var factor: float = deg_to_rad(sensitivity * (Prefs.values.ads_sensitivity if arsenal.aiming() else 1.0))
 	if tactile and Prefs.mobile() and Prefs.values.touch_aim_assist:
 		factor *= touch_aim.on_drag()
@@ -144,6 +147,7 @@ func _process(delta: float) -> void:
 		presentation.present(delta)
 
 func _physics_process(delta: float) -> void:
+	previous_walk_phase = walk_phase
 	if local_view and Prefs.mobile():
 		touch_aim.update(self, delta)
 	if local_view and alive and not input_blocked:
@@ -217,6 +221,9 @@ func pose_flags() -> int:
 func reload_progress() -> float:
 	return clampf(arsenal.reload_left / maxf(0.001, arsenal.cycle_length), 0.0, 1.0)
 
+func rendered_step_phase() -> float:
+	return lerp_angle(previous_walk_phase, walk_phase, Engine.get_physics_interpolation_fraction())
+
 func move_pilot(delta: float) -> void:
 	locomotion.step(self, delta)
 
@@ -268,7 +275,9 @@ func take_damage(amount: float, source := Vector3.INF, attacker: CharacterBody3D
 func steering() -> Vector2:
 	if input_blocked:
 		return Vector2.ZERO
-	return net_move if remote_input else Input.get_vector("left", "right", "forward", "back")
+	if remote_input:
+		return net_move
+	return touch_move if not touch_move.is_zero_approx() else Input.get_vector("left", "right", "forward", "back")
 
 func down(action: String) -> bool:
 	if input_blocked:

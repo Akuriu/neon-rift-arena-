@@ -14,6 +14,7 @@ const INK := Color(0.07, 0.079, 0.064, 0.86)
 var session: Node3D
 var sample_time := 0.0
 var frame_samples := PackedFloat32Array()
+var sample_last := 0
 var diagnostic := ""
 var render_wait := 0.0
 var scope_mesh: ArrayMesh
@@ -25,12 +26,16 @@ var status_contrast := Palette.box(Color("#141611"), Color("#77776a"), 5)
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	visibility_changed.connect(func(): sample_last = 0)
 
 func _process(delta: float) -> void:
 	if not is_visible_in_tree() or not is_instance_valid(session) or not is_instance_valid(session.player):
+		sample_last = 0
 		return
 	if Prefs.values.telemetry:
-		_sample(delta)
+		_sample()
+	else:
+		sample_last = 0
 	render_wait -= delta
 	if render_wait <= 0.0 or session.last_hit > 0.0 or session.player.arsenal.scope > 0.02:
 		render_wait = 1.0 / (25.0 if Prefs.values.quality == 3 else 36.0)
@@ -45,6 +50,7 @@ func _draw() -> void:
 	var director = session.director
 	var match_mode := is_instance_valid(session.classic)
 	var mobile := Prefs.mobile()
+	var compact: bool = mobile and Prefs.compact_touch()
 	var tint: Color = gun.spec().tint
 	var center := size * 0.5
 	if gun.spec().has("zoom") and gun.scope > 0.05 and Prefs.values.scope_overlay:
@@ -70,7 +76,7 @@ func _draw() -> void:
 		time = maxf(0.0, session.training_options.time - director.elapsed)
 	var score := "%d  –  %d" % [director.score, director.rival_score()] if match_mode else str(director.score)
 	if mobile:
-		_mobile_status(pilot, objective, score, time)
+		_mobile_status(pilot, objective, score, time, compact)
 	else:
 		_desktop_status(pilot, gun, objective, score, time, tint)
 	_crosshair(center, tint)
@@ -99,9 +105,9 @@ func _draw() -> void:
 		if boss.kind in ["warden", "colossus", "architect"]:
 			_print(pos + Vector2(274, 20), "PHASE %d" % boss.phase, 12, Palette.MONO, AMBER)
 		_meter(pos + Vector2(12, 34), Vector2(336, 6), boss.health / boss.maximum, AMBER)
-	if session.radio_time > 0.0:
+	if session.radio_time > 0.0 and not compact:
 		_mid(Vector2(center.x, size.y - 101), session.radio, 16, Palette.BOLD, AMBER)
-	elif director.combo > 1 and director.combo_left > 0.0:
+	elif director.combo > 1 and director.combo_left > 0.0 and not compact:
 		_mid(Vector2(center.x, size.y - 101), "SÉRIE ×%d" % director.combo, 16, Palette.MONO, CYAN)
 	if session.pickup_hint != "":
 		var hint: String = session.pickup_hint
@@ -111,37 +117,49 @@ func _draw() -> void:
 	if session.relay_state == 1 and director.phase == Director.Phase.ACTIVE:
 		_mid(Vector2(center.x, size.y - 122), "RELAIS   %.1f / 6 s   ·   +48 CR" % session.relay_progress, 13, Palette.MONO, signal_ink)
 	if Prefs.values.telemetry and not diagnostic.is_empty():
-		_frame(Rect2(26, 120, 345, 39), CYAN)
-		_print(Vector2(36, 145), diagnostic, 12, Palette.MONO, TEXT)
+		_frame(Rect2(26, 83 if compact else 120, 440, 49), CYAN)
+		var lines := diagnostic.split("\n")
+		_print(Vector2(36, 102 if compact else 139), lines[0], 12, Palette.MONO, TEXT)
+		_print(Vector2(36, 120 if compact else 157), lines[1], 11, Palette.MONO, MUTE)
 	if is_instance_valid(session.net):
-		_team(Vector2(26, 170 if Prefs.values.telemetry else 117))
+		var top := (140 if Prefs.values.telemetry else 83) if compact else (178 if Prefs.values.telemetry else 117)
+		_team(Vector2(26, top))
 		if not pilot.alive:
 			_notice(Vector2(center.x, 244), "HORS COMBAT", "Retour à l’intermission si l’équipe tient la vague.", AMBER)
 	if Input.is_action_pressed("stats"):
 		_stats()
-	if session.mode == "training":
+	if session.mode == "training" and not compact:
 		var accuracy := roundi(100.0 * session.hits / maxi(1, session.shots))
 		var hint := "%d NEUTRALISÉS  /  %d %% DE PRÉCISION  /  %d TIRS" % [director.kills, accuracy, session.shots]
 		_mid(Vector2(center.x, size.y - 41), hint, 13, Palette.BODY, TEXT)
 
-func _mobile_status(pilot: CharacterBody3D, objective: String, score: String, time: float) -> void:
+func _mobile_status(pilot: CharacterBody3D, objective: String, score: String, time: float, compact: bool) -> void:
 	var factor: float = Prefs.values.hud_scale
-	var left_handed: bool = Prefs.values.touch_left
+	var left_handed: bool = Prefs.left_touch()
 	var width := 184.0 * factor
 	var corner := Vector2(size.x - 24.0 - width if left_handed else 24.0, 21.0)
-	draw_set_transform(corner, 0, Vector2.ONE * factor)
 	var plate := status_contrast if Prefs.values.high_contrast else status_panel
-	draw_style_box(plate, Rect2(0, 0, 184, 61))
-	draw_rect(Rect2(0, 11, 3, 39), AMBER)
-	_print(Vector2(14, 22), Catalog.MAPS[session.map_id].name.to_upper(), 11, Palette.MONO, MUTE)
-	_print(Vector2(13, 47), objective, 21, Palette.HEAD, TEXT)
-	draw_set_transform(Vector2(size.x * 0.5 - 112.0 * factor, 18), 0, Vector2.ONE * factor)
-	draw_style_box(plate, Rect2(0, 0, 224, 54))
-	draw_line(Vector2(123, 9), Vector2(123, 45), Color(MUTE, 0.34), 1.0)
-	_mid(Vector2(62, 17), "SCORE", 10, Palette.MONO, AMBER)
-	_mid(Vector2(174, 17), "TEMPS", 10, Palette.MONO, MUTE)
-	_mid(Vector2(62, 42), score, 23, Palette.HEAD, TEXT)
-	_mid(Vector2(174, 41), Palette.clock(time), 17, Palette.MONO, TEXT)
+	if compact:
+		draw_set_transform(Vector2(size.x * 0.5 - 158.0 * factor, 18), 0, Vector2.ONE * factor)
+		draw_style_box(plate, Rect2(0, 0, 316, 55))
+		draw_rect(Rect2(0, 11, 3, 33), AMBER)
+		var line: String = score if is_instance_valid(session.classic) else Catalog.MAPS[session.map_id].name
+		_print(Vector2(14, 20), line, 12, Palette.MONO, MUTE)
+		_print(Vector2(13, 43), objective, 21, Palette.HEAD, TEXT)
+		_mid(Vector2(270, 34), Palette.clock(time), 18, Palette.MONO, TEXT)
+	else:
+		draw_set_transform(corner, 0, Vector2.ONE * factor)
+		draw_style_box(plate, Rect2(0, 0, 184, 61))
+		draw_rect(Rect2(0, 11, 3, 39), AMBER)
+		_print(Vector2(14, 22), Catalog.MAPS[session.map_id].name.to_upper(), 11, Palette.MONO, MUTE)
+		_print(Vector2(13, 47), objective, 21, Palette.HEAD, TEXT)
+		draw_set_transform(Vector2(size.x * 0.5 - 112.0 * factor, 18), 0, Vector2.ONE * factor)
+		draw_style_box(plate, Rect2(0, 0, 224, 54))
+		draw_line(Vector2(123, 9), Vector2(123, 45), Color(MUTE, 0.34), 1.0)
+		_mid(Vector2(62, 17), "SCORE", 10, Palette.MONO, AMBER)
+		_mid(Vector2(174, 17), "TEMPS", 10, Palette.MONO, MUTE)
+		_mid(Vector2(62, 42), score, 23, Palette.HEAD, TEXT)
+		_mid(Vector2(174, 41), Palette.clock(time), 17, Palette.MONO, TEXT)
 	draw_set_transform(Vector2(corner.x, size.y - 24.0 - 65.0 * factor), 0, Vector2.ONE * factor)
 	draw_style_box(plate, Rect2(0, 0, 184, 65))
 	_mid(Vector2(47, 17), "SANTÉ", 10, Palette.MONO, MUTE)
@@ -274,17 +292,28 @@ func _crosshair(center: Vector2, tint: Color) -> void:
 			_print(center + Vector2(22, -16.0 - (0.25 - session.last_hit) * 31.0),
 				"%s%d" % ["★ " if session.critical else "", roundi(session.last_damage)], 18, Palette.MONO, marker)
 
-func _sample(delta: float) -> void:
-	if frame_samples.size() < 180:
-		frame_samples.append(delta * 1000.0)
-	sample_time += delta
+func _sample() -> void:
+	var now := Time.get_ticks_usec()
+	if sample_last == 0:
+		sample_last = now
+		frame_samples.clear()
+		sample_time = 0.0
+		return
+	var elapsed := (now - sample_last) * 0.001
+	sample_last = now
+	if frame_samples.size() < 512:
+		frame_samples.append(elapsed)
+	sample_time += elapsed * 0.001
 	if sample_time < 0.85 or not is_instance_valid(session):
 		return
 	frame_samples.sort()
-	var p95 := frame_samples[floori((frame_samples.size() - 1) * 0.95)]
-	var p99 := frame_samples[floori((frame_samples.size() - 1) * 0.99)]
-	diagnostic = "%d FPS · P95 %.1f · P99 %.1f ms · %d MB" % [
-		Engine.get_frames_per_second(), p95, p99, roundi(Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0)]
+	var ranks := Vector3(0.50, 0.95, 0.99) * (frame_samples.size() - 1)
+	var physics_ms := Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
+	var draw_calls := Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
+	var memory := Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0
+	diagnostic = "%d FPS   P50 %.1f   P95 %.1f   P99 %.1f ms\nPhysique %.2f ms   Dessins %d   Mémoire moteur %.0f Mio" % [
+		Engine.get_frames_per_second(), frame_samples[floori(ranks.x)], frame_samples[floori(ranks.y)],
+		frame_samples[floori(ranks.z)], physics_ms, int(draw_calls), memory]
 	frame_samples.clear()
 	sample_time = 0.0
 
