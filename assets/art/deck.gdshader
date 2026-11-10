@@ -2,38 +2,32 @@ shader_type spatial;
 render_mode vertex_lighting, specular_disabled;
 
 varying vec3 world;
-uniform vec4 base_color : source_color = vec4(0.235, 0.275, 0.295, 1.0);
-uniform vec4 groove_color : source_color = vec4(0.125, 0.159, 0.175, 1.0);
+uniform vec4 base_color : source_color = vec4(0.50, 0.48, 0.43, 1.0);
+uniform vec4 groove_color : source_color = vec4(0.34, 0.32, 0.29, 1.0);
+uniform sampler2D aggregate : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform bool low_detail = false;
 uniform bool ground_path = false;
+uniform float joint_scale = 0.0;
 
 void vertex() {
 	world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 
 void fragment() {
-	vec2 panel = world.xz / vec2(3.0, 2.75);
-	vec2 repeat_uv = fract(panel);
-	vec2 edge = min(repeat_uv, 1.0 - repeat_uv);
-	float footprint = max(fwidth(panel.x), fwidth(panel.y));
-	float seams = mix(smoothstep(0.006, 0.014 + footprint, min(edge.x, edge.y)), 0.93, smoothstep(0.09, 0.38, footprint));
-	float lane = step(16.0, abs(world.x));
-	vec3 metal = base_color.rgb;
-	float bolt = 0.0;
-	if (!low_detail) {
-		float hash = fract(sin(dot(floor(panel), vec2(127.1, 311.7))) * 43758.54);
-		float grain = sin(world.x * 25.0 + sin(world.z * 21.0)) * sin(world.z * 23.0) * (1.0 - smoothstep(0.006, 0.09, footprint));
-		bolt = 1.0 - smoothstep(0.010, 0.018, length(edge - vec2(0.055)));
-		metal *= 0.91 + hash * 0.15 + grain * 0.023;
-	}
-	metal = mix(metal, metal * vec3(0.83, 0.98, 1.07), lane * 0.65);
+	float surface = texture(aggregate, world.xz * 0.73).r;
+	float weathering = texture(aggregate, world.xz * 0.103 + vec2(0.31, 0.62)).r;
+	vec3 finish = base_color.rgb * (0.53 + 0.43 * surface + 0.34 * weathering);
 	if (ground_path) {
-		float trail = 1.0 - smoothstep(3.4, 5.8, abs(world.x + 1.4 * sin(world.z * 0.24)));
-		metal = mix(metal * vec3(0.71, 0.95, 0.61), metal * vec3(1.24, 1.07, 0.86), trail);
-		seams = mix(1.0, seams, trail * 0.18);
-		bolt = 0.0;
+		float trail = 1.0 - smoothstep(2.8, 5.5, abs(world.x + 1.25 * sin(world.z * 0.22)));
+		finish = mix(finish * vec3(0.68, 0.76, 0.61), finish * vec3(0.98, 0.91, 0.81), trail);
 	}
-	ALBEDO = mix(groove_color.rgb, metal, seams) * (1.0 - bolt * 0.36);
-	ROUGHNESS = 0.79 + (1.0 - seams) * 0.18;
-	METALLIC = 0.08;
+	if (joint_scale > 0.0) {
+		vec2 panel = world.xz * joint_scale;
+		vec2 edge = abs(fract(panel + 0.5) - 0.5);
+		float aa = clamp(max(fwidth(panel.x), fwidth(panel.y)), 0.002, 0.10);
+		float face = smoothstep(0.004, 0.004 + aa, min(edge.x, edge.y));
+		finish = mix(groove_color.rgb, finish, face);
+	}
+	ALBEDO = finish * 0.71;
+	ROUGHNESS = 0.93;
 }

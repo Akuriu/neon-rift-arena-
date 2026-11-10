@@ -1,6 +1,6 @@
 # Crédits
 
-NEON RIFT — ARENA a été conçu et réalisé avec Codex. Les arènes, les robots, les équipements, la signalétique, les effets, les sons et les musiques ont été produits pour ce projet. Le script tools/synth_audio.py régénère les pistes et les effets sonores.
+Rifle Arena a été réalisé avec Codex. Les cartes, armes, personnages, textures et effets sonores ont été créés pour le jeu.
 
 - **Godot Engine** et **GDScript**, licence MIT. [Licence du moteur](https://godotengine.org/license/)
 - **Open Sans**, données numérisées © 2010–2011 Google Corporation, licence Apache 2.0. [Licence incluse](assets/fonts/LICENSE-OpenSans.txt)

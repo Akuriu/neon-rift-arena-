@@ -19,8 +19,10 @@ func run() -> void:
 	app = load("res://scenes/App.tscn").instantiate()
 	root.add_child(app)
 	check(app.screen == "menu", "Menu au démarrage")
-	press("JOUER")
-	check(app.screen == "select", "Jouer ouvre les protocoles")
+	press("Jouer")
+	check(app.screen == "play", "Jouer ouvre les types de partie")
+	press("Survie")
+	check(app.screen == "select", "Survie ouvre la configuration")
 	press("DÉMARRER")
 	check(app.screen == "hud" and app.session.mode == "survival", "Démarrer charge l’arène")
 	await frames(9)
@@ -38,7 +40,7 @@ func run() -> void:
 	app.settings.tabs[1].pressed.emit()
 	var listen := false
 	for button in app.settings.entries.find_children("*", "Button", true, false):
-		listen = listen or button.text == "Écouter une impulsion"
+		listen = listen or button.text == "Écouter un tir"
 	check(app.settings.active == 1 and listen, "Onglet Audio et bouton d’écoute")
 	prefs.change_value("master", 0.0)
 	check(AudioServer.is_bus_mute(0), "Le volume général agit sur la sortie")
@@ -132,7 +134,8 @@ func three_restarts() -> void:
 	check(app.screen == "menu", "Retour au menu confirmé")
 
 func practice() -> void:
-	press("ENTRAÎNEMENT")
+	press("Jouer")
+	press("Entraînement")
 	var stage = app.session
 	var pilot = stage.player
 	await frames(45)
@@ -236,7 +239,7 @@ func save_tests() -> void:
 
 func press(fragment: String) -> void:
 	for control in app.view.find_children("*", "Button", true, false):
-		if fragment in control.text and not control.disabled:
+		if (fragment in control.text or control.accessibility_name == fragment) and not control.disabled:
 			control.pressed.emit()
 			return
 	check(false, "Bouton absent " + fragment)

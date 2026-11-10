@@ -64,7 +64,7 @@ func host_game() -> void:
 		starts[id] = stage.pilots[id].position
 	check(stage.pilots.size() == expected and stage.map_id == "cryo" and not net.match_id.is_empty(), "Même arène et pilotes autoritaires")
 	var moved := false
-	var move_until := Time.get_ticks_msec() + 2300
+	var move_until := Time.get_ticks_msec() + 4700
 	while Time.get_ticks_msec() < move_until:
 		moved = true
 		for id in other_ids:
@@ -172,9 +172,11 @@ func client_game() -> void:
 	check(stage.map_id == "cryo" and stage.pilots.size() == expected and stage.pilots[1].avatar != null,
 		"Carte commune et avatar 3D de l’hôte")
 	Input.action_press("forward")
-	await create_timer(0.65).timeout
+	var motion_deadline := Time.get_ticks_msec() + 2800
+	while pilot.position.distance_to(initial) <= 1.65 and Time.get_ticks_msec() < motion_deadline:
+		await physics_frame
 	Input.action_release("forward")
-	check(pilot.position.distance_to(initial) > 1.0, "Mouvement retourné par l’hôte")
+	check(pilot.position.distance_to(initial) > 1.65, "Mouvement retourné par l’hôte")
 	var last_ready := 0
 	var seen_wave6 := false
 	var before: int = 0

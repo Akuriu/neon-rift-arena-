@@ -23,15 +23,15 @@ var status: Label
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	Palette.label(self, Rect2(57, 32, 480, 34), "NEON RIFT   /   CONSOLE", 14, Palette.CYAN, Palette.MONO)
+	Palette.label(self, Rect2(57, 32, 480, 34), "Rifle Arena", 14, Palette.CYAN, Palette.MONO)
 	Palette.label(self, Rect2(54, 78, 600, 74), "Paramètres", 59, Palette.TEXT, Palette.HEAD)
-	Palette.panel(self, Rect2(55, 167, 248, 410), Color("#0c1d25"))
-	Palette.panel(self, Rect2(326, 167, 899, 410), Color("#0d2028"))
+	Palette.panel(self, Rect2(55, 167, 248, 410), Palette.PANEL)
+	Palette.panel(self, Rect2(326, 167, 899, 410), Palette.PANEL)
 	var labels := ["Vidéo", "Audio", "Jeu et confort", "Clavier"]
 	labels.append("Tactile")
 	for index in labels.size():
 		var tab := Palette.button(self, Rect2(67, 180 + index * 53, 222, 44),
-			"%02d     %s" % [index + 1, labels[index]], show_tab.bind(index))
+			labels[index], show_tab.bind(index))
 		tabs.append(tab)
 	Palette.label(self, Rect2(73, 452, 204, 89), "Les réglages s’appliquent pendant que vous jouez.", 15, Palette.MUTED,
 		Palette.BODY, HORIZONTAL_ALIGNMENT_LEFT, true)
@@ -40,11 +40,12 @@ func _ready() -> void:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	Palette.at(self, scroll, Rect2(343, 181, 863, 382))
 	status = Palette.label(self, Rect2(329, 599, 474, 46), "Enregistrement automatique", 14, Palette.MUTED, Palette.MONO)
-	Palette.button(self, Rect2(831, 600, 225, 43), "Réinitialiser les réglages", _reset)
+	Palette.button(self, Rect2(831, 600, 225, 43), "Réinitialiser", _reset)
 	Palette.button(self, Rect2(1069, 600, 155, 43), "Retour", _back, true)
 	Prefs.saved.connect(_saved)
-	show_tab(0)
-	tabs[0].grab_focus()
+	var initial := 4 if Prefs.mobile() else 0
+	show_tab(initial)
+	tabs[initial].grab_focus()
 
 func show_tab(index: int) -> void:
 	active = index
@@ -61,8 +62,6 @@ func show_tab(index: int) -> void:
 	button_by_action.clear()
 	match active:
 		0:
-			_choice("Style du monde", "art_style", Art.LABELS, [0, 1, 2, 3])
-			_slider("Émissions lumineuses", "emission", 0, 1, 0.05, true)
 			_toggle("Brume de profondeur", "fog")
 			_toggle("Météo légère", "weather")
 			var low := "Mobile Ultra Léger · 64 %" if Prefs.mobile() else "Ultra faible · 64 %"
@@ -83,16 +82,16 @@ func show_tab(index: int) -> void:
 			_slider("Volume général", "master", 0, 1, 0.01, true)
 			_slider("Musique", "music", 0, 1, 0.01, true)
 			_slider("Effets sonores", "sfx", 0, 1, 0.01, true)
-			_slider("Ambiance du réacteur", "ambience", 0, 1, 0.01, true)
+			_slider("Ambiance", "ambience", 0, 1, 0.01, true)
 			_toggle("Alarmes sonores", "audio_alerts")
 			_toggle("Confirmation des impacts", "audio_hits")
 			_toggle("Variation de musique en combat", "audio_dynamic")
 			var sample := Button.new()
-			sample.text = "Écouter une impulsion"
+			sample.text = "Écouter un tir"
 			sample.pressed.connect(Sounds.play.bind("pulse"))
 			entries.add_child(sample)
 		2:
-			_choice("Teinte du HUD", "hud_tone", ["Ivoire", "Glacier", "Sable", "Lilas"], [0, 1, 2, 3])
+			_choice("Teinte du HUD", "hud_tone", ["Ivoire", "Ardoise", "Sable", "Olive"], [0, 1, 2, 3])
 			_toggle("Contraste renforcé du HUD", "high_contrast")
 			_slider("Sensibilité souris", "sensitivity", 0.035, 0.7, 0.005)
 			_slider("Sensibilité en visée", "ads_sensitivity", 0.25, 1.0, 0.05)
@@ -120,26 +119,28 @@ func show_tab(index: int) -> void:
 			_note("Changer de disposition rétablit les touches du profil sélectionné.")
 			for action in KeyLabels:
 				_binding(action)
-			_note("Clic gauche pour tirer, clic droit pour la lunette. En visant avec le Rail, la molette change le zoom.")
+			_note("Clic gauche pour tirer, clic droit pour viser. En visant avec le DMR-762, la molette change le grossissement.")
 		4:
 			var edit := Button.new()
 			edit.text = "Modifier la disposition des commandes"
 			edit.custom_minimum_size.y = 45
 			edit.pressed.connect(edit_touch)
 			entries.add_child(edit)
+			_toggle("Aide légère à la visée", "touch_aim_assist")
+			_toggle("Interface tactile simplifiée", "touch_compact")
 			_slider("Sensibilité horizontale", "touch_x", 0.25, 3.0, 0.05, true)
 			_slider("Sensibilité verticale", "touch_y", 0.25, 3.0, 0.05, true)
 			_slider("Zone morte du joystick", "touch_dead", 0.04, 0.35, 0.01, true)
 			_toggle("Inverser l’axe vertical", "touch_invert")
 			_toggle("Disposition gaucher", "touch_left")
 			_toggle("Joystick flottant", "touch_float")
-			_toggle("Réduire les boutons contextuels", "touch_compact")
+			_toggle("Sprint au bout du joystick", "touch_auto_sprint")
 			_toggle("Vibrations facultatives", "touch_haptic")
-			_note("En coop, la partie continue pendant une pause locale. La suspension peut entraîner une déconnexion.")
+			_note("L’aide ralentit légèrement le glissement près d’un adversaire visible. Glissez sur la flèche vers le bas pour vous accroupir, ou sur le côté pour utiliser le gadget.")
 
 func _row(caption: String) -> HBoxContainer:
 	var line := HBoxContainer.new()
-	line.custom_minimum_size = Vector2(0, 49)
+	line.custom_minimum_size = Vector2(0, 60 if Prefs.mobile() else 49)
 	line.add_theme_constant_override("separation", 17)
 	var text := Label.new()
 	text.text = caption

@@ -19,6 +19,9 @@ func run() -> void:
 	layer = app.touch_panel
 	await ticks(4)
 	var pilot = app.session.player
+	check(prefs.values.touch_compact and not layer._available("gadget") and not layer._available("sprint"),
+		"Le HUD tactile démarre en mode simplifié")
+	await check_aim(pilot)
 	var stick: Vector2 = layer._center("stick")
 	var fire: Vector2 = layer._center("fire")
 	var look := Vector2(770, 289)
@@ -41,7 +44,20 @@ func run() -> void:
 	check(not Input.is_action_pressed("fire"), "Annulation système relâche le tir")
 	tap(0, stick, false)
 	tap(1, look, false)
-	check(Input.get_vector("left", "right", "forward", "back") == Vector2.ZERO, "Relâchement du joystick sans déplacement bloqué")
+	check(Input.get_vector("left", "right", "forward", "back") == Vector2.ZERO and not Input.is_action_pressed("sprint"),
+		"Relâchement du joystick sans déplacement ni sprint bloqué")
+	former_yaw = pilot.rotation.y
+	tap(2, fire, true)
+	drag(2, fire + Vector2(46, 0), Vector2(46, 0))
+	check(absf(pilot.rotation.y - former_yaw) > 0.02 and Input.is_action_pressed("fire"),
+		"Glisser sur le tir permet de viser avec le même doigt")
+	tap(2, fire, false)
+	var jump: Vector2 = layer._center("jump")
+	tap(7, jump, true)
+	drag(7, jump + Vector2(0, 40), Vector2(0, 40))
+	check(Input.is_action_pressed("crouch"), "Glisser vers le bas déclenche l’accroupissement")
+	tap(7, jump, false)
+	check(not Input.is_action_pressed("crouch"), "Lever le doigt relâche l’accroupissement")
 	var gun = pilot.arsenal
 	var active: int = gun.active
 	var next: Vector2 = layer._center("next")
@@ -52,6 +68,7 @@ func run() -> void:
 	await ticks(32)
 	var ads: Vector2 = layer._center("ads")
 	tap(4, ads, true)
+	tap(4, ads, false)
 	await ticks(24)
 	var zoom: Vector2 = layer._center("zoom")
 	tap(5, zoom, true)
@@ -83,6 +100,35 @@ func run() -> void:
 	app.menu()
 	await process_frame
 	quit(failures)
+
+func check_aim(pilot: CharacterBody3D) -> void:
+	var stage = app.session
+	var target = stage.units[0]
+	target.set_physics_process(false)
+	target.position = pilot.position + Vector3(0, 0, -4)
+	pilot.head.rotation.x = asin((target.aim_point() - pilot.head.global_position).normalized().y)
+	await ticks(3)
+	var before := pilot.rotation
+	pilot.look_input(Vector2.ZERO, Vector2.ONE, true)
+	await ticks(4)
+	var scale: float = pilot.touch_aim.speed_scale
+	check(scale < 0.96 and scale >= 0.72 and pilot.rotation == before,
+		"L’aide tactile freine près d’une cible visible sans tourner la caméra")
+	var wall := StaticBody3D.new()
+	var hitbox := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(1.8, 2.7, 0.32)
+	hitbox.shape = shape
+	wall.position = pilot.position + Vector3(0, 1.1, -2)
+	wall.add_child(hitbox)
+	stage.add_child(wall)
+	pilot.look_input(Vector2.ZERO, Vector2.ONE, true)
+	await ticks(4)
+	check(is_equal_approx(pilot.touch_aim.speed_scale, 1.0), "Un mur annule l’aide à la visée")
+	wall.queue_free()
+	pilot.head.rotation.x = 0.0
+	target.set_physics_process(true)
+	await ticks(3)
 
 func tap(index: int, at: Vector2, pressed: bool, canceled := false) -> void:
 	var event := InputEventScreenTouch.new()

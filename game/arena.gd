@@ -3,16 +3,17 @@ extends Node3D
 const Fabric := preload("res://game/fabric.gd")
 const Routes := preload("res://game/routes.gd")
 const Scenery := preload("res://art/scenery.gd")
+const Materials := preload("res://art/materials.gd")
 const FONT := preload("res://assets/fonts/OpenSans-CondBold.ttf")
 const START := Vector3(0, 0.06, 18.0)
 const TERMINAL := Vector3(3.2, 1.0, 17.0)
 const HALF := Vector2(26.0, 24.0)
-const CYAN := Color("#5af3ea")
-const GOLD := Color("#ffb85e")
-const INK := Color("#19262d")
-const SLATE := Color("#34474d")
-const STEEL := Color("#6f8083")
-const WHITE := Color("#a8b7ac")
+const CYAN := Color("#9faaa1")
+const GOLD := Color("#c0a16a")
+const INK := Color("#555b56")
+const SLATE := Color("#5e6561")
+const STEEL := Color("#818781")
+const WHITE := Color("#d0cdc1")
 const COPPER := Color("#a65335")
 
 var spawn_points: Array[Vector3] = [
@@ -29,11 +30,8 @@ var collision: StaticBody3D
 var sun: DirectionalLight3D
 var atmosphere: Environment
 var dome: ShaderMaterial
-var daylight: Node3D
 var air: CPUParticles3D
 var deck_surface: ShaderMaterial
-var turbine: Node3D
-var sleeve: Node3D
 var is_backdrop := false
 var emergency := false
 var map_id := "reactor"
@@ -59,7 +57,7 @@ func _ready() -> void:
 	_build_layout()
 	batches.commit(structure)
 	if map_id != "station":
-		daylight = Scenery.build(self)
+		Scenery.build(self)
 	if not is_backdrop:
 		routes.setup(footprints, half_size)
 	apply_quality()
@@ -81,14 +79,7 @@ func apply_quality() -> void:
 		deck_surface.set_shader_parameter("low_detail", Prefs.values.quality in [0, 3])
 	dome.set_shader_parameter("low_detail", Prefs.values.quality in [0, 3])
 	atmosphere.fog_enabled = Prefs.values.fog and Prefs.values.quality in [1, 2]
-	if is_instance_valid(daylight):
-		daylight.visible = Prefs.values.art_style != 1 and Prefs.values.quality != 3
 	_apply_weather()
-
-func _process(delta: float) -> void:
-	if is_instance_valid(turbine):
-		turbine.rotate_y(delta * 0.36)
-		sleeve.rotate_y(-delta * 0.53)
 
 func _light() -> void:
 	var world := WorldEnvironment.new()
@@ -104,22 +95,22 @@ func _light() -> void:
 	sun = DirectionalLight3D.new()
 	sun.name = "Sun"
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-	sun.shadow_bias = 0.09
-	sun.shadow_normal_bias = 0.72
+	sun.shadow_bias = 0.17
+	sun.shadow_normal_bias = 0.95
 	add_child(sun)
 
 func apply_art() -> void:
 	var colors: Dictionary = Art.world(map_id)
 	atmosphere.background_color = colors.horizon
 	atmosphere.ambient_light_color = colors.ambient
-	atmosphere.ambient_light_energy = 0.67 if Prefs.values.art_style == 1 else 0.78
+	atmosphere.ambient_light_energy = 0.64 if map_id != "station" else 0.83
 	atmosphere.fog_enabled = Prefs.values.fog and Prefs.values.quality in [1, 2]
 	atmosphere.fog_density = colors.mist
 	atmosphere.fog_light_color = colors.horizon
 	dome.set_shader_parameter("zenith", colors.sky)
 	dome.set_shader_parameter("haze", colors.horizon)
 	dome.set_shader_parameter("sun_tint", colors.sun)
-	dome.set_shader_parameter("cloud_amount", [0.34, 0.07, 0.19, 0.30][Prefs.values.art_style])
+	dome.set_shader_parameter("cloud_amount", 0.22)
 	sun.rotation_degrees = colors.angle
 	sun.light_color = colors.sun
 	sun.light_energy = colors.power * (0.82 if emergency else 1.0)
@@ -129,13 +120,13 @@ func apply_art() -> void:
 	if is_instance_valid(deck_surface):
 		deck_surface.set_shader_parameter("base_color", colors.floor)
 		deck_surface.set_shader_parameter("groove_color", colors.seam)
-		deck_surface.set_shader_parameter("ground_path", map_id == "grove" and Prefs.values.art_style != 1)
-	if is_instance_valid(daylight):
-		daylight.visible = Prefs.values.art_style != 1 and Prefs.values.quality != 3
+		deck_surface.set_shader_parameter("ground_path", map_id == "grove")
+		deck_surface.set_shader_parameter("aggregate", Materials.texture(colors.ground))
+		deck_surface.set_shader_parameter("joint_scale", 0.62 if map_id == "station" else (0.16 if map_id in ["reactor", "cryo"] else 0.0))
 	for child in structure.get_children():
 		if child is Label3D and child.has_meta("original_ink"):
 			var original: Color = child.get_meta("original_ink")
-			child.modulate = original if Prefs.values.art_style == 1 else original.lerp(colors.dark, 0.62)
+			child.modulate = original.lerp(Color("#c4bba6"), 0.31)
 	_apply_weather()
 
 func alert_lighting(enabled: bool) -> void:
@@ -158,7 +149,7 @@ func _deck() -> void:
 	deck_surface = finish
 	var deck := PlaneMesh.new()
 	deck.size = half_size * 2.0
-	Fabric.place(structure, deck, finish, Vector3.ZERO)
+	Fabric.place(structure, deck, finish, Vector3.ZERO, Vector3.ZERO, false)
 	_block(Vector3(0, -0.25, 0), Vector3(half_size.x * 2, 0.5, half_size.y * 2), Vector3.ZERO, false)
 	for side in [-1.0, 1.0]:
 		var accent := CYAN if side < 0 else GOLD
@@ -176,9 +167,9 @@ func _deck() -> void:
 	for index in 9:
 		_box(Vector3((index - 4) * 0.4, 0.012, 15.0), Vector3(0.22, 0.016, 0.72), GOLD,
 			false, Vector3(0, -0.51, 0))
-	_stencil("07  /  COURT", Vector3(0, 0.026, 12.7), Vector3(-PI / 2, 0, 0), 0.025, WHITE)
-	_stencil("A  /  BYPASS", Vector3(-16.9, 0.026, 12.7), Vector3(-PI / 2, 0, 0), 0.023, CYAN)
-	_stencil("B  /  BYPASS", Vector3(16.9, 0.026, 12.7), Vector3(-PI / 2, 0, 0), 0.023, GOLD)
+	_stencil("COUR 07", Vector3(0, 0.026, 12.7), Vector3(-PI / 2, 0, 0), 0.025, WHITE)
+	_stencil("VOIE A", Vector3(-16.9, 0.026, 12.7), Vector3(-PI / 2, 0, 0), 0.023, CYAN)
+	_stencil("VOIE B", Vector3(16.9, 0.026, 12.7), Vector3(-PI / 2, 0, 0), 0.023, GOLD)
 
 func _enclosure() -> void:
 	for side in [-1.0, 1.0]:
@@ -210,9 +201,9 @@ func _enclosure() -> void:
 			var x := -22.0 + index * 4.0
 			_box(Vector3(x, 8.10, z), Vector3(1.7, 0.11, 0.40), CYAN if index % 2 == 0 else GOLD, true)
 			_box(Vector3(x, 8.71, z), Vector3(0.38, 0.82, 0.52), SLATE)
-	_stencil("R C T   /   0 7", Vector3(0, 4.37, -23.08), Vector3.ZERO, 0.036, WHITE)
-	_stencil("R E A C T O R    C O U R T", Vector3(0, 3.82, -23.07), Vector3.ZERO, 0.013, CYAN)
-	_stencil("M A I N T E N A N C E   /   0 7", Vector3(0, 3.46, 23.05), Vector3(0, PI, 0), 0.021, WHITE)
+	_stencil("ATELIER 07", Vector3(0, 4.37, -23.08), Vector3.ZERO, 0.036, WHITE)
+	_stencil("AIRE TECHNIQUE", Vector3(0, 3.82, -23.07), Vector3.ZERO, 0.013, CYAN)
+	_stencil("ACCÈS ENTRETIEN", Vector3(0, 3.46, 23.05), Vector3(0, PI, 0), 0.021, WHITE)
 
 func _wall_module(at: Vector3, rot: Vector3, accent: Color, port: bool) -> void:
 	var frame := Basis.from_euler(rot)
@@ -242,52 +233,40 @@ func _reactor() -> void:
 	_cylinder_collision(4.79, 2.59, 0.97)
 	if not is_backdrop:
 		footprints.append(Rect2(-3.09, -3.09, 6.18, 6.18))
-	for layer in [
-		[3.46, 0.26, 0.13, INK], [3.35, 0.19, 0.34, GOLD], [3.21, 0.51, 0.61, STEEL],
-		[2.97, 0.57, 0.98, INK], [2.73, 0.15, 1.31, CYAN], [2.53, 0.67, 1.65, SLATE],
-		[2.23, 2.58, 3.03, INK], [2.61, 0.36, 4.40, STEEL], [2.35, 0.11, 4.65, CYAN],
-		[2.50, 0.58, 4.96, SLATE], [2.17, 0.17, 5.33, GOLD], [1.88, 0.55, 5.62, INK],
-		[1.28, 0.32, 6.08, STEEL], [0.77, 0.41, 6.35, WHITE], [0.40, 0.12, 6.62, CYAN],
-	]:
-		var color: Color = layer[3]
-		batches.put(Fabric.tube(layer[0], layer[1], 12), Fabric.paint(color, color in [CYAN, GOLD]),
-			Vector3(0, layer[2], 0))
-	for index in 12:
-		var angle := index * TAU / 12.0
+	var concrete := Materials.finish(Color("#969388"), "concrete", 0.74)
+	var painted := Materials.finish(Color("#777b72"), "steel", 0.78, 0.25)
+	var galvanized := Materials.finish(Color("#a2a39a"), "steel", 0.90, 0.33)
+	batches.put(Fabric.tube(3.39, 0.43, 22), concrete, Vector3(0, 0.215, 0))
+	batches.put(Fabric.tube(3.10, 0.62, 22), concrete, Vector3(0, 0.75, 0))
+	batches.put(Fabric.tube(2.50, 3.42, 28), painted, Vector3(0, 2.75, 0))
+	batches.put(Fabric.tube(2.56, 0.34, 28, 2.36), galvanized, Vector3(0, 4.61, 0))
+	batches.put(Fabric.tube(2.36, 0.39, 28, 1.67), painted, Vector3(0, 4.97, 0))
+	batches.put(Fabric.tube(1.69, 0.17, 24, 0.74), galvanized, Vector3(0, 5.24, 0))
+	batches.put(Fabric.tube(0.39, 0.45, 12), galvanized, Vector3(0, 5.50, 0))
+	for height in [1.32, 2.76, 4.35]:
+		batches.put(Fabric.tube(2.55, 0.06, 28), galvanized, Vector3(0, height, 0))
+	for i in 8:
+		var angle := TAU * i / 8.0
 		var direction := Vector3(sin(angle), 0, cos(angle))
-		_box(direction * 2.25 + Vector3.UP * 3.03, Vector3(0.43, 2.53, 0.38), STEEL,
-			false, Vector3(0, angle, -0.17))
-		_box(direction * 2.47 + Vector3.UP * 3.05, Vector3(0.075, 2.00, 0.045), CYAN,
-			true, Vector3(0, angle, -0.17))
-		var bay := direction * 3.36
-		_box(bay + Vector3.UP * 0.023, Vector3(0.24, 0.035, 0.54), GOLD, false, Vector3(0, angle, 0))
+		_box(direction * 2.47 + Vector3.UP * 1.42, Vector3(0.46, 1.03, 0.28), SLATE, false, Vector3(0, angle, 0))
+		_box(direction * 2.48 + Vector3.UP * 4.43, Vector3(0.11, 0.97, 0.11), STEEL)
+	for height in [4.91, 5.20]:
+		batches.put(Fabric.ring(2.58, 0.043, 24), galvanized, Vector3(0, height, 0))
+	for x in [-0.25, 0.25]:
+		_box(Vector3(x, 2.99, 2.59), Vector3(0.055, 3.45, 0.067), STEEL)
+	for i in 11:
+		_box(Vector3(0, 1.35 + i * 0.30, 2.59), Vector3(0.54, 0.037, 0.054), STEEL)
 	for side in [-1.0, 1.0]:
-		var x: float = side * 8.1
-		for z in [-1.0, 1.0]:
-			batches.put(Fabric.tube(0.22, 11.15, 10), Fabric.paint(COPPER),
-				Vector3(x, 5.02 + z * 0.22, z * 0.77), Vector3(0, 0, PI / 2))
-			for index in 4:
-				batches.put(Fabric.tube(0.285, 0.17, 10), Fabric.paint(STEEL),
-					Vector3(side * (4.7 + index * 2.2), 5.02 + z * 0.22, z * 0.77),
-					Vector3(0, 0, PI / 2))
-		_box(Vector3(side * 13.55, 5.0, 0), Vector3(1.26, 1.20, 2.24), SLATE, false, Vector3.ZERO, 0.28)
-		_box(Vector3(side * 13.55, 4.76, 1.17), Vector3(0.63, 0.15, 0.08), GOLD, true)
-	turbine = Node3D.new()
-	turbine.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
-	turbine.position.y = 5.73
-	add_child(turbine)
-	sleeve = Node3D.new()
-	sleeve.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
-	sleeve.position.y = 3.53
-	add_child(sleeve)
-	Fabric.place(turbine, Fabric.ring(2.42, 0.12), Art.surface(Fabric.paint(CYAN, true)), Vector3.ZERO, Vector3(0.16, 0, 0.07), false)
-	Fabric.place(sleeve, Fabric.ring(2.84, 0.18), Art.surface(Fabric.paint(COPPER)), Vector3.ZERO, Vector3(-0.16, 0, 0.09))
-	for i in 5:
-		var angle := TAU * i / 5.0
-		Fabric.place(turbine, Fabric.bevel(Vector3(0.48, 0.22, 0.43), 0.12),
-			Fabric.paint(WHITE), Vector3(sin(angle), 0.02, cos(angle)) * 2.42, Vector3(0, angle, 0))
-	_stencil("07", Vector3(0, 2.56, 2.73), Vector3.ZERO, 0.032, CYAN)
-	_stencil("RIFT CORE", Vector3(0, 2.15, 2.72), Vector3.ZERO, 0.010, WHITE)
+		for z in [-0.74, 0.74]:
+			batches.put(Fabric.tube(0.20, 11.12, 12), galvanized,
+				Vector3(side * 8.10, 4.83, z), Vector3(0, 0, PI * 0.5))
+			for i in 4:
+				batches.put(Fabric.tube(0.264, 0.15, 12), painted,
+					Vector3(side * (4.85 + i * 2.20), 4.83, z), Vector3(0, 0, PI * 0.5))
+		_box(Vector3(side * 13.64, 4.15, 0), Vector3(1.13, 2.30, 2.03), SLATE, false, Vector3.ZERO, 0.09)
+		_box(Vector3(side * 13.64, 3.34, 1.03), Vector3(0.62, 0.22, 0.06), GOLD)
+	_box(Vector3(0.87, 2.89, 2.43), Vector3(0.69, 0.48, 0.11), INK, false, Vector3(0, 0.32, 0))
+	_stencil("T-07", Vector3(0.87, 2.90, 2.52), Vector3(0, 0.32, 0), 0.008, WHITE)
 
 func _routes_and_cover() -> void:
 	for side in [-1.0, 1.0]:
@@ -322,27 +301,42 @@ func _routes_and_cover() -> void:
 	_supply(Vector3(0, 0, -16.5), Vector3(3.0, 2.15, 1.60), CYAN)
 
 func _supply(at: Vector3, size: Vector3, accent: Color) -> void:
-	_solid(at + Vector3.UP * size.y * 0.5, size, SLATE, 0.16)
-	_box(at + Vector3.UP * (size.y - 0.09), Vector3(size.x + 0.11, 0.18, size.z + 0.11), STEEL,
-		false, Vector3.ZERO, 0.14)
-	_box(at + Vector3.UP * 0.16, Vector3(size.x + 0.06, 0.24, size.z + 0.06), INK, false, Vector3.ZERO, 0.16)
+	_block(at + Vector3.UP * size.y * 0.5, size)
+	var wood := Color("#987958").lerp(accent, 0.09)
+	var boards := Materials.finish(wood, "timber", 0.79)
+	batches.put(Fabric.bevel(size, 0.018), boards, at + Vector3.UP * size.y * 0.5)
+	var frame := wood.darkened(0.30)
+	for y in [0.10, size.y - 0.10]:
+		_box(at + Vector3.UP * y, Vector3(size.x + 0.074, 0.15, size.z + 0.074), frame)
 	for side in [-1.0, 1.0]:
-		var z: float = side * (size.z * 0.5 + 0.034)
-		_box(at + Vector3(0, size.y * 0.57, z), Vector3(size.x - 0.54, size.y * 0.51, 0.055), INK)
-		_box(at + Vector3(0, size.y * 0.76, z + side * 0.037), Vector3(size.x - 0.60, 0.048, 0.025), accent, true)
-		for j in 5:
-			var x := (j - 2) * (size.x - 0.68) / 5.0
-			_box(at + Vector3(x, size.y * 0.51, z + side * 0.038), Vector3(0.08, size.y * 0.28, 0.035), STEEL,
-				false, Vector3(0, 0, -0.27))
+		for edge in [-1.0, 1.0]:
+			var corner := at + Vector3(side * size.x * 0.463, size.y * 0.5, edge * size.z * 0.507)
+			_box(corner, Vector3(0.13, size.y, 0.056), frame)
+			for y in [0.19, size.y - 0.19]:
+				_box(Vector3(corner.x, at.y + y, corner.z + edge * 0.032), Vector3(0.042, 0.042, 0.014), INK)
+		var diagonal := Vector2(size.x * 0.84, size.y * 0.68)
+		_box(at + Vector3(0, size.y * 0.51, side * (size.z * 0.5 + 0.038)),
+			Vector3(diagonal.length(), 0.135, 0.053), wood.lightened(0.17),
+			false, Vector3(0, 0, side * diagonal.angle()))
+	if size.y < 1.65:
+		_box(at + Vector3(0, size.y * 0.67, size.z * 0.5 + 0.034), Vector3(0.34, 0.15, 0.018), INK)
+		_box(at + Vector3(0, size.y * 0.67, size.z * 0.5 + 0.059), Vector3(0.21, 0.039, 0.056), STEEL)
 
 func _terminal() -> void:
 	var foot := terminal_at - Vector3.UP
-	_solid(foot + Vector3.UP * 0.48, Vector3(0.68, 0.96, 0.56), INK, 0.13, false)
-	_box(foot + Vector3.UP * 0.19, Vector3(0.83, 0.13, 0.75), STEEL, false, Vector3.ZERO, 0.13)
-	_box(foot + Vector3.UP * 1.03, Vector3(0.90, 0.22, 0.72), STEEL, false, Vector3(0.42, 0, 0), 0.15)
-	_box(foot + Vector3(0, 1.11, 0.015), Vector3(0.59, 0.037, 0.44), CYAN, true, Vector3(0.42, 0, 0), 0.08)
-	_box(foot + Vector3(0, 0.65, 0.295), Vector3(0.27, 0.05, 0.025), GOLD, true)
-	_stencil("CONTROL / 07", foot + Vector3(0, 1.44, 0.0), Vector3.ZERO, 0.008, CYAN)
+	var olive := Color("#6c7458")
+	_block(foot + Vector3.UP * 0.48, Vector3(0.68, 0.96, 0.56), Vector3.ZERO, false)
+	_box(foot + Vector3.UP * 0.44, Vector3(0.71, 0.88, 0.57), olive, false, Vector3.ZERO, 0.034)
+	for y in [0.09, 0.48, 0.85]:
+		_box(foot + Vector3.UP * y, Vector3(0.75, 0.09, 0.61), olive.darkened(0.30))
+	for x in [-0.23, 0.23]:
+		_box(foot + Vector3(x, 0.71, 0.294), Vector3(0.08, 0.12, 0.042), STEEL, false, Vector3.ZERO, 0.01)
+	_box(foot + Vector3(0, 0.30, 0.305), Vector3(0.33, 0.18, 0.033), INK)
+	_stencil("MUNITIONS", foot + Vector3(0, 0.30, 0.328), Vector3.ZERO, 0.0039, WHITE)
+	_box(foot + Vector3(-0.07, 0.92, 0), Vector3(0.46, 0.105, 0.33), INK, false, Vector3.ZERO, 0.02)
+	for x in [-0.21, 0.07]:
+		_box(foot + Vector3(x, 0.984, 0), Vector3(0.077, 0.025, 0.24), STEEL)
+	_box(foot + Vector3(0.23, 1.0, -0.04), Vector3(0.071, 0.24, 0.083), STEEL, false, Vector3(0.20, 0, 0))
 
 func _skyline() -> void:
 	var random := RandomNumberGenerator.new()
@@ -352,14 +346,15 @@ func _skyline() -> void:
 			var x := -55.0 + 9.0 * i + random.randf_range(-2.0, 2.0)
 			var z: float = side * random.randf_range(31.5, 58.0)
 			var h := random.randf_range(7.0, 27.0)
-			var width := random.randf_range(3.1, 7.7)
+			var width := random.randf_range(5.1, 9.0)
 			var depth := floorf((absf(z) - 30.0) / 6.0) / 5.0
-			var shade := Color("#324d57").lerp(Color("#67818b"), depth)
+			var shade := Color("#6e7472").lerp(Color("#adb0a6"), depth)
 			_box(Vector3(x, h * 0.5, z), Vector3(width, h, 4.5), shade, false, Vector3.ZERO, 0.65)
 			_box(Vector3(x, h + 0.4, z), Vector3(width * 0.70, 0.90, 3.2), shade.lightened(0.09))
-			for j in range(2, floori(h), 3):
-				_box(Vector3(x, j, z - side * 2.26), Vector3(width * 0.56, 0.13, 0.035),
-					Color("#789899") if (j + i) % 4 > 0 else Color("#c79671"), true)
+			for j in range(3, floori(h), 3):
+				for column in [-0.28, 0.0, 0.28]:
+					_box(Vector3(x + width * column, j, z - side * 2.26), Vector3(width * 0.16, 0.78, 0.035),
+						Color("#6d7577"))
 			if i % 3 == 1:
 				_box(Vector3(x + 0.8, h + 2.1, z), Vector3(0.13, 3.45, 0.15), INK)
 				_box(Vector3(x + 0.8, h + 3.87, z), Vector3(0.19, 0.17, 0.19), GOLD, true)

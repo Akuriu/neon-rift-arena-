@@ -24,7 +24,7 @@ func build(parent: Control, selected_map: String, selected_level: String, initia
 	root = parent
 	var mode: String = initial.get("mode", "classic")
 	var rules := Rules.normalize(initial.get("rules", {}), mode)
-	Palette.panel(root, Rect2(57, 206, 1166, 349), Color("#142730"))
+	Palette.panel(root, Rect2(57, 206, 1166, 349), Palette.PANEL)
 	var names: Array[String] = []
 	for id in MODES:
 		names.append(Rules.LABELS[id])
@@ -65,13 +65,6 @@ func build(parent: Control, selected_map: String, selected_level: String, initia
 	if initial.has("seed"):
 		seed.text = str(initial.seed)
 	Palette.at(root, seed, Rect2(832, 572, 345, 51))
-	var styles := OptionButton.new()
-	styles.accessibility_name = "Style visuel"
-	for style in Art.LABELS:
-		styles.add_item(style)
-	styles.select(Prefs.values.art_style)
-	styles.item_selected.connect(func(index: int): Prefs.change_value("art_style", index))
-	Palette.at(root, styles, Rect2(509, 572, 300, 51))
 	Palette.button(root, Rect2(57, 572, 137, 51), "Retour", back)
 	Palette.button(root, Rect2(209, 572, 279, 51), "LANCER LE MATCH    ›", func():
 		var code := seed.text.strip_edges()

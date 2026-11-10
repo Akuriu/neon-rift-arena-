@@ -1,27 +1,28 @@
 extends RefCounted
 
-# Coordinates are normalized inside the game's safe rectangle.
+# Coordinates are normalized inside the safe play area, independently of aspect ratio.
 const CONTROLS := {
-	"stick": [0.113, 0.725, 58.0, "Mouvement", "••"],
-	"fire": [0.935, 0.610, 41.0, "Tir", "TIR"],
-	"ads": [0.850, 0.610, 34.0, "Visée", "VISÉE"],
-	"jump": [0.855, 0.755, 36.0, "Saut", "SAUT"],
-	"crouch": [0.935, 0.755, 34.0, "Glissade", "BAS"],
-	"sprint": [0.208, 0.735, 34.0, "Sprint", "COURSE"],
-	"reload": [0.760, 0.755, 34.0, "Recharger", "RECH."],
-	"gadget": [0.760, 0.610, 34.0, "Gadget", "GADG."],
-	"interact": [0.935, 0.470, 34.0, "Interagir", "ACTION"],
-	"next": [0.935, 0.337, 34.0, "Arme suivante", "ARME"],
-	"zoom": [0.850, 0.472, 33.0, "Zoom", "ZOOM"],
-	"stats": [0.760, 0.474, 33.0, "Journal", "STATS"],
-	"pause": [0.935, 0.222, 32.0, "Pause", "II"],
+	"stick": [0.124, 0.743, 62.0, "Joystick", ""],
+	"fire": [0.913, 0.622, 47.0, "Tirer", ""],
+	"ads": [0.806, 0.698, 34.0, "Viser", ""],
+	"jump": [0.910, 0.804, 35.0, "Saut / glissade", ""],
+	"next": [0.767, 0.897, 33.0, "Changer d’arme", ""],
+	"reload": [0.906, 0.935, 32.0, "Munitions / recharge", ""],
+	"interact": [0.697, 0.635, 33.0, "Interagir", "Prendre"],
+	"zoom": [0.792, 0.522, 28.0, "Grossissement", "×2"],
+	"pause": [0.950, 0.082, 32.0, "Pause", ""],
+	"crouch": [0.964, 0.799, 26.0, "S’accroupir", "Bas"],
+	"sprint": [0.203, 0.593, 30.0, "Sprint", "Sprint"],
+	"gadget": [0.709, 0.764, 30.0, "Gadget", "Kit"],
+	"stats": [0.056, 0.220, 27.0, "Bilan", "Bilan"],
 }
+const SECONDARY := ["crouch", "sprint", "gadget", "stats"]
 
 static func defaults() -> Dictionary:
 	var layout := {}
 	for id in CONTROLS:
 		var spec: Array = CONTROLS[id]
-		layout[id] = {"x": spec[0], "y": spec[1], "size": 1.0, "opacity": 0.82}
+		layout[id] = {"x": spec[0], "y": spec[1], "size": 1.0, "opacity": 0.87}
 	return layout
 
 static func normalize(raw: Variant) -> Dictionary:

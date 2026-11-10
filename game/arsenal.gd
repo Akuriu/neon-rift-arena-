@@ -2,7 +2,6 @@ extends Node
 
 const Arms := preload("res://game/weapons/catalog.gd")
 const Models := preload("res://game/weapon_models.gd")
-const Fabric := preload("res://game/fabric.gd")
 const ViewMotion := preload("res://game/weapons/view_animation.gd")
 const SLOT_KEYS := ["slot_1", "slot_2", "slot_3", "slot_4"]
 const SPREAD := [Vector2.ZERO, Vector2(-0.094, 0), Vector2(0.094, 0),
@@ -25,9 +24,10 @@ var charge := 0.0
 var reload_boost := 1.0
 var damage_boost := 1.0
 var view: Node3D
-var core: MeshInstance3D
-var cell: MeshInstance3D
-var mechanism: MeshInstance3D
+var core: Node3D
+var cell: Node3D
+var mechanism: Node3D
+var flash: Node3D
 var models := {}
 var visual_index := -1
 var animator := ViewMotion.new()
@@ -113,16 +113,9 @@ func _cache_model(index: int) -> void:
 	model.name = "Weapon_" + Arms.WEAPONS[index].id
 	model.scale = Vector3.ONE * 0.92
 	pilot.presentation.add_child(model)
-	var tint: Color = Arms.WEAPONS[index].tint
-	var muzzle := Models.make(model, index, tint, pilot.gear.get("skin", ""))
-	var battery := Fabric.place(model, Fabric.bevel(Vector3(0.115, 0.104, 0.17), 0.026),
-		Fabric.paint(Color("#586975")), Vector3(0.005, -0.095, -0.074), Vector3.ZERO, false)
-	var slider := Fabric.place(model, Fabric.bevel(Vector3(0.087, 0.039, 0.17), 0.012),
-		Fabric.paint(tint.darkened(0.33)), Vector3(0.0, 0.076, -0.18), Vector3.ZERO, false)
-	Fabric.place(muzzle, Fabric.bevel(Vector3(0.077, 0.032, 0.18), 0.014), Fabric.paint(tint, true),
-		Vector3(0, 0, -0.034), Vector3.ZERO, false)
+	var parts := Models.build(model, index, pilot.gear.get("skin", ""), true)
 	model.hide()
-	models[index] = [model, muzzle, battery, slider]
+	models[index] = [model, parts.muzzle, parts.magazine, parts.bolt, parts.flash]
 
 func show_model(index: int) -> void:
 	if is_instance_valid(view):
@@ -134,17 +127,21 @@ func show_model(index: int) -> void:
 	core = parts[1]
 	cell = parts[2]
 	mechanism = parts[3]
-	core.hide()
+	flash = parts[4]
+	flash.hide()
 	view.show()
 	visual_index = index
 
+func sight_height() -> float:
+	return Models.SIGHT_HEIGHTS[visual_index]
+
 func aiming() -> bool:
-	return spec().has("zoom") and pilot.down("ads") and reload_left <= 0.0 and swap_left <= 0.0
+	return pilot.down("ads") and reload_left <= 0.0 and swap_left <= 0.0
 
 func magnification() -> float:
 	if not aiming():
 		return 1.0
-	var zoom: Array = spec().zoom
+	var zoom: Array = spec().get("zoom", [1.19])
 	if spec().mode == "lance":
 		return lerpf(zoom[0], zoom[1], charge)
 	return zoom[aim_step]

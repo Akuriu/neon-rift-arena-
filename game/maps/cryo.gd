@@ -1,11 +1,11 @@
 extends "res://game/arena.gd"
 
-const ICE := Color("#85dce9")
+const ICE := Color("#aebebf")
 const FROST := Color("#cfebed")
 const DARK := Color("#172732")
 const BLUE := Color("#355563")
-const SERVICE := Color("#f4bc76")
-const BEACON := Color("#92f1fb")
+const SERVICE := Color("#bb9c62")
+const BEACON := Color("#b7c0b5")
 
 func _init() -> void:
 	map_id = "cryo"
@@ -42,7 +42,7 @@ func _floor() -> void:
 		for row in 13:
 			_box(Vector3(side * 4.3, 0.011, -24 + row * 4.0), Vector3(0.15, 0.02, 2.9), ICE, true)
 			_box(Vector3(side * 19.4, 0.012, -24 + row * 4.0), Vector3(0.11, 0.02, 2.6), SERVICE, true)
-	_stencil("CRYO  /  FOUNDRY 03", Vector3(0, 0.025, 16.8),
+	_stencil("CHAUFFERIE 03", Vector3(0, 0.025, 16.8),
 		Vector3(-PI * 0.5, 0, 0), 0.023, FROST)
 
 func _shell() -> void:
@@ -71,12 +71,17 @@ func _manifolds() -> void:
 			_solid(at + Vector3.UP * 0.57, Vector3(4.05, 1.14, 5.4), BLUE, 0.27)
 			for lane in [-1.23, 1.23]:
 				var tank := at + Vector3(lane, 2.3, 0)
-				batches.put(Fabric.tube(0.88, 3.35, 13), Fabric.paint(STEEL), tank)
+				batches.put(Fabric.tube(0.88, 3.35, 18), Materials.finish(STEEL, "steel", 0.72, 0.26), tank)
+				for clamp_y in [-1.17, 0.0, 1.35]:
+					batches.put(Fabric.tube(0.897, 0.065, 18), Fabric.paint(Color("#a6aaa5")), tank + Vector3.UP * clamp_y)
+				_box(tank + Vector3(0, -0.34, 0.885), Vector3(0.25, 0.33, 0.10), DARK, false, Vector3.ZERO, 0.029)
+				batches.put(Fabric.tube(0.094, 0.13, 10), Fabric.paint(SERVICE),
+					tank + Vector3(0, -0.34, 0.977), Vector3(PI * 0.5, 0, 0))
 				batches.put(Fabric.tube(0.86, 0.95, 13), Fabric.paint(ICE, true), tank + Vector3.UP * 0.11)
 				batches.put(Fabric.tube(0.92, 0.21, 13), Fabric.paint(FROST), tank + Vector3.UP * 1.71)
 				_block(tank, Vector3(1.58, 3.3, 1.58))
 			_box(at + Vector3(0, 4.31, 0), Vector3(4.2, 0.3, 1.7), BLUE)
-			_stencil("CIRCUIT %d" % (1 + roundi((z + 10.0) / 11.0)), at + Vector3(0, 1.04, 2.73),
+			_stencil("CUVE %d" % (1 + roundi((z + 10.0) / 11.0)), at + Vector3(0, 1.04, 2.73),
 				Vector3.ZERO, 0.012, FROST)
 	for at in [Vector3(-3.1, 0.0, -6.5), Vector3(3.1, 0.0, 7.0),
 			Vector3(-15.2, 0.0, -17.0), Vector3(15.2, 0.0, 17.0)]:

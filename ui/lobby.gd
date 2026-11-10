@@ -25,8 +25,8 @@ var connect_button: Button
 func _ready() -> void:
 	mouse_filter = MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	Palette.panel(self, Rect2(56, 204, 552, 356), Color("#10252d"))
-	Palette.panel(self, Rect2(625, 204, 598, 356), Color("#10252d"))
+	Palette.panel(self, Rect2(56, 204, 552, 356), Palette.PANEL)
+	Palette.panel(self, Rect2(625, 204, 598, 356), Palette.PANEL)
 	Palette.label(self, Rect2(76, 215, 506, 40), "CONNEXION DIRECTE", 23, Palette.CYAN, Palette.HEAD)
 	Palette.label(self, Rect2(646, 215, 549, 40), "ÉQUIPE · JUSQU’À QUATRE PILOTES", 23, Palette.CYAN, Palette.HEAD)
 	address = _line_entry(Rect2(76, 288, 344, 43), "Adresse de l’hôte", "127.0.0.1", 64)

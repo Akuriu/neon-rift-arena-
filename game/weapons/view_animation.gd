@@ -5,8 +5,7 @@ enum Pose { IDLE, WALK, SPRINT, STOW, EQUIP, RELOAD_OPEN, RELOAD_CELL, RELOAD_CL
 
 const SWAP := 0.29
 const HANDOFF := 0.16
-const REST := Vector3(0.266, -0.245, -0.54)
-const AIM := Vector3(0.0, -0.154, -0.56)
+const REST := Vector3(0.225, -0.217, -0.66)
 const TUNES := [
 	# Recul linéaire, rotation, durée d’inspection, inclinaison du mécanisme.
 	Vector4(0.057, 0.066, 1.03, 0.14), Vector4(0.092, 0.119, 1.16, 0.30),
@@ -42,12 +41,12 @@ func tick(gun: Node, delta: float, motion: float, running: bool, wall: float, se
 	stride = lerpf(stride, motion, 1.0 - exp(-10.0 * delta))
 	sprint = lerpf(sprint, 1.0 if running else 0.0, 1.0 - exp(-12.0 * delta))
 	var walk: float = gun.pilot.walk_phase
-	var target := REST + Vector3(sin(walk) * 0.016, (absf(cos(walk)) - 0.58) * 0.016, 0.0) * stride * comfort
+	var base := REST + Vector3(0.0, -0.009, -0.10) if gun.visual_index == 2 else REST
+	var target := base + Vector3(sin(walk) * 0.016, (absf(cos(walk)) - 0.58) * 0.016, 0.0) * stride * comfort
 	target += Vector3(0, sin(gun.pose_clock * 2.2) * 0.003 * comfort, kick * tune.x)
 	target += Vector3(0.041, -0.087, 0.038) * sprint
 	var angle := Vector3(-kick * tune.y, -0.071, -0.22 * sprint)
 	var cell := 0.0
-	var hinge := heat * 0.15 + kick * tune.w
 	state = Pose.SPRINT if running else (Pose.WALK if motion > 0.07 else Pose.IDLE)
 	if gun.rounds() <= 0:
 		state = Pose.EMPTY
@@ -61,10 +60,8 @@ func tick(gun: Node, delta: float, motion: float, running: bool, wall: float, se
 		var turn := sin(PI * clampf(phase, 0.0, 1.0))
 		target += Vector3(-0.096, 0.044, -0.044) * turn
 		angle += Vector3(0.15, (0.58 + tune.w) * turn, -0.40) * turn
-		hinge += turn * 0.24
 	if gun.charge > 0.0:
 		state = Pose.CHARGE
-		hinge += gun.charge * 0.5
 		angle.x -= gun.charge * 0.056
 	if gun.reload_left > 0.0:
 		var phase: float = 1.0 - gun.reload_left / maxf(0.05, gun.cycle_length)
@@ -72,12 +69,13 @@ func tick(gun: Node, delta: float, motion: float, running: bool, wall: float, se
 		cell = smoothstep(0.18, 0.42, phase) * (1.0 - smoothstep(0.57, 0.79, phase))
 		target += Vector3(-0.036, -0.148, 0.036) * opening
 		angle += Vector3(-0.62, 0.23, -0.29) * opening
-		hinge += opening * (0.23 + tune.w)
 		state = Pose.RELOAD_OPEN if phase < 0.21 else (Pose.RELOAD_CELL if phase < 0.72 else Pose.RELOAD_CLOSE)
 	if gun.scope > 0.01:
 		var aim_weight: float = gun.scope
-		target = target.lerp(AIM, aim_weight)
-		angle = angle.lerp(Vector3.ZERO, aim_weight)
+		var sight: float = gun.sight_height()
+		var aim := Vector3(0.0, -sight * gun.view.scale.y - 0.007, base.z)
+		target = target.lerp(aim + Vector3(0, -0.003, kick * tune.x * 0.63), aim_weight)
+		angle = angle.lerp(Vector3(-kick * tune.y * 0.38, 0, 0), aim_weight)
 		if gun.aiming() and state != Pose.CHARGE and state != Pose.FIRE:
 			state = Pose.AIM
 	if gun.swap_left > 0.0:
@@ -97,10 +95,12 @@ func tick(gun: Node, delta: float, motion: float, running: bool, wall: float, se
 	attitude = attitude.lerp(angle, 1.0 - exp(-23.0 * delta))
 	gun.view.position = travel
 	gun.view.rotation = attitude
-	gun.view.visible = gun.scope < 0.90
-	gun.cell.position.y = -0.095 - cell * (0.145 + tune.w * 0.068)
-	gun.cell.rotation.z = -cell * 0.51
-	gun.mechanism.rotation.x = hinge
+	gun.view.visible = not gun.spec().has("zoom") or gun.scope < 0.90
+	var home: Vector3 = gun.cell.get_meta("home")
+	gun.cell.position = home + Vector3(-0.035 * cell, -cell * (0.19 + tune.w * 0.06), 0.035 * cell)
+	gun.cell.rotation.z = -cell * 0.48
+	var travel_distance := 0.10 if gun.visual_index == 1 else 0.036
+	gun.mechanism.position.z = (kick * 0.65 + cell * 0.35) * travel_distance
 	var intensity: float = settings.flashes
-	gun.core.visible = intensity > 0.03 and (gun.shot_kick > 0.53 or gun.charge > 0.28)
-	gun.core.scale = Vector3(0.42, 0.45, 0.67) * (0.62 + maxf(gun.shot_kick, gun.charge) * intensity)
+	gun.flash.visible = intensity > 0.03 and gun.shot_kick > 0.77
+	gun.flash.scale = Vector3.ONE * (0.55 + gun.shot_kick * intensity * 0.56)

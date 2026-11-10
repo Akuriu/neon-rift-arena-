@@ -4,15 +4,15 @@ const Arms := preload("res://game/weapons/catalog.gd")
 const Career := preload("res://services/career.gd")
 const CAP := 1000000000
 const GEAR := {
-	"gd_dash": {"name": "Propulseur", "class": "Gadgets", "price": 0, "info": "Dash court dans la direction du mouvement. Recharge de 7 s."},
-	"gd_aegis": {"name": "Aegis Pulse", "class": "Gadgets", "price": 115, "info": "Restaure 32 points de bouclier aux pilotes proches. Recharge de 13 s."},
-	"mod_cycle": {"name": "Catalyseur", "class": "Modules", "price": 100, "info": "Recharge et refroidissement accélérés de 12 %."},
-	"mod_rack": {"name": "Double cellule", "class": "Modules", "price": 120, "info": "Une charge supplémentaire par chargeur."},
-	"skin_copper": {"name": "Cuivre industriel", "class": "Apparences", "price": 65, "info": "Boîtier cuivré et couleur de pilote orange."},
-	"skin_glacier": {"name": "Verre glacial", "class": "Apparences", "price": 70, "info": "Boîtier bleu nuit et couleur de pilote turquoise."},
-	"skin_ash": {"name": "Cendre & ivoire", "class": "Apparences", "price": 85, "info": "Revêtement ivoire mat et armure graphite. Purement cosmétique."},
-	"skin_aurora": {"name": "Aurore", "class": "Apparences", "price": 0, "wave": 50,
-		"info": "Finition bleu pétrole et ivoire. Récompense cosmétique après la vague 50."},
+	"gd_dash": {"name": "Sprint d’urgence", "class": "Gadgets", "price": 0, "info": "Accélération courte dans la direction du mouvement. Recharge de 7 s."},
+	"gd_aegis": {"name": "Plaques de secours", "class": "Gadgets", "price": 115, "info": "Restaure 32 points de bouclier aux pilotes proches. Recharge de 13 s."},
+	"mod_cycle": {"name": "Kit d’entretien", "class": "Modules", "price": 100, "info": "Recharge et refroidissement accélérés de 12 %."},
+	"mod_rack": {"name": "Chargeur étendu", "class": "Modules", "price": 120, "info": "Une cartouche supplémentaire par chargeur."},
+	"skin_copper": {"name": "Bronze mat", "class": "Apparences", "price": 65, "info": "Finition brun bronze et tenue assortie."},
+	"skin_glacier": {"name": "Ardoise", "class": "Apparences", "price": 70, "info": "Finition ardoise et tenue gris bleuté."},
+	"skin_ash": {"name": "Sable", "class": "Apparences", "price": 85, "info": "Finition sable et tenue beige."},
+	"skin_aurora": {"name": "Olive", "class": "Apparences", "price": 0, "wave": 50,
+		"info": "Finition olive et tenue de campagne. Récompense de la vague 50."},
 	"perk_reserve": {"name": "Sacoche renforcée", "class": "Améliorations", "price": 135, "info": "Démarre chaque partie avec deux chargeurs supplémentaires en réserve."},
 }
 const CONTRACTS := {

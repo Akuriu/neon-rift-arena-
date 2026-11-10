@@ -46,8 +46,8 @@ func _floor() -> void:
 	surface.size = half_size * 2.0
 	Fabric.place(structure, surface, deck_surface, Vector3.ZERO, Vector3.ZERO, false)
 	_block(Vector3(0, -0.35, 0), Vector3(50, 0.7, 48), Vector3.ZERO, false)
-	var plaque: String = {"bastion": "BASTION  /  RELAIS 02", "district": "MERIDIAN  /  DISTRICT 04",
-		"grove": "ASHGROVE  /  SENTIER NORD", "station": "TRANSIT  /  ACCÈS 05"}[map_id]
+	var plaque: String = {"bastion": "POSTE RADIO 02", "district": "RUE DU MARCHÉ",
+		"grove": "SENTIER NORD", "station": "ACCÈS AUX QUAIS"}[map_id]
 	_stencil(plaque, Vector3(0, 0.028, 16.3), Vector3(-PI * 0.5, 0, 0), 0.021, WHITE)
 
 func _boundary(height: float, shade: Color) -> void:
@@ -102,7 +102,10 @@ func _district() -> void:
 	control_points[2] = Vector3(7.2, 0.06, -11.1)
 
 func _building(at: Vector3, width: float, height: float, depth: float, color: Color) -> void:
-	_solid(at + Vector3.UP * height * 0.5, Vector3(width, height, depth), color, 0.19)
+	var volume := Vector3(width, height, depth)
+	_block(at + Vector3.UP * height * 0.5, volume)
+	var material := Materials.finish(color, "brick" if height > 6.0 else "concrete", 0.57)
+	batches.put(Fabric.bevel(volume, 0.055), material, at + Vector3.UP * height * 0.5)
 	_box(at + Vector3.UP * (height + 0.14), Vector3(width + 0.45, 0.32, depth + 0.45), CONCRETE)
 	for face in [-1.0, 1.0]:
 		_box(at + Vector3(0, 1.06, face * (depth * 0.5 + 0.021)), Vector3(width * 0.67, 1.7, 0.047), TARMAC)
@@ -113,13 +116,24 @@ func _building(at: Vector3, width: float, height: float, depth: float, color: Co
 				_box(window + Vector3(0, 0, face * 0.047), Vector3(1.01, 0.66, 0.033), WINDOW)
 				_box(window - Vector3.UP * 0.43, Vector3(1.38, 0.13, 0.18), CONCRETE)
 
+	for side in [-1.0, 1.0]:
+		var face: float = side * (width * 0.5 + 0.044)
+		for level in range(2, int(height), 2):
+			for column in [-0.28, 0.0, 0.28]:
+				var at_window := at + Vector3(face, level + 0.38, depth * column)
+				_box(at_window, Vector3(0.072, 0.98, 1.08), CONCRETE)
+				_box(at_window + Vector3(side * 0.045, 0, 0), Vector3(0.039, 0.79, 0.91), WINDOW.darkened(0.31))
+				_box(at_window + Vector3(side * 0.073, 0, 0), Vector3(0.026, 0.80, 0.043), STEEL)
+		var storefront := at + Vector3(face, 1.09, 0.0)
+		_box(storefront, Vector3(0.10, 1.99, 2.4), TARMAC)
+		for slat in 12:
+			_box(storefront + Vector3(side * 0.057, -0.89 + slat * 0.16, 0), Vector3(0.025, 0.046, 2.34), STEEL)
+		var sign_at := storefront + Vector3(side * 0.093, 1.21, 0)
+		_box(sign_at, Vector3(0.13, 0.36, 2.48), Color("#66664d"))
+		_stencil("MARCHÉ" if height > 6.0 else "ATELIER", sign_at + Vector3(side * 0.071, 0, 0),
+			Vector3(0, side * PI * 0.5, 0), 0.007, WHITE)
+
 func _grove() -> void:
-	var grass := Fabric.paint(LEAF)
-	for i in 18:
-		var x := cos(float(i) * 2.4) * (10.0 + i % 6 * 2.1)
-		var z := sin(float(i) * 2.4) * (10.4 + i % 5 * 2.32)
-		var radius := 2.35 + i % 4 * 0.49
-		batches.put(Fabric.tube(radius, 0.021, 9), grass, Vector3(x, 0.012, z))
 	for side in [-1.0, 1.0]:
 		for z in [-13.4, 6.8]:
 			var at := Vector3(side * 10.2, 0, z)
@@ -127,24 +141,34 @@ func _grove() -> void:
 				_solid(at + Vector3(x, 1.58, 0), Vector3(1.78, 3.16, 1.20), CONCRETE, 0.28)
 				_box(at + Vector3(x, 3.12, 0), Vector3(2.12, 0.33, 1.4), LEAF, false, Vector3.ZERO, 0.12)
 			_solid(at + Vector3(0, 3.08, 0), Vector3(4.18, 0.68, 1.05), CONCRETE, 0.23, false)
+			for column in [-2.46, 2.46]:
+				for course in 6:
+					var depth := 0.62 + 0.04 * sin(float(course) * 2.1)
+					var face := at + Vector3(column + sin(float(course) * 2.7) * 0.12, 0.37 + course * 0.49, depth)
+					_box(face, Vector3(1.45, 0.42, 0.16), CONCRETE.darkened(0.07 + 0.07 * (course % 3)),
+						false, Vector3(0, 0, 0.04 * sin(float(course))), 0.077)
+			for j in 7:
+				var stone := at + Vector3(-2.64 + j * 0.81, 0.09, 0.90 + 0.67 * cos(float(j) * 2.42))
+				_box(stone, Vector3(0.32, 0.17, 0.38), CONCRETE.darkened(0.12), false,
+					Vector3(0, float(j) * 0.41, 0.16), 0.089)
 		for z in [-17.8, -6.7, 5.3, 14.1]:
 			_tree(Vector3(side * (15.4 + fposmod(z, 3.1)), 0, z), 5.8 + fposmod(z, 1.5))
 		_solid(Vector3(side * 5.9, 0.57, side * -8.8), Vector3(3.3, 1.14, 1.6), SAND, 0.46)
 		_solid(Vector3(side * 11.0, 0.64, side * 14.7), Vector3(3.3, 1.28, 1.8), LEAF, 0.40)
 
 func _tree(at: Vector3, height: float) -> void:
-	batches.put(Fabric.tube(0.34, height, 8), Fabric.paint(WOOD), at + Vector3.UP * height * 0.5)
-	_block(at + Vector3.UP * height * 0.5, Vector3(0.66, height, 0.66))
-	for i in 3:
-		var size := 1.40 + i * 0.31
-		batches.put(Fabric.orb(size, size * 1.30, 8), Fabric.paint(LEAF.lightened(i * 0.075)),
-			at + Vector3(i * 0.67 - 0.65, height - i * 0.8, (i % 2) * 0.63))
+	var branch := RandomNumberGenerator.new()
+	branch.seed = hash(at)
+	Scenery.tree(batches, at, height, branch)
+	_block(at + Vector3.UP * height * 0.5, Vector3(0.63, height, 0.63))
 
 func _station() -> void:
 	_solid(Vector3(0, 6.74, 0), Vector3(50, 0.30, 48), TILE, 0.12, false)
 	for z in range(-19, 20, 6):
 		_box(Vector3(0, 6.20, z), Vector3(48, 0.57, 0.39), SLATE)
-		_box(Vector3(0, 5.90, z), Vector3(39, 0.049, 0.24), WHITE, true)
+		for x in [-16.0, -8.0, 0.0, 8.0, 16.0]:
+			_box(Vector3(x, 5.86, z), Vector3(2.2, 0.09, 0.30), INK)
+			_box(Vector3(x, 5.80, z), Vector3(1.96, 0.034, 0.18), WHITE)
 	for side in [-1.0, 1.0]:
 		_ramp_deck(Vector3(side * 19, 0, 0), 4.5, 1.9, 16, TILE)
 		_box(Vector3(side * 22.8, 2.82, 0), Vector3(0.18, 1.1, 17.5), STEEL)
@@ -155,7 +179,12 @@ func _station() -> void:
 			_supply(at + Vector3(side * 1.55, 0, 0), Vector3(1.7, 1.08, 2.3), WINDOW)
 		_box(Vector3(side * 5, 0.025, 0), Vector3(0.14, 0.04, 47.0), GOLD)
 		_box(Vector3(side * 4.3, 0.023, 0), Vector3(0.11, 0.035, 47.0), STEEL)
-		_stencil("QUAI %s" % ("01" if side < 0 else "02"), Vector3(side * 13, 3.2, -22.9), Vector3.ZERO, 0.023, WHITE)
+		for lane in [-0.70, 0.70]:
+			_box(Vector3(side * 2.4 + lane, 0.035, 0), Vector3(0.052, 0.025, 46.6), Color("#6f746e"))
+		for z in range(-22, 23, 2):
+			_box(Vector3(side * 2.4, 0.019, z), Vector3(1.62, 0.024, 0.19), WOOD.darkened(0.31))
+		_box(Vector3(side * 13, 3.27, -23.10), Vector3(5.7, 0.93, 0.17), Color("#384249"))
+		_stencil("QUAI %s" % ("01" if side < 0 else "02"), Vector3(side * 13, 3.29, -22.99), Vector3.ZERO, 0.013, WHITE)
 		_supply(Vector3(side * 3.8, 0, side * 9), Vector3(1.9, 1.18, 2.7), WINDOW)
 
 func _ramp_deck(at: Vector3, width: float, rise: float, length: float, shade: Color) -> void:

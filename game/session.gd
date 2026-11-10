@@ -362,10 +362,12 @@ func fire_rays(origin: Vector3, directions: Array[Vector3], data: Dictionary, mu
 			total += damage
 			effects.impact(end, result.normal, data.tint, map_id, damage > 0.0)
 		var from := emission if origin.distance_squared_to(end) > origin.distance_squared_to(emission) else origin
-		var beam_width := 0.095 if data.mode == "lance" else (0.042 if directions.size() == 1 else 0.029)
-		effects.beam(from, end, data.tint, beam_width, 0.19 if data.mode in ["rail", "lance"] else 0.105)
+		var streak := from.move_toward(end, 7.4 if data.mode in ["rail", "lance"] else 3.5)
+		var beam_width := 0.014 if directions.size() == 1 else 0.008
+		var tracer := Color("#dfc598")
+		effects.beam(from, streak, tracer, beam_width, 0.045)
 		if is_instance_valid(net):
-			net.visual("beam", from, end, data.tint, beam_width, 0.13)
+			net.visual("beam", from, streak, tracer, beam_width, 0.045)
 	if Prefs.values.flashes > 0.05:
 		effects.sparks(emission, data.tint, roundi(7.0 * Prefs.values.flashes), 2.2)
 	_confirm_hit(total, weak, actor)

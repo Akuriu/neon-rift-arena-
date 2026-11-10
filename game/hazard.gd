@@ -16,9 +16,9 @@ var visual_only := false
 func _ready() -> void:
 	source_required = is_instance_valid(source)
 	var ring_segments := 24 if Prefs.values.quality == 3 else 40
-	Fabric.place(self, Fabric.ring(radius, 0.055, ring_segments), Fabric.paint(tint, true),
+	Fabric.place(self, Fabric.ring(radius, 0.055, ring_segments), Fabric.paint(tint.lerp(Color("#c78b53"), 0.65)),
 		Vector3.ZERO, Vector3.ZERO, false)
-	inner = Fabric.place(self, Fabric.ring(radius, 0.039, ring_segments), Fabric.paint(tint.lightened(0.2), true),
+	inner = Fabric.place(self, Fabric.ring(radius, 0.039, ring_segments), Fabric.paint(Color("#c5a277")),
 		Vector3.ZERO, Vector3.ZERO, false)
 
 func _physics_process(delta: float) -> void:

@@ -23,7 +23,7 @@ var balance: Label
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	Palette.panel(self, Rect2(56, 189, 1168, 431), Color("#101e27"))
+	Palette.panel(self, Rect2(56, 189, 1168, 431), Palette.PANEL)
 	var x := 70
 	for group in GROUPS:
 		var button := Palette.button(self, Rect2(x, 203, 154, 43), group, _category.bind(group), group == category)
@@ -32,7 +32,7 @@ func _ready() -> void:
 	balance = Palette.label(self, Rect2(910, 203, 296, 43), "", 18, Palette.AMBER, Palette.BOLD, HORIZONTAL_ALIGNMENT_RIGHT)
 	var classes := OptionButton.new()
 	classes.add_item("Toutes")
-	for kind in ["Automatique", "Dispersion", "Rafale", "Zone", "Précision", "Soutien"]:
+	for kind in ["Automatique", "Fusil à pompe", "Pistolet", "Lance-grenades", "Précision", "Mitraillette"]:
 		classes.add_item(kind)
 		if kind == filtering:
 			classes.select(classes.item_count - 1)
@@ -62,7 +62,8 @@ func _ready() -> void:
 	detail = Control.new()
 	Palette.at(self, detail, Rect2(459, 256, 746, 347))
 	Palette.button(self, Rect2(56, 630, 136, 40), "Retour", app.menu).grab_focus()
-	Palette.button(self, Rect2(205, 630, 190, 40), "Contrats locaux", app.show_profile.bind("contracts"))
+	Palette.button(self, Rect2(205, 630, 190, 40), "Boutique" if page == "arsenal" else "Arsenal",
+		app.open_hub.bind("shop" if page == "arsenal" else "arsenal"))
 	Palette.button(self, Rect2(407, 630, 175, 40), "Profil du pilote", app.show_profile.bind("profile"))
 	var presets := OptionButton.new()
 	presets.add_item("Configuration rapide")
@@ -137,7 +138,7 @@ func _rebuild() -> void:
 func _show_detail() -> void:
 	preview = null
 	_empty(detail)
-	Palette.panel(detail, Rect2(0, 0, 746, 347), Color("#142b34"))
+	Palette.panel(detail, Rect2(0, 0, 746, 347), Color("#303329"))
 	if selected.is_empty():
 		Palette.label(detail, Rect2(24, 23, 685, 38), "Aucun article dans cette classe", 24, Palette.TEXT, Palette.HEAD)
 		return
@@ -155,16 +156,16 @@ func _show_detail() -> void:
 	description.add_theme_color_override("default_color", Palette.MUTED)
 	Palette.at(detail, description, Rect2(24, 71, text_width, 59))
 	if index >= 0:
-		_preview(index, item.tint)
+		_preview(index)
 		Palette.label(detail, Rect2(24, 133, 455, 26),
-			"%d IMPACT  /  %d CHARGES  /  %d m" % [roundi(item.damage), item.mag, roundi(item.range)], 14, item.tint, Palette.MONO)
+			"%d dégâts  ·  %d cartouches  ·  %d m" % [roundi(item.damage), item.mag, roundi(item.range)], 14, item.tint, Palette.MONO)
 		var points: int = Prefs.profile.data.mastery.get(selected, 0)
 		var mastery := mini(30, 1 + floori(sqrt(float(points) / 45.0)))
-		Palette.label(detail, Rect2(24, 161, 450, 25), "MAÎTRISE %02d   /   %d IMPULSIONS" % [mastery, points], 13, Palette.MUTED, Palette.MONO)
+		Palette.label(detail, Rect2(24, 161, 450, 25), "Maîtrise %d  ·  %d tirs" % [mastery, points], 13, Palette.MUTED, Palette.MONO)
 		var active_id: String = Prefs.profile.data.slots[slot]
 		var active := Profile.item(active_id)
 		Palette.label(detail, Rect2(24, 185, 445, 36),
-			"S%d  %s   %+d impact  /  %+d charges  /  %+.2fs" % [slot + 1, active.name,
+			"S%d  %s   %+d dégâts  ·  %+d cartouches  ·  %+.2fs" % [slot + 1, active.name,
 			roundi(item.damage - active.damage), int(item.mag) - int(active.mag), item.cadence - active.cadence],
 			12, Palette.TEXT, Palette.MONO)
 		var slots := OptionButton.new()
@@ -214,7 +215,7 @@ func _equip(id: String) -> void:
 	notice = receipt.message
 	_rebuild()
 
-func _preview(index: int, color: Color) -> void:
+func _preview(index: int) -> void:
 	var surface := SubViewportContainer.new()
 	surface.stretch = true
 	surface.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -226,23 +227,24 @@ func _preview(index: int, color: Color) -> void:
 	surface.add_child(viewport)
 	preview = Node3D.new()
 	viewport.add_child(preview)
-	Models.make(preview, index, color, Prefs.profile.data.skin)
-	preview.rotation.y = 0.66
+	Models.build(preview, index, Prefs.profile.data.skin)
+	preview.rotation.y = 1.14
 	var camera := Camera3D.new()
 	camera.fov = 39
-	camera.position = Vector3(0.89, 0.49, 1.42)
+	var distance := [1.0, 1.12, 0.49, 0.87, 1.15, 1.21, 0.86, 1.05][index] as float
+	camera.position = Vector3(0.74, 0.28, 1.03) * distance
 	viewport.add_child(camera)
-	camera.look_at(Vector3(0, 0.03, -0.08))
+	camera.look_at(Vector3(0, -0.022, -0.075 if index != 2 else -0.032))
 	var light := DirectionalLight3D.new()
 	light.rotation_degrees = Vector3(-44, 27, 0)
 	light.light_energy = 1.5
 	viewport.add_child(light)
 	var fill := DirectionalLight3D.new()
 	fill.rotation_degrees = Vector3(-20, 150, 0)
-	fill.light_color = Color("#9accee")
+	fill.light_color = Color("#cac4ab")
 	fill.light_energy = 0.8
 	viewport.add_child(fill)
 
 func _process(delta: float) -> void:
 	if is_instance_valid(preview):
-		preview.rotate_y(delta * 0.48)
+		preview.rotate_y(delta * 0.27)

@@ -1,0 +1,205 @@
+name: Rifle Arena Alpha release
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/release-alpha.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: rifle-arena-alpha-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  GODOT_VERSION: 4.6.3-stable
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot and export templates
+        run: |
+          set -euo pipefail
+          base="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}"
+          godot_name="Godot_v${GODOT_VERSION}_linux.x86_64"
+          curl -fLsS --retry 3 "$base/$godot_name.zip" -o "$RUNNER_TEMP/godot.zip"
+          curl -fLsS --retry 3 "$base/Godot_v${GODOT_VERSION}_export_templates.tpz" -o "$RUNNER_TEMP/templates.tpz"
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP"
+          install "$RUNNER_TEMP/$godot_name" "$RUNNER_TEMP/godot"
+          template_dir="$HOME/.local/share/godot/export_templates/${GODOT_VERSION/-/.}"
+          unzip -q "$RUNNER_TEMP/templates.tpz" -d "$RUNNER_TEMP/godot-templates"
+          mkdir -p "$(dirname "$template_dir")"
+          mv "$RUNNER_TEMP/godot-templates/templates" "$template_dir"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Install Android SDK components
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          export ANDROID_HOME="$RUNNER_TEMP/android-sdk"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          curl -fLsS --retry 3 https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip -o "$RUNNER_TEMP/android-tools.zip"
+          unzip -q "$RUNNER_TEMP/android-tools.zip" -d "$RUNNER_TEMP/android-tools"
+          mv "$RUNNER_TEMP/android-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses > "$RUNNER_TEMP/android-licenses.log" || {
+            test "${PIPESTATUS[1]}" -eq 0 || { cat "$RUNNER_TEMP/android-licenses.log"; exit 1; }
+          }
+          "$sdkmanager" 'platforms;android-36' 'build-tools;36.0.0' 'platform-tools'
+          printf 'ANDROID_HOME=%s\nANDROID_SDK_ROOT=%s\n' "$ANDROID_HOME" "$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/.config/godot"
+          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/java_sdk_path = "%s"\nexport/android/android_sdk_path = "%s"\n' \
+            "$JAVA_HOME_21_X64" "$ANDROID_HOME" > "$HOME/.config/godot/editor_settings-4.6.tres"
+          keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/rifle-alpha.keystore" \
+            -storepass android -keypass android -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=Android Debug,O=Android,C=US'
+      - name: Import and test
+        run: |
+          set -euo pipefail
+          godot --headless --editor --import > "$RUNNER_TEMP/import.log" 2>&1 || { cat "$RUNNER_TEMP/import.log"; exit 1; }
+          if grep -E 'ERROR:|Parse Error' "$RUNNER_TEMP/import.log"; then exit 1; fi
+          python3 tools/run_tests.py --suite all
+      - name: Export and verify binaries
+        env:
+          GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ runner.temp }}/rifle-alpha.keystore
+          GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+          GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/windows" "$RUNNER_TEMP/dist"
+          windows="$RUNNER_TEMP/windows"
+          dist="$RUNNER_TEMP/dist"
+          exe="$windows/RifleArena.exe"
+          apk="$dist/RifleArena_Android_alpha.apk"
+          godot --headless --export-release 'Windows x64' "$exe"
+          godot --headless --export-debug Android "$apk"
+          file "$exe" | grep -E 'PE32\+.*x86-64'
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 "$apk"
+          unzip -tq "$apk"
+          unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"
+          grep -Fx 'lib/arm64-v8a/libgodot_android.so' "$RUNNER_TEMP/apk-files.txt"
+          grep -Fx 'assets/project.binary' "$RUNNER_TEMP/apk-files.txt"
+          {
+            printf 'Rifle Arena v0.0.4 Alpha - Windows x64\n\nExtraire le ZIP et ouvrir RifleArena.exe.\nGodot est inclus dans le jeu.\n\n'
+            cat README.md
+          } > "$windows/LISEZ_MOI.txt"
+          source="https://raw.githubusercontent.com/godotengine/godot/$GODOT_VERSION"
+          curl -fLsS --retry 3 "$source/LICENSE.txt" -o "$windows/LICENCE_GODOT.txt"
+          curl -fLsS --retry 3 "$source/COPYRIGHT.txt" -o "$windows/NOTICES_GODOT.txt"
+          cp CREDITS.md assets/fonts/LICENSE-*.txt "$windows/"
+          (cd "$windows" && zip -q "$dist/RifleArena_Windows_x64.zip" ./*)
+          unzip -tq "$dist/RifleArena_Windows_x64.zip"
+      - name: Install and launch the APK on Android
+        timeout-minutes: 9
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          sdk_tools="$ANDROID_HOME/cmdline-tools/latest/bin"
+          image='system-images;android-35;default;x86_64'
+          "$sdk_tools/sdkmanager" emulator "$image"
+          printf 'no\n' | "$sdk_tools/avdmanager" create avd --force --name rifle-ci --package "$image"
+          sudo chown "$USER" /dev/kvm
+          emulator="$ANDROID_HOME/emulator/emulator"
+          adb="$ANDROID_HOME/platform-tools/adb"
+          export ANDROID_SERIAL=emulator-5554
+          "$emulator" -avd rifle-ci -port 5554 -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect \
+            -memory 2048 -cores 2 > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          emulator_pid=$!
+          trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
+          booted=false
+          for attempt in {1..100}; do
+            if ! kill -0 "$emulator_pid" 2>/dev/null; then cat "$RUNNER_TEMP/emulator.log"; exit 1; fi
+            if [[ $("$adb" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r') == 1 ]]; then
+              booted=true
+              break
+            fi
+            sleep 2
+          done
+          if [[ $booted != true ]]; then cat "$RUNNER_TEMP/emulator.log"; exit 1; fi
+          apk="$RUNNER_TEMP/dist/RifleArena_Android_alpha.apk"
+          package=com.riflearena.game
+          "$adb" install "$apk"
+          "$adb" shell wm dismiss-keyguard
+          activity=$("$adb" shell cmd package resolve-activity --brief "$package" | tail -n1 | tr -d '\r')
+          [[ "$activity" == "$package/"* ]]
+          "$adb" logcat -c
+          "$adb" shell am start -W -n "$activity" | tee "$RUNNER_TEMP/android-start.log"
+          grep -F 'Status: ok' "$RUNNER_TEMP/android-start.log"
+          sleep 9
+          "$adb" shell pidof "$package"
+          "$adb" shell dumpsys activity activities > "$RUNNER_TEMP/android-activity.log"
+          "$adb" logcat -d -s AndroidRuntime godot > "$RUNNER_TEMP/android-runtime.log"
+          cat "$RUNNER_TEMP/android-runtime.log"
+          grep -E "(topResumedActivity|mResumedActivity).*com[.]riflearena[.]game" "$RUNNER_TEMP/android-activity.log"
+          if grep -E 'FATAL EXCEPTION|SCRIPT ERROR:' "$RUNNER_TEMP/android-runtime.log"; then exit 1; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rifle-alpha-installers
+          path: ${{ runner.temp }}/dist/*
+          if-no-files-found: error
+
+  windows-smoke:
+    needs: build
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: rifle-alpha-installers
+      - name: Launch the distributed EXE on Windows
+        shell: pwsh
+        run: |
+          Expand-Archive RifleArena_Windows_x64.zip -DestinationPath game
+          $exe = (Resolve-Path game/RifleArena.exe).Path
+          $log = Join-Path $env:RUNNER_TEMP rifle-smoke.log
+          $process = Start-Process -FilePath $exe -WorkingDirectory $env:RUNNER_TEMP -ArgumentList @('--headless', '--quit-after', '60', '--log-file', $log) -PassThru
+          if (-not $process.WaitForExit(60000)) { $process.Kill(); throw 'Windows launch timed out' }
+          if (-not (Test-Path $log)) { throw 'Godot did not create its startup log' }
+          Get-Content $log
+          if ($process.ExitCode -ne 0 -or (Select-String -Path $log -Pattern 'ERROR:|Parse Error' -Quiet)) {
+            throw 'Windows launch failed'
+          }
+
+  publish:
+    needs: windows-smoke
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: rifle-alpha-installers
+      - name: Publish both installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=v0.0.4-alpha
+          windows=RifleArena_Windows_x64.zip
+          android=RifleArena_Android_alpha.apk
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets,isDraft,isPrerelease |
+              jq -e --arg win "$windows" --arg apk "$android" \
+                '.isDraft == false and ([.assets[].name] | index($win) != null and index($apk) != null) and .isPrerelease'
+            exit
+          fi
+          cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
+          ## Installer Rifle Arena v0.0.4 Alpha
+
+          - **Windows 64 bits** — téléchargez le ZIP, extrayez-le, puis ouvrez `RifleArena.exe`.
+          - **Android** — téléchargez l’APK debug et ouvrez-le depuis le téléphone. Android peut demander d’autoriser l’installation depuis l’application utilisée pour ouvrir le fichier.
+
+          Les huit armes, les personnages et les sept arènes adoptent une direction réaliste stylisée. Les menus et le HUD sont simplifiés. Sur mobile, l’aide à la visée ralentit le geste près d’une cible visible et se désactive dans Paramètres → Tactile.
+
+          Le moteur Godot est inclus. L’APK alpha utilise un nouveau nom de paquet et une clé de débogage. Il s’installe à côté de Neon Rift et démarre avec un profil local séparé. La suite de tests, le démarrage Windows et le lancement sur émulateur Android ont été vérifiés avant publication.
+          EOF
+          gh release create "$tag" "$windows" "$android" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --prerelease --title 'Rifle Arena v0.0.4 Alpha' --notes-file "$RUNNER_TEMP/release-notes.md"

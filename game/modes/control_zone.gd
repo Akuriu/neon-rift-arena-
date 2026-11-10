@@ -3,7 +3,7 @@ extends Node3D
 const Fabric := preload("res://game/fabric.gd")
 const RADIUS := 3.3
 const HOLD := 2.9
-const COLORS := [Color("#84b8db"), Color("#dc9b69")]
+const COLORS := [Color("#9bb4be"), Color("#c5916a")]
 var badge := "A"
 var owner_side := -1
 var control := 0.0
@@ -12,7 +12,7 @@ var edge: MeshInstance3D
 var flag: Label3D
 
 func _ready() -> void:
-	edge = Fabric.place(self, Fabric.ring(RADIUS, 0.064, 36), Fabric.paint(Color("#bbbaa8"), true),
+	edge = Fabric.place(self, Fabric.ring(RADIUS, 0.036, 36), Fabric.paint(Color("#bbbaa8")),
 		Vector3.UP * 0.025, Vector3.ZERO, false)
 	flag = Label3D.new()
 	flag.position.y = 1.1
@@ -48,4 +48,4 @@ func _refresh() -> void:
 	var shade: Color = Color("#f1d085") if contested else (Color("#c7c8b7") if owner_side < 0 else COLORS[owner_side])
 	flag.modulate = shade
 	flag.text = "%s · CONTESTÉ" % badge if contested else badge
-	edge.material_override = Fabric.paint(shade, true)
+	edge.material_override = Fabric.paint(shade)

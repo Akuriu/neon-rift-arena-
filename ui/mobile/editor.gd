@@ -17,7 +17,7 @@ func _ready() -> void:
 	Palette.at(self, diagram, Rect2(57, 207, 719, 404))
 	diagram.selected.connect(_select)
 	diagram.moved.connect(_move)
-	Palette.panel(self, Rect2(804, 207, 419, 404), Color("#142730"))
+	Palette.panel(self, Rect2(804, 207, 419, 404), Palette.PANEL)
 	selection = OptionButton.new()
 	for id in Layout.CONTROLS:
 		selection.add_item(Layout.CONTROLS[id][3])

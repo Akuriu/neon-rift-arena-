@@ -6,7 +6,7 @@ func _initialize() -> void:
 	call_deferred("run")
 
 func run() -> void:
-	check(ProjectSettings.get_setting("application/config/version") == "3.0.0", "Version exportée 3.0.0")
+	check(ProjectSettings.get_setting("application/config/version") == "0.0.4-alpha", "Version exportée 0.0.4-alpha")
 	var app = load("res://scenes/App.tscn").instantiate()
 	root.add_child(app)
 	check(app.screen == "menu" and app.coop != null, "Scène d’entrée et gestionnaire coop dans le paquet")
@@ -20,7 +20,7 @@ func run() -> void:
 		await physics_frame
 	var stage = app.session
 	check(stage.map_id == "cryo" and stage.units.size() == 4, "Cryo Foundry et cibles chargées")
-	check(stage.player.arsenal.spec().id == "wp_eclipse", "Eclipse Rail équipé")
+	check(stage.player.arsenal.spec().id == "wp_eclipse", "DMR-762 équipé")
 	Input.action_press("ads")
 	Input.action_press("fire")
 	for frame in 60:

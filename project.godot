@@ -1,17 +1,17 @@
 config_version=5
 
 [application]
-config/name="NEON RIFT — ARENA"
+config/name="Rifle Arena"
 config/description="FPS d’arène solo et coopératif. Escarmouches, contrôle de zones et survie."
 config/icon="res://assets/art/rift.svg"
-config/version="3.0.0"
+config/version="0.0.4-alpha"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 run/main_scene="res://scenes/App.tscn"
 config/use_custom_user_dir=true
 config/custom_user_dir_name="NeonRiftArena"
 config/quit_on_go_back=false
 boot_splash/show_image=false
-boot_splash/bg_color=Color(0.025, 0.04, 0.05, 1)
+boot_splash/bg_color=Color(0.067, 0.072, 0.065, 1)
 
 [autoload]
 Prefs="*res://services/prefs.gd"
@@ -24,7 +24,7 @@ window/size/viewport_height=720
 window/size/window_width_override=1280
 window/size/window_height_override=720
 window/stretch/mode="canvas_items"
-window/stretch/aspect="keep"
+window/stretch/aspect="expand"
 window/handheld/orientation=0
 
 [physics]
@@ -34,5 +34,5 @@ common/physics_interpolation=true
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
-environment/defaults/default_clear_color=Color(0.025, 0.04, 0.05, 1)
+environment/defaults/default_clear_color=Color(0.067, 0.072, 0.065, 1)
 lights_and_shadows/directional_shadow/size=1536

@@ -4,7 +4,7 @@ signal eliminated(drone: CharacterBody3D, points: int)
 
 const Catalog := preload("res://game/catalog.gd")
 const Models := preload("res://game/robot_models.gd")
-const Rig := preload("res://game/enemies/robot_motion.gd")
+const Operator := preload("res://art/operator.gd")
 
 enum State { ARRIVAL, CHASE, TELL, RECOVER, DEAD }
 var state := State.ARRIVAL
@@ -25,7 +25,6 @@ var patrol_origin := Vector3.ZERO
 var hull: Node3D
 var lens: MeshInstance3D
 var paint: StandardMaterial3D
-var lens_energy := -1.0
 var lens_color := Color.TRANSPARENT
 var gaze := Vector3.FORWARD
 var strafe := 1.0
@@ -50,7 +49,8 @@ var replica_yaw := 0.0
 var arena_slot := -1
 var arena_side := 1
 var last_attacker: CharacterBody3D
-var motion := Rig.new()
+var operator: Operator
+var last_visual_at := Vector3.ZERO
 var visual_wait := 0.0
 
 func major() -> bool:
@@ -79,12 +79,23 @@ func _ready() -> void:
 	add_child(collider)
 	hull = Node3D.new()
 	add_child(hull)
-	lens = Models.build(hull, kind, spec.tint)
-	motion.build(hull, kind)
+	if kind == "skimmer":
+		lens = Models.drone(hull)
+	elif training:
+		lens = Models.target(hull)
+	else:
+		operator = Operator.new()
+		var rig := Node3D.new()
+		rig.scale = Vector3(1.40, 1.51, 1.35) if major() else (Vector3(1.24, 1.02, 1.18) if kind in ["bulwark", "elite", "artillery"] else Vector3(1, 0.96, 1))
+		hull.add_child(rig)
+		var cloth: Color = Color("#747567") if arena_side == 0 else spec.tint
+		operator.build(rig, cloth, Color("#a6bac2") if arena_side == 0 else Color("#ac775e"),
+			major() or kind in ["bulwark", "elite", "artillery"], kind)
+		operator.set_weapon(int({"scout": 2, "sentinel": 0, "bulwark": 1, "specter": 6, "elite": 0,
+			"warden": 7, "medic": 2, "disruptor": 6, "artillery": 3, "colossus": 1, "architect": 4}[kind]))
+		lens = operator.mark
+	last_visual_at = position
 	paint = lens.material_override.duplicate()
-	paint.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-	paint.emission_enabled = true
-	paint.emission = spec.tint
 	lens.material_override = paint
 	if arena_slot >= 0 and session.mode != "classic":
 		var badge := Label3D.new()
@@ -158,27 +169,24 @@ func _animate(delta: float) -> void:
 	var step := visual_wait
 	visual_wait = 0.0
 	var time := age + serial * 0.57
-	hull.position.y = sin(time * 4.3) * (0.12 if kind == "skimmer" else 0.065)
-	hull.rotation.z = lerpf(hull.rotation.z, -velocity.dot(global_basis.x) * 0.034, 0.19)
-	var prep := 1.0 - clampf(timer / maxf(0.01, spec.tell * tuning.tempo), 0.0, 1.0) if state == State.TELL else 0.0
-	hull.rotation.x = lerpf(hull.rotation.x, -prep * 0.13 + hit_flash * 0.065, 1.0 - exp(-14.0 * step))
-	motion.step(step, Vector2(velocity.x, velocity.z).length(), state == State.TELL, hit_flash, major())
-	hull.scale = Vector3.ONE * (0.55 + 0.45 * clampf(1.0 - timer / 0.48, 0.0, 1.0)) \
-		if state == State.ARRIVAL else Vector3.ONE
-	var warning := 0.0
-	if state == State.TELL:
-		warning = (0.65 + 0.33 * sin(time * 20.0)) * Prefs.values.flashes + 0.45
-	var base: Color = Art.effect_color(spec.tint)
-	if major() and phase > 1:
-		base = base.lerp(Color("#ff7297") if phase == 2 else Color("#fff0b2"), 0.52)
-	var energy: float = 0.19 + warning + hit_flash * Prefs.values.flashes
-	var color := base.lerp(Color.WHITE, hit_flash * 0.55)
-	if absf(lens_energy - energy) > 0.015:
-		lens_energy = energy
-		paint.emission_energy_multiplier = energy
+	var travel := Vector2(velocity.x, velocity.z).length()
+	if replica:
+		travel = minf(Vector2(position.x - last_visual_at.x, position.z - last_visual_at.z).length() / maxf(step, 0.001), spec.speed)
+	last_visual_at = position
+	var telling := state == State.TELL
+	var prep := 1.0 - clampf(timer / maxf(0.01, spec.tell * tuning.tempo), 0.0, 1.0) if telling else 0.0
+	var weight := 1.0 - exp(-14.0 * step)
+	if operator != null:
+		hull.position.y = absf(sin(time * 9.0)) * minf(travel * 0.006, 0.029)
+		operator.animate(step, travel, -prep * 0.16, prep * 0.13, travel > 5.0, telling, 0.0)
+	elif kind == "skimmer":
+		hull.position.y = sin(time * 4.3) * 0.055
+		hull.rotation.z = lerpf(hull.rotation.z, -velocity.dot(global_basis.x) * 0.036, weight)
+	hull.rotation.x = lerpf(hull.rotation.x, -prep * 0.065 + hit_flash * 0.052, weight)
+	var base := Color("#95a9b2") if arena_side == 0 else Color("#a8775d")
+	var color := base.lerp(Color("#e6c79a"), maxf(prep * 0.61, hit_flash * 0.45))
 	if color != lens_color:
 		lens_color = color
-		paint.emission = base
 		paint.albedo_color = color
 
 func _check_stall(delta: float, distance: float) -> void:
@@ -275,6 +283,8 @@ func _begin_tell() -> void:
 	session.telegraph(self)
 
 func attack() -> void:
+	if operator != null:
+		operator.recoil = 0.9
 	if training:
 		return
 	if kind == "medic" and is_instance_valid(patient) and patient.alive and repairs_left > 0:
@@ -369,8 +379,7 @@ func take_hit(amount: float, at: Vector3, direction: Vector3, attacker: Characte
 		collision_layer = 0
 		eliminated.emit(self, spec.points)
 		var shutdown := create_tween().set_parallel(true).set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
-		shutdown.tween_property(hull, "scale", Vector3.ONE * 0.34, 0.21)
-		shutdown.tween_property(hull, "position:y", -0.30, 0.21)
-		shutdown.tween_property(paint, "emission_energy_multiplier", 0.0, 0.12)
+		shutdown.tween_property(hull, "rotation:x", -PI * 0.48, 0.28)
+		shutdown.tween_property(hull, "position:y", -0.12, 0.28)
 		shutdown.chain().tween_callback(queue_free)
 	return amount

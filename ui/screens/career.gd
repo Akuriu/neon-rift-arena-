@@ -14,7 +14,7 @@ var data: Dictionary
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	data = Prefs.profile.data
-	Palette.panel(self, Rect2(57, 210, 1166, 352), Color("#142730"))
+	Palette.panel(self, Rect2(57, 210, 1166, 352), Palette.PANEL)
 	var scroll := ScrollContainer.new()
 	scroll.follow_focus = true
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED

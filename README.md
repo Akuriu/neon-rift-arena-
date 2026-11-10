@@ -1,65 +1,36 @@
-# NEON RIFT ARENA V3 · COMPLETE REFORGE
+# Rifle Arena
 
-FPS d’arène hors ligne et en coop privée pour 2 à 4 joueurs. Cette version part des sources Godot de la V2 et conserve ses armes, sa progression locale, ses boss, son serveur dédié et ses modes.
+**[Télécharger v0.0.4 Alpha pour Windows ou Android](https://github.com/Akuriu/neon-rift-arena-/releases/tag/v0.0.4-alpha)**
+
+FPS d’arène en solo contre des bots, avec un stand d’entraînement et un mode survie en coop. Les sept cartes reprennent des lieux comme un dépôt de fret, une chaufferie, une gare et un quartier en brique. L’arsenal comprend huit armes, dont la carabine AR-24, le pistolet P9 Rafale et le fusil à pompe M7.
 
 ## Jouer
 
-- **Windows x64.** Décompressez l’archive Windows dans un dossier puis ouvrez **NeonRiftArenaV3.exe**. Le jeu est contenu dans l’exécutable.
-- **Projet.** Décompressez l’archive des sources, importez **project.godot** dans **Godot 4.6.3 Standard**, puis appuyez sur **F5**. Le paquet **build/NeonRiftArenaV3.pck** peut aussi être lancé via **JOUER_WINDOWS.bat** avec le moteur Godot.
-- **Android.** L’APK de débogage est une application Godot native en paysage avec commandes tactiles. Consultez [l’installation et les limites de validation](docs/ANDROID_PORT.md).
+- **Windows 64 bits** — extraire `RifleArena_Windows_x64.zip` et ouvrir `RifleArena.exe`. Le moteur Godot est inclus. La progression Windows utilise le dossier existant `%APPDATA%\NeonRiftArena`.
+- **Android** — ouvrir `RifleArena_Android_alpha.apk` sur le téléphone. Android peut demander d’autoriser l’installation depuis l’application qui a ouvert le fichier. Rifle Arena utilise un nouveau paquet Android et possède son propre profil local.
+- **Coop** — créer un salon privé pour 2 à 4 joueurs en Survie ou Infini. Les joueurs utilisent la même version du jeu. Le port par défaut est UDP 24562. Voir [le guide réseau](docs/V3_NETWORK.md) pour les connexions directes.
 
-Le solo fonctionne sans connexion et conserve sa progression entre les parties. Les **CR** de terrain expirent à la fin d’une opération. Les **pièces du pilote** et l’XP sont enregistrées dans le profil local à la clôture.
+## Commandes tactiles
 
-## Modes
+| Action | Geste |
+| --- | --- |
+| Avancer et sprinter | Joystick. Le pousser à fond vers l’avant pour sprinter. |
+| Regarder | Glisser à droite de l’écran ou sur le bouton de tir. |
+| Tirer et viser | Maintenir le bouton de tir. Toucher la petite mire pour basculer en visée. |
+| Sauter, s’accroupir ou glisser | Toucher la flèche pour sauter. Glisser dessus vers le bas pour s’accroupir, ou pour glisser en sprint. |
+| Utiliser le gadget | Glisser sur la flèche vers le côté. |
+| Recharger et changer d’arme | Toucher le compteur de munitions ou l’icône à deux flèches. |
 
-| Mode | Fonctionnement |
-|---|---|
-| Survie 20 | Vingt vagues, quatre boss et choix d’extraction ou de prolongation en Infini |
-| Survie 10 | Dix vagues avec ravitaillement et deux boss |
-| Infini | Renforts continus, mutateurs et paliers 25, 50, 75, 100. Extraction entre deux vagues |
-| Défi chronométré | Quinze robots en 90 secondes |
-| Boss Rush | Quatre boss et trois ravitaillements |
-| Entraînement | Huit armes en prêt. Dans Pause, sélectionnez des cibles fixes, mobiles ou aériennes, une distance et un chrono |
-| FPS Classique | Match chacun pour soi contre bots. Sélection du score, du temps, de la graine et de l’effectif |
-| Équipes | Escarmouche avec alliés, adversaires, score d’équipe et réapparition |
-| Capture et Domination | Un point ou trois points de contrôle avec contestation |
-| Exploration et Détente | Visite libre des arènes ou cinq vagues à rythme modéré. Sessions libres |
+Dans **Paramètres → Tactile**, on peut inverser la disposition pour gaucher, déplacer les commandes, afficher la disposition complète ou désactiver l’aide à la visée. L’aide ne change jamais la direction de la caméra toute seule. Elle ralentit le geste à proximité d’une cible visible.
 
-Reactor Court, Skyline Depot et Cryo Foundry restent accessibles. Bastion Relay, Meridian District, Ashgrove Ruins et Transit Hall ajoutent une base, une place urbaine, des ruines en forêt et une station couverte. La sélection montre une capture issue de chaque carte.
+## Développement
 
-Le style **Classique / Normal** est actif au premier lancement. **Néon raffiné**, **Cinématique** et **Arcade coloré** sont accessibles dans le menu et les paramètres. Le style est indépendant des règles de match.
-
-## Commandes et confort
-
-| Action | Clavier et souris |
-|---|---|
-| Se déplacer | ZQSD ou WASD selon la disposition |
-| Regarder, tirer, viser | Souris, clic gauche, clic droit |
-| Saut, sprint, accroupissement | Espace, Maj, Ctrl |
-| Recharger, interagir, gadget | R, E, G |
-| Armes, zoom du Rail | 1–4 ou molette. En visée Rail, molette pour ×2 / ×4 |
-| Inspecter, journal, pause | I, Tab, Échap |
-
-Les paramètres permettent de réassigner le clavier et de régler le FOV, le contraste, le HUD, la lunette, la sensibilité, les mouvements de caméra, les effets et les volumes. Sur Android, utilisez **Paramètres → Tactile → Modifier la disposition** pour déplacer et redimensionner chaque commande. Le profil mobile démarre en Ultra Léger, à 45 images par seconde maximum.
-
-## Profil, arsenal et boutiques
-
-La boutique du pilote présente les armes en 3D, leurs caractéristiques, leur maîtrise et leur comparaison avec l’emplacement choisi. Les armes sont essayables au stand. La configuration rapide équipe les objets possédés, avec quatre préréglages et une configuration personnelle enregistrable.
-
-Le profil regroupe statistiques par mode, contrats quotidiens, défi hebdomadaire, succès, 32 bilans rejouables et 48 reçus. La migration préserve le profil V2 et crée une copie `pilot_profile.v2.json` au premier enregistrement. Godot utilise `user://`. Sous Windows, le dossier de profil est habituellement `%APPDATA%\NeonRiftArena`.
-
-## Coop privée
-
-Choisissez **Coop**, hébergez un salon ou entrez l’adresse et le port de l’hôte. Les pilotes se déclarent prêts avant le départ. Les modes Survie, Patrouille et Infini restent disponibles. L’hôte arbitre les vagues, dégâts et achats. Tous les joueurs utilisent le protocole V3. Voir [connexion locale et serveur dédié](docs/V3_NETWORK.md).
-
-## Vérifier et reconstruire
+Le projet s’ouvre avec **Godot 4.6.3 Standard**, rendu Compatibility. Ouvrir `project.godot` et appuyer sur **F5**.
 
 ```sh
 python3 tools/run_tests.py --suite all
-godot --headless --path . --export-release "Windows x64" build/NeonRiftArenaV3.exe
-godot --headless --path . --export-debug Android build/NEON_RIFT_ARENA_V3_Android_debug.apk
 ```
 
-Créez le dossier `build` et installez les modèles d’export **4.6.3 Standard** avant de reconstruire. Python 3 sert uniquement au banc de tests. Pour les tests avec interface et son, voir [la validation](docs/V3_QA_REPORT.md). Pour reprendre le développement et l’historique Git, voir [le passage de relais](docs/V3_HANDOFF.md).
+[GitHub Actions](.github/workflows/release-alpha.yml) exporte le ZIP Windows et l’APK, exécute le programme Windows et installe puis lance l’APK dans l’émulateur Android avant publication. Les anciennes versions sont accessibles dans [Releases](https://github.com/Akuriu/neon-rift-arena-/releases).
 
-[221 étapes](docs/V3_RAPPORT_221.md) · [Performances](docs/V3_PERFORMANCE.md) · [Direction artistique](docs/V3_ART_DIRECTION.md) · [Changements V3](CHANGELOG_V3.md) · [Crédits](CREDITS.md)
+Voir les [crédits et licences](CREDITS.md).

@@ -7,6 +7,7 @@ const Arsenal := preload("res://game/arsenal.gd")
 const Avatar := preload("res://network/avatar.gd")
 const Motion := preload("res://game/player/locomotion.gd")
 const CameraRig := preload("res://game/player/camera_rig.gd")
+const TouchAim := preload("res://game/player/touch_aim.gd")
 const WALK := Motion.WALK
 const RUN := Motion.RUN
 const STAND := Motion.STAND
@@ -17,6 +18,7 @@ const INPUT_BITS := {"fire": 1, "jump": 2, "sprint": 4, "crouch": 8, "ads": 16,
 var head: Camera3D
 var presentation: CameraRig
 var locomotion := Motion.new()
+var touch_aim := TouchAim.new()
 var collider: CollisionShape3D
 var arsenal: Arsenal
 var session: Node3D
@@ -129,6 +131,8 @@ func look_input(movement: Vector2, scale := Vector2.ONE, tactile := false) -> vo
 		return
 	var sensitivity: float = 0.16 if tactile else Prefs.values.sensitivity
 	var factor: float = deg_to_rad(sensitivity * (Prefs.values.ads_sensitivity if arsenal.aiming() else 1.0))
+	if tactile and Prefs.mobile() and Prefs.values.touch_aim_assist:
+		factor *= touch_aim.on_drag()
 	rotation.y = wrapf(rotation.y - movement.x * scale.x * factor, -PI, PI)
 	var inverted: bool = Prefs.values.touch_invert if tactile else Prefs.values.invert_y
 	var sign_y := 1.0 if inverted else -1.0
@@ -139,6 +143,8 @@ func _process(delta: float) -> void:
 		presentation.present(delta)
 
 func _physics_process(delta: float) -> void:
+	if local_view and Prefs.mobile():
+		touch_aim.update(self, delta)
 	if local_view and alive and not input_blocked:
 		if Prefs.values.sprint_toggle and Input.is_action_just_pressed("sprint"):
 			sprint_latched = not sprint_latched

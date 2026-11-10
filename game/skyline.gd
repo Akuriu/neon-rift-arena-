@@ -2,10 +2,10 @@ extends "res://game/arena.gd"
 
 const SAND := Color("#b6a78b")
 const VERMILION := Color("#a75c47")
-const MINT := Color("#85f2ce")
-const CLAY := Color("#f8ae84")
+const MINT := Color("#bbb6a1")
+const CLAY := Color("#a77d55")
 const CARGO := Color("#536a67")
-const LILAC := Color("#ccbaff")
+const LILAC := Color("#b5ad95")
 
 func _init() -> void:
 	map_id = "skyline"
@@ -40,7 +40,7 @@ func _floor() -> void:
 	deck_surface = finish
 	finish.set_shader_parameter("base_color", Color("#484c52"))
 	finish.set_shader_parameter("groove_color", Color("#272c38"))
-	Fabric.place(structure, deck, finish, Vector3.ZERO)
+	Fabric.place(structure, deck, finish, Vector3.ZERO, Vector3.ZERO, false)
 	_block(Vector3(0, -0.25, 0), Vector3(60, 0.5, 50), Vector3.ZERO, false)
 	for lane in [-9.1, 9.1]:
 		for j in 12:
@@ -50,9 +50,9 @@ func _floor() -> void:
 	for index in 9:
 		_box(Vector3(-1.52 + index * 0.61, 0.022, 14.6), Vector3(0.34, 0.025, 0.72), SAND,
 			false, Vector3(0, 0.49, 0))
-	_stencil("S K Y L I N E   /   1 2", Vector3(1, 0.030, 17.55), Vector3(-PI / 2, 0, 0), 0.023, SAND)
-	_stencil("L O A D   /   A", Vector3(-20.0, 0.030, 11.1), Vector3(-PI / 2, 0, 0), 0.026, LILAC)
-	_stencil("L O A D   /   B", Vector3(20.9, 0.030, 11.1), Vector3(-PI / 2, 0, 0), 0.026, MINT)
+	_stencil("DÉPÔT 12", Vector3(1, 0.030, 17.55), Vector3(-PI / 2, 0, 0), 0.023, SAND)
+	_stencil("QUAI A", Vector3(-20.0, 0.030, 11.1), Vector3(-PI / 2, 0, 0), 0.026, LILAC)
+	_stencil("QUAI B", Vector3(20.9, 0.030, 11.1), Vector3(-PI / 2, 0, 0), 0.026, MINT)
 
 func _perimeter() -> void:
 	for side in [-1.0, 1.0]:
@@ -74,8 +74,8 @@ func _perimeter() -> void:
 			var rot := Vector3(0, -side * PI / 2, 0)
 			_wall_module(Vector3(x + side * 0.02, 0, f), rot, stripe, true)
 			_box(Vector3(x - side * 1.37, 3.23, f), Vector3(2.65, 0.29, 4.7), CARGO, false, Vector3.ZERO, 0.27)
-	_stencil("SKYLINE DEPOT", Vector3(0.0, 2.32, -24.43), Vector3.ZERO, 0.028, SAND)
-	_stencil("FREIGHT  /  12", Vector3(0.0, 1.86, -24.43), Vector3.ZERO, 0.012, CLAY)
+	_stencil("DÉPÔT DE FRET", Vector3(0.0, 2.32, -24.43), Vector3.ZERO, 0.028, SAND)
+	_stencil("ZONE DE CHARGEMENT", Vector3(0.0, 1.86, -24.43), Vector3.ZERO, 0.012, CLAY)
 
 func _loading_gantry() -> void:
 	for side in [-1.0, 1.0]:
@@ -95,7 +95,7 @@ func _loading_gantry() -> void:
 				false, Vector3(0, 0, (1 if i % 2 == 0 else -1) * 0.56))
 	_box(Vector3(0, 6.62, 4.85), Vector3(4.18, 1.28, 0.56), INK, false, Vector3.ZERO, 0.13)
 	_box(Vector3(0, 6.04, 5.15), Vector3(3.94, 0.06, 0.04), MINT, true)
-	_stencil("12  /  PORTAL", Vector3(0, 6.59, 5.15), Vector3.ZERO, 0.021, SAND)
+	_stencil("PORTIQUE 12", Vector3(0, 6.59, 5.15), Vector3.ZERO, 0.021, SAND)
 	_box(Vector3(0, 7.08, 0), Vector3(0.34, 0.34, 10.45), SAND)
 	_box(Vector3(0, 5.64, -2.3), Vector3(0.17, 2.65, 0.17), INK)
 	_box(Vector3(0, 4.38, -2.3), Vector3(1.66, 0.27, 0.58), VERMILION, false, Vector3.ZERO, 0.09)
@@ -127,18 +127,27 @@ func _elevated(at: Vector3, stripe: Color, slope_side: float) -> void:
 	_solid(at + Vector3(2.27, 2.65, 0), Vector3(0.10, 0.13, 6.1), SAND, 0.027, false)
 
 func _container(at: Vector3, size: Vector3, color: Color, accent: Color, code: String) -> void:
-	_solid(at + Vector3.UP * (size.y * 0.5), size, color, 0.22)
-	_box(at + Vector3.UP * (size.y - 0.07), Vector3(size.x + 0.09, 0.19, size.z + 0.09), SAND, false, Vector3.ZERO, 0.17)
-	_box(at + Vector3.UP * 0.18, Vector3(size.x + 0.04, 0.25, size.z + 0.04), INK, false, Vector3.ZERO, 0.15)
+	_block(at + Vector3.UP * size.y * 0.5, size)
+	var paint := Materials.finish(color, "steel", 0.91, 0.31)
+	batches.put(Fabric.cube(size), paint, at + Vector3.UP * size.y * 0.5)
+	for y in [0.09, size.y - 0.09]:
+		_box(at + Vector3.UP * y, Vector3(size.x + 0.09, 0.18, size.z + 0.09), color.darkened(0.23))
+	var ribs := maxi(7, roundi(size.z / 0.32))
 	for side in [-1.0, 1.0]:
-		for i in 8:
-			var z := -size.z * 0.42 + i * size.z * 0.12
-			_box(at + Vector3(side * (size.x * 0.5 + 0.02), size.y * 0.49, z),
-				Vector3(0.13, size.y * 0.66, 0.11), INK)
-		_box(at + Vector3(side * size.x * 0.39, size.y * 0.50, size.z * 0.50 + 0.02),
-			Vector3(0.08, size.y * 0.72, 0.10), STEEL)
-	_box(at + Vector3(0, size.y * 0.52, size.z * 0.50 + 0.038), Vector3(size.x * 0.65, 0.50, 0.05), INK)
-	_stencil(code, at + Vector3(0, size.y * 0.52, size.z * 0.50 + 0.07), Vector3.ZERO, 0.009, accent)
+		for i in ribs:
+			var z := size.z * (-0.46 + 0.92 * float(i) / float(ribs - 1))
+			_box(at + Vector3(side * size.x * 0.506, size.y * 0.5, z),
+				Vector3(0.088, size.y - 0.38, 0.094), color.lightened(0.12))
+		for end in [-1.0, 1.0]:
+			_box(at + Vector3(side * size.x * 0.485, size.y * 0.5, end * size.z * 0.495),
+				Vector3(0.16, size.y, 0.19), color.darkened(0.19))
+		var door := at + Vector3(side * size.x * 0.24, size.y * 0.5, size.z * 0.505)
+		_box(door, Vector3(size.x * 0.44, size.y - 0.39, 0.07), color.darkened(0.14))
+		for bar in [-0.12, 0.12]:
+			var center := door + Vector3(bar * size.x, 0, 0.054)
+			batches.put(Fabric.tube(0.032, size.y * 0.88, 6), Fabric.paint(STEEL), center)
+			_box(center + Vector3(0.11, -0.24, 0.029), Vector3(0.24, 0.043, 0.053), INK)
+	_stencil(code, at + Vector3(size.x * 0.23, size.y * 0.71, size.z * 0.5 + 0.09), Vector3.ZERO, 0.009, accent)
 
 func _distant_beacon() -> void:
 	_box(Vector3(18, 12.0, -41), Vector3(4.6, 24.0, 4.6), Color("#48566a"), false, Vector3.ZERO, 0.43)

@@ -6,7 +6,7 @@ signal saved(success: bool)
 const SAVE := "user://pilot_profile.json"
 const BACKUP := "user://pilot_profile.json.bak"
 const TEMP := "user://pilot_profile.json.tmp"
-const VERSION := 4
+const VERSION := 5
 const Profile := preload("res://services/profile.gd")
 const Rules := preload("res://game/modes/rules.gd")
 const TouchLayout := preload("res://ui/mobile/layout.gd")
@@ -34,9 +34,10 @@ const DEFAULTS := {
 	"master": 0.8, "music": 0.45, "sfx": 0.8, "ambience": 0.6,
 	"steady_cam": false, "motion_strength": 0.62, "shake": 0.50, "sprint_toggle": false,
 	"crouch_toggle": false, "auto_slide": false, "scope_shade": 0.54, "ui_motion": true,
-	"art_style": 0, "hud_tone": 0, "emission": 0.72, "fog": true, "weather": false, "high_contrast": false,
+	"hud_tone": 0, "fog": true, "weather": false, "high_contrast": false,
 	"touch_x": 1.05, "touch_y": 0.95, "touch_dead": 0.13, "touch_invert": false,
-	"touch_left": false, "touch_float": true, "touch_haptic": false, "touch_compact": false,
+	"touch_left": false, "touch_float": true, "touch_haptic": false, "touch_compact": true,
+	"touch_aim_assist": true, "touch_auto_sprint": true,
 	"particles": 0.85, "audio_alerts": true, "audio_hits": true, "audio_dynamic": true,
 }
 const RANGES := {
@@ -44,7 +45,7 @@ const RANGES := {
 	"ads_sensitivity": [0.25, 1.0], "reticle": [0, 2], "reticle_tint": [0, 3], "flashes": [0.0, 1.0], "quality": [0, 3], "resolution": [0, 3], "hud_scale": [0.80, 1.20],
 	"master": [0.0, 1.0], "music": [0.0, 1.0], "sfx": [0.0, 1.0], "ambience": [0.0, 1.0],
 	"motion_strength": [0.0, 1.0], "shake": [0.0, 1.0], "scope_shade": [0.1, 0.85],
-	"art_style": [0, 3], "hud_tone": [0, 3], "emission": [0.0, 1.0],
+	"hud_tone": [0, 3],
 	"touch_x": [0.25, 3.0], "touch_y": [0.25, 3.0], "touch_dead": [0.04, 0.35],
 	"particles": [0.0, 1.0],
 }
@@ -243,7 +244,11 @@ func load_disk() -> void:
 		for key in DEFAULTS:
 			if stored.has(key):
 				values[key] = _valid_value(key, stored[key])
-	touch_layout = TouchLayout.normalize(document.get("touch_layout"))
+	if int(document.get("version", 0)) < 5:
+		touch_layout = TouchLayout.defaults()
+		values.touch_compact = true
+	else:
+		touch_layout = TouchLayout.normalize(document.get("touch_layout"))
 	keys = keyboard(values.layout)
 	var bindings: Variant = document.get("bindings", {})
 	if bindings is Dictionary:
@@ -458,6 +463,6 @@ func _write_locked() -> String:
 
 func _failed_save(message: String) -> bool:
 	save_error = message
-	push_warning("NEON RIFT • " + message)
+	push_warning("Rifle Arena • " + message)
 	saved.emit(false)
 	return false

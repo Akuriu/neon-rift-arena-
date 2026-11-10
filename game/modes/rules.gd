@@ -1,6 +1,6 @@
 extends RefCounted
 
-const LABELS := {"classic": "FPS Classique", "teams": "Escarmouche en équipes",
+const LABELS := {"classic": "Chacun pour soi", "teams": "Match en équipes",
 	"capture": "Capture", "domination": "Domination"}
 const DURATIONS := [300, 600, 900]
 const TARGETS := [10, 20, 35, 60, 100]

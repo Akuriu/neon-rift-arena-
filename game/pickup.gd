@@ -1,32 +1,35 @@
 extends Node3D
 
 const Fabric := preload("res://game/fabric.gd")
+const Materials := preload("res://art/materials.gd")
 var kind := "repair"
 var serial := 0
 var age := 0.0
-var rig: Node3D
 var tint: Color
 
 func _ready() -> void:
-	tint = Color("#7dffcc") if kind == "repair" else Color("#ffbf77")
-	rig = Node3D.new()
-	add_child(rig)
-	Fabric.place(rig, Fabric.bevel(Vector3(0.52, 0.28, 0.52), 0.10),
-		Fabric.paint(Color("#202d34")), Vector3.ZERO, Vector3.ZERO, false)
-	Fabric.place(rig, Fabric.ring(0.34, 0.047, 12), Fabric.paint(tint, true),
-		Vector3(0, 0.025, 0), Vector3.ZERO, false)
-	Fabric.place(rig, Fabric.cube(Vector3(0.31, 0.04, 0.075)), Fabric.paint(tint, true),
-		Vector3.UP * 0.153, Vector3.ZERO, false)
-	if kind == "repair":
-		Fabric.place(rig, Fabric.cube(Vector3(0.075, 0.04, 0.31)), Fabric.paint(tint, true),
-			Vector3.UP * 0.153, Vector3.ZERO, false)
+	var repair := kind == "repair"
+	var finish := Color("#848472") if repair else Color("#6e7354")
+	tint = Color("#a95743") if repair else Color("#c2a37a")
+	var metal := Materials.finish(finish, "steel", 5.0, 0.24)
+	var trim := Materials.finish(finish.darkened(0.28), "steel", 5.0, 0.27)
+	var turn := Vector3(0.0, 0.21 * float(serial % 7), 0.0)
+	var box := Node3D.new()
+	box.rotation = turn
+	add_child(box)
+	Fabric.place(box, Fabric.bevel(Vector3(0.46, 0.25, 0.32), 0.031), metal, Vector3.UP * 0.129)
+	Fabric.place(box, Fabric.bevel(Vector3(0.48, 0.056, 0.34), 0.034), trim, Vector3.UP * 0.248)
+	Fabric.place(box, Fabric.cube(Vector3(0.141, 0.036, 0.071)), trim, Vector3.UP * 0.283)
+	for x in [-0.151, 0.151]:
+		Fabric.place(box, Fabric.bevel(Vector3(0.053, 0.082, 0.023), 0.005), trim, Vector3(x, 0.205, 0.172))
+	Fabric.place(box, Fabric.cube(Vector3(0.176, 0.008, 0.041)), Fabric.paint(tint), Vector3(0, 0.279, 0.071))
+	if repair:
+		Fabric.place(box, Fabric.cube(Vector3(0.041, 0.008, 0.143)), Fabric.paint(tint), Vector3(0, 0.279, 0.071))
 	else:
-		Fabric.place(rig, Fabric.cube(Vector3(0.077, 0.044, 0.13)), Fabric.paint(tint, true),
-			Vector3(0.09, 0.154, 0.055), Vector3.ZERO, false)
+		for x in [-0.046, 0.0, 0.046]:
+			Fabric.place(box, Fabric.cube(Vector3(0.015, 0.009, 0.059)), Fabric.paint(tint), Vector3(x, 0.279, -0.05))
 
 func _physics_process(delta: float) -> void:
 	age += delta
-	rig.position.y = 0.33 + sin(age * 4.0) * 0.09
-	rig.rotate_y(delta * 1.48)
 	if age >= 24.0:
 		queue_free()

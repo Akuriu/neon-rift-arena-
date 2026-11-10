@@ -9,10 +9,9 @@ const AMBER := Palette.AMBER
 const TEXT := Palette.TEXT
 const MUTE := Palette.MUTED
 const PINK := Palette.PINK
-const INK := Color(0.028, 0.059, 0.079, 0.92)
+const INK := Color(0.07, 0.079, 0.064, 0.86)
 
 var session: Node3D
-var entering := 0.0
 var sample_time := 0.0
 var frame_samples := PackedFloat32Array()
 var diagnostic := ""
@@ -28,11 +27,10 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if not is_visible_in_tree() or not is_instance_valid(session) or not is_instance_valid(session.player):
 		return
-	entering += delta
 	if Prefs.values.telemetry:
 		_sample(delta)
 	render_wait -= delta
-	if render_wait <= 0.0 or entering < 0.65 or session.last_hit > 0.0 or session.player.arsenal.scope > 0.02:
+	if render_wait <= 0.0 or session.last_hit > 0.0 or session.player.arsenal.scope > 0.02:
 		render_wait = 1.0 / (25.0 if Prefs.values.quality == 3 else 36.0)
 		queue_redraw()
 
@@ -44,87 +42,35 @@ func _draw() -> void:
 	signal_ink = Art.hud_color()
 	var director = session.director
 	var match_mode := is_instance_valid(session.classic)
+	var mobile := Prefs.mobile()
 	var tint: Color = gun.spec().tint
 	var center := size * 0.5
-	var zoom: float = Prefs.values.hud_scale
-	var fade := 1.0 - clampf(entering / 0.62, 0.0, 1.0)
-	if fade > 0.0:
-		draw_rect(Rect2(Vector2.ZERO, size), Color(0.01, 0.025, 0.03, fade * 0.68))
-	if gun.scope > 0.05 and Prefs.values.scope_overlay:
+	if gun.spec().has("zoom") and gun.scope > 0.05 and Prefs.values.scope_overlay:
 		_scope(center, gun.scope, gun.magnification(), tint)
 	var damage: float = maxf(pilot.shield_flash, pilot.hull_flash) * Prefs.values.flashes
 	if damage > 0.001:
-		var edge := Color(PINK if pilot.hull_flash > pilot.shield_flash else CYAN, damage * 0.30)
-		draw_rect(Rect2(Vector2(4, 4), size - Vector2(8, 8)), edge, false, 12.0)
-		draw_rect(Rect2(Vector2(11, 11), size - Vector2(22, 22)), Color(edge, edge.a * 0.42), false, 5.0)
-	draw_set_transform(Vector2(26, 24), 0.0, Vector2.ONE * zoom)
-	_frame(Rect2(0, 0, 244, 76), signal_ink)
-	_print(Vector2(14, 23), "NR // " + Catalog.MAPS[session.map_id].name.to_upper(), 13, Palette.MONO, signal_ink)
-	var objective := "VAGUE %02d / %02d" % [director.wave, director.total_waves] if director.total_waves > 0 else "VAGUE %02d  ·  ∞" % director.wave
+		var edge := Color(PINK if pilot.hull_flash > pilot.shield_flash else signal_ink, damage * 0.25)
+		draw_rect(Rect2(Vector2(3, 3), size - Vector2(6, 6)), edge, false, 7.0)
+	var objective := "Vague %d / %d" % [director.wave, director.total_waves] if director.total_waves > 0 else "Vague %d" % director.wave
 	if match_mode:
-		objective = {"classic": "CHACUN POUR SOI", "teams": "ÉQUIPES", "capture": "CAPTURE",
-			"domination": "DOMINATION"}[session.mode]
+		objective = {"classic": "Chacun pour soi", "teams": "Équipes", "capture": "Capture",
+			"domination": "Domination"}[session.mode]
 	elif session.mode == "training":
-		objective = "ENTRAÎNEMENT"
+		objective = "Entraînement"
 	elif session.mode == "explore":
-		objective = "EXPLORATION"
+		objective = "Exploration"
 	elif session.mode == "trial":
-		objective = "DÉFI CHRONOMÉTRÉ"
-	_print(Vector2(13, 56), objective, 27, Palette.HEAD, TEXT)
-	draw_set_transform(Vector2(size.x - 26.0 - 216.0 * zoom, 24), 0.0, Vector2.ONE * zoom)
-	_frame(Rect2(0, 0, 216, 76), AMBER)
-	_print(Vector2(13, 23), "SCORE", 12, Palette.MONO, AMBER)
+		objective = "Défi chronométré"
 	var time: float = director.time_left() if match_mode else director.elapsed
 	if session.mode == "trial":
 		time = Director.TRIAL_TIME - director.elapsed
 	elif session.mode == "training" and session.training_options.time > 0:
 		time = maxf(0.0, session.training_options.time - director.elapsed)
-	_print(Vector2(137, 23), Palette.clock(time), 13, Palette.MONO, MUTE)
-	_print(Vector2(12, 58), "%02d : %02d" % [director.score, director.rival_score()] if match_mode else "%06d" % director.score,
-		28, Palette.MONO, TEXT)
-	if not match_mode:
-		_print(Vector2(138, 54), "%02d  BOT" % director.remaining(), 13, Palette.MONO, MUTE)
-	if match_mode:
-		_frame(Rect2(0, 84, 216, 30), AMBER)
-		_print(Vector2(13, 105), "LIMITE %d" % director.options.target, 13, Palette.MONO, AMBER)
-		if Prefs.values.fps_counter:
-			_print(Vector2(129, 105), "%d FPS" % Engine.get_frames_per_second(), 13, Palette.MONO, TEXT)
-	elif session.mode not in ["training", "explore"]:
-		_frame(Rect2(0, 84, 216, 30), AMBER)
-		_print(Vector2(13, 105), "%d CR" % session.wallet.balance, 14, Palette.MONO, AMBER)
-		if Prefs.values.fps_counter:
-			_print(Vector2(129, 105), "%d FPS" % Engine.get_frames_per_second(), 13, Palette.MONO, TEXT)
-	elif Prefs.values.fps_counter:
-		_print(Vector2(129, 96), "%d FPS" % Engine.get_frames_per_second(), 13, Palette.MONO, TEXT)
-	draw_set_transform(Vector2(26, size.y - 27 - 112.0 * zoom), 0.0, Vector2.ONE * zoom)
-	_frame(Rect2(0, 0, 272, 112), signal_ink)
-	var gadget := "GADGET PRÊT" if pilot.gadget_left <= 0.0 else "GADGET %.1f s" % pilot.gadget_left
-	_print(Vector2(14, 25), "%s  ·  %s" % [OS.get_keycode_string(Prefs.keys.gadget), gadget], 12, Palette.MONO, MUTE)
-	_meter(Vector2(14, 53), Vector2(197, 6), pilot.health / 100.0, TEXT)
-	_print(Vector2(14, 46), "INTÉGRITÉ", 12, Palette.MONO, TEXT)
-	_print(Vector2(219, 57), "%03d" % ceili(pilot.health), 18, Palette.MONO, TEXT)
-	_meter(Vector2(14, 92), Vector2(197, 6), pilot.shield / pilot.shield_max, signal_ink)
-	_print(Vector2(14, 84), "BOUCLIER", 12, Palette.MONO, signal_ink)
-	_print(Vector2(219, 96), "%03d" % ceili(pilot.shield), 18, Palette.MONO, signal_ink)
-	draw_set_transform(Vector2(size.x - 26 - 280.0 * zoom, size.y - 27 - 112.0 * zoom), 0.0, Vector2.ONE * zoom)
-	_frame(Rect2(0, 0, 280, 112), tint)
-	_print(Vector2(13, 24), "%02d / %s" % [gun.rack.find(gun.active) + 1, gun.spec().tag], 12, Palette.MONO, tint)
-	_print(Vector2(13, 57), gun.spec().name, 29, Palette.HEAD, TEXT)
-	_print(Vector2(191, 62), "%02d" % gun.rounds(), 33, Palette.MONO, TEXT)
-	var reserve := "∞" if gun.reserve() < 0 else str(gun.reserve())
-	_print(Vector2(233, 62), "/%02d" % gun.capacity(), 14, Palette.MONO, MUTE)
-	_print(Vector2(186, 84), "RÉSERVE " + reserve, 11, Palette.MONO, MUTE)
-	var gauge: float = gun.heat[gun.active]
-	var gauge_name := "CHALEUR"
-	if gun.reload_left > 0.0:
-		gauge = 1.0 - gun.reload_left / gun.cycle_length
-		gauge_name = "RECHARGE"
-	elif gun.charge > 0.0:
-		gauge = gun.charge
-		gauge_name = "CHARGE"
-	_print(Vector2(13, 84), gauge_name, 11, Palette.MONO, MUTE)
-	_meter(Vector2(13, 93), Vector2(254, 5), gauge, AMBER if gauge > 0.75 else tint)
-	draw_set_transform(Vector2.ZERO)
+	var score := "%d  –  %d" % [director.score, director.rival_score()] if match_mode else str(director.score)
+	if mobile:
+		_mobile_status(pilot, objective, score, time)
+	else:
+		_desktop_status(pilot, gun, objective, score, time, tint)
 	_crosshair(center, tint)
 	if (pilot.hull_flash > 0.0 or pilot.shield_flash > 0.0) and pilot.damage_from.is_finite():
 		var direction: Vector3 = pilot.damage_from - pilot.global_position
@@ -134,18 +80,18 @@ func _draw() -> void:
 	if match_mode:
 		_classic(center, director, pilot)
 	elif director.phase == Director.Phase.PREP:
-		_notice(Vector2(center.x, 159), "CALIBRATION", ("Défi dans %.1f s" % director.clock if session.mode == "trial"
+		_notice(Vector2(center.x, 159), "Préparez-vous", ("Défi dans %.1f s" % director.clock if session.mode == "trial"
 			else "Vague %02d dans %.1f s" % [director.wave, director.clock]), AMBER)
 	if not match_mode and director.notice > 0.0 and director.phase in [Director.Phase.ACTIVE, Director.Phase.TRIAL]:
-		var title := "PROTOCOLE LANCÉ" if session.mode == "trial" else "VAGUE %02d" % director.wave
-		var sub: String = director.current_wave.get("theme", "Unités actives dans le secteur")
+		var title := "Défi lancé" if session.mode == "trial" else "Vague %d" % director.wave
+		var sub: String = director.current_wave.get("theme", "Les adversaires arrivent.")
 		var major: String = director.current_wave.get("boss", "")
 		if not major.is_empty():
 			sub = Catalog.UNITS[major].name + " détecté"
 		_notice(Vector2(center.x, 164), title, sub, CYAN)
 	if is_instance_valid(session.boss) and session.boss.alive:
 		var boss = session.boss
-		var pos := Vector2(center.x - 180, 25)
+		var pos := Vector2(center.x - 180, 74 if mobile else 25)
 		_frame(Rect2(pos, Vector2(360, 55)), AMBER)
 		_print(pos + Vector2(12, 20), boss.spec.name.to_upper(), 14, Palette.MONO, TEXT)
 		if boss.kind in ["warden", "colossus", "architect"]:
@@ -156,8 +102,10 @@ func _draw() -> void:
 	elif director.combo > 1 and director.combo_left > 0.0:
 		_mid(Vector2(center.x, size.y - 101), "SÉRIE ×%d" % director.combo, 16, Palette.MONO, CYAN)
 	if session.pickup_hint != "":
-		var key := OS.get_keycode_string(Prefs.keys.interact)
-		_mid(Vector2(center.x, size.y - 72), "[%s]  %s" % [key, session.pickup_hint], 16, Palette.BOLD, TEXT)
+		var hint: String = session.pickup_hint
+		if not mobile:
+			hint = "[%s]  %s" % [OS.get_keycode_string(Prefs.keys.interact), hint]
+		_mid(Vector2(center.x, size.y - 72), hint, 16, Palette.BOLD, TEXT)
 	if session.relay_state == 1 and director.phase == Director.Phase.ACTIVE:
 		_mid(Vector2(center.x, size.y - 122), "RELAIS   %.1f / 6 s   ·   +48 CR" % session.relay_progress, 13, Palette.MONO, signal_ink)
 	if Prefs.values.telemetry and not diagnostic.is_empty():
@@ -174,6 +122,68 @@ func _draw() -> void:
 		var hint := "%d NEUTRALISÉS  /  %d %% DE PRÉCISION  /  %d TIRS" % [director.kills, accuracy, session.shots]
 		_mid(Vector2(center.x, size.y - 41), hint, 13, Palette.BODY, TEXT)
 
+func _mobile_status(pilot: CharacterBody3D, objective: String, score: String, time: float) -> void:
+	var factor: float = Prefs.values.hud_scale
+	var left_handed: bool = Prefs.values.touch_left
+	var width := 184.0 * factor
+	var corner := Vector2(size.x - 24.0 - width if left_handed else 24.0, 21.0)
+	draw_set_transform(corner, 0, Vector2.ONE * factor)
+	_frame(Rect2(0, 0, 184, 63), signal_ink)
+	_print(Vector2(12, 24), Catalog.MAPS[session.map_id].name, 16, Palette.BOLD, TEXT)
+	_print(Vector2(12, 47), objective, 14, Palette.BODY, MUTE)
+	draw_set_transform(Vector2(size.x * 0.5 - 93.0 * factor, 18), 0, Vector2.ONE * factor)
+	_frame(Rect2(0, 0, 186, 46), AMBER)
+	_mid(Vector2(55, 29), score, 21, Palette.BOLD, TEXT)
+	_mid(Vector2(137, 28), Palette.clock(time), 16, Palette.MONO, MUTE)
+	draw_set_transform(Vector2(corner.x, size.y - 24.0 - 58.0 * factor), 0, Vector2.ONE * factor)
+	_frame(Rect2(0, 0, 184, 58), signal_ink)
+	_print(Vector2(11, 25), "+", 21, Palette.BOLD, TEXT)
+	_print(Vector2(31, 25), str(ceili(pilot.health)), 19, Palette.BOLD, TEXT)
+	_meter(Vector2(81, 14), Vector2(90, 6), pilot.health / 100.0, TEXT)
+	_meter(Vector2(81, 27), Vector2(90, 5), pilot.shield / pilot.shield_max, Color("#a7b2a3"))
+	_print(Vector2(12, 47), "Protection %d" % ceili(pilot.shield), 12, Palette.BODY, MUTE)
+	draw_set_transform(Vector2.ZERO)
+	if Prefs.values.fps_counter:
+		_mid(Vector2(size.x * 0.5, 80), "%d FPS" % Engine.get_frames_per_second(), 12, Palette.MONO, TEXT)
+
+func _desktop_status(pilot: CharacterBody3D, gun: Node, objective: String, score: String, time: float, tint: Color) -> void:
+	var factor: float = Prefs.values.hud_scale
+	draw_set_transform(Vector2(25, 23), 0, Vector2.ONE * factor)
+	_frame(Rect2(0, 0, 216, 62), signal_ink)
+	_print(Vector2(12, 23), Catalog.MAPS[session.map_id].name, 15, Palette.BOLD, MUTE)
+	_print(Vector2(12, 48), objective, 22, Palette.HEAD, TEXT)
+	draw_set_transform(Vector2(size.x - 25.0 - 186.0 * factor, 23), 0, Vector2.ONE * factor)
+	_frame(Rect2(0, 0, 186, 62), AMBER)
+	_print(Vector2(12, 22), "Score", 13, Palette.BOLD, MUTE)
+	_print(Vector2(104, 22), Palette.clock(time), 15, Palette.MONO, MUTE)
+	_print(Vector2(11, 49), score, 25, Palette.BOLD, TEXT)
+	var match_mode := is_instance_valid(session.classic)
+	if match_mode:
+		_print(Vector2(101, 48), "/ %d" % session.director.options.target, 13, Palette.MONO, MUTE)
+	elif session.mode not in ["training", "explore"]:
+		_print(Vector2(101, 48), "%d crédits" % session.wallet.balance, 13, Palette.BODY, MUTE)
+	if Prefs.values.fps_counter:
+		_print(Vector2(100, 80), "%d FPS" % Engine.get_frames_per_second(), 13, Palette.MONO, TEXT)
+	draw_set_transform(Vector2(25, size.y - 24.0 - 73.0 * factor), 0, Vector2.ONE * factor)
+	_frame(Rect2(0, 0, 209, 73), signal_ink)
+	_print(Vector2(12, 28), "%d" % ceili(pilot.health), 23, Palette.BOLD, TEXT)
+	_print(Vector2(67, 26), "Santé", 14, Palette.BODY, MUTE)
+	_meter(Vector2(118, 17), Vector2(78, 5), pilot.health / 100.0, TEXT)
+	_print(Vector2(12, 55), "%d" % ceili(pilot.shield), 19, Palette.BOLD, MUTE)
+	_print(Vector2(67, 54), "Protection", 13, Palette.BODY, MUTE)
+	_meter(Vector2(141, 46), Vector2(55, 5), pilot.shield / pilot.shield_max, Color("#a7b2a3"))
+	draw_set_transform(Vector2(size.x - 25.0 - 215.0 * factor, size.y - 24.0 - 73.0 * factor), 0, Vector2.ONE * factor)
+	_frame(Rect2(0, 0, 215, 73), tint)
+	_print(Vector2(12, 25), gun.spec().name, 17, Palette.BOLD, TEXT)
+	var reserve := "∞" if gun.reserve() < 0 else str(gun.reserve())
+	_print(Vector2(12, 55), "%d / %s" % [gun.rounds(), reserve], 24, Palette.BOLD, TEXT)
+	if gun.reload_left > 0.0:
+		_print(Vector2(110, 54), "Recharge", 12, Palette.BOLD, AMBER)
+		_meter(Vector2(12, 65), Vector2(190, 3), 1.0 - gun.reload_left / gun.cycle_length, AMBER)
+	elif gun.charge > 0.0:
+		_meter(Vector2(12, 65), Vector2(190, 3), gun.charge, tint)
+	draw_set_transform(Vector2.ZERO)
+
 func _classic(center: Vector2, match_state: Node, pilot: CharacterBody3D) -> void:
 	if match_state.phase == Director.Phase.PREP:
 		_notice(Vector2(center.x, 156), Rules.LABELS[session.mode].to_upper(), "Départ dans %.1f s" % match_state.clock, AMBER)
@@ -182,7 +192,7 @@ func _classic(center: Vector2, match_state: Node, pilot: CharacterBody3D) -> voi
 	var width: float = match_state.zones.size() * 115.0
 	for i in match_state.zones.size():
 		var zone: Node3D = match_state.zones[i]
-		var at := Vector2(center.x - width * 0.5 + i * 115.0, 25.0)
+		var at := Vector2(center.x - width * 0.5 + i * 115.0, 92.0 if Prefs.mobile() else 25.0)
 		var color := signal_ink if zone.owner_side == 0 else (AMBER if zone.owner_side == 1 else MUTE)
 		_frame(Rect2(at, Vector2(108, 48)), color)
 		var status := "NEUTRE" if zone.owner_side < 0 else ("ALLIÉS" if zone.owner_side == 0 else "ADVERSES")
@@ -292,18 +302,11 @@ func _notice(at: Vector2, title: String, sub: String, color: Color) -> void:
 	_mid(at + Vector2(0, 20), sub, 15, Palette.BODY, TEXT)
 
 func _frame(rect: Rect2, accent: Color) -> void:
-	var a := rect.position
-	var b := rect.end
-	var points := PackedVector2Array([a, Vector2(b.x - 9, a.y), Vector2(b.x, a.y + 9),
-		b, Vector2(a.x + 9, b.y), Vector2(a.x, b.y - 9)])
-	draw_colored_polygon(points, Color("#090f14") if Prefs.values.high_contrast else INK)
-	points.append(a)
-	draw_polyline(points, Color("#345058"), 1.0, true)
-	draw_rect(Rect2(a, Vector2(24, 2)), accent)
-	draw_rect(Rect2(b - Vector2(14, 2), Vector2(14, 2)), Color(accent, 0.60))
+	draw_rect(rect, Color("#141611") if Prefs.values.high_contrast else INK)
+	draw_rect(rect, Color(accent, 0.28), false, 1.0)
 
 func _meter(at: Vector2, extent: Vector2, fraction: float, color: Color) -> void:
-	draw_rect(Rect2(at, extent), Color("#2c4149"))
+	draw_rect(Rect2(at, extent), Color("#494b3f"))
 	draw_rect(Rect2(at, Vector2(extent.x * clampf(fraction, 0.0, 1.0), extent.y)), color)
 
 func _print(at: Vector2, value: String, pixels: int, font: Font, color: Color) -> void:

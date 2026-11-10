@@ -2,6 +2,9 @@ extends Node
 
 const Session := preload("res://scenes/Session.tscn")
 const Arena := preload("res://game/arena.gd")
+const Depot := preload("res://game/skyline.gd")
+const FRAME := Vector2(1280, 720)
+const VERSION_LABEL := "v0.0.4 Alpha"
 const Director := preload("res://game/wave_director.gd")
 const Catalog := preload("res://game/catalog.gd")
 const Palette := preload("res://ui/skin.gd")
@@ -23,27 +26,28 @@ const Waves := preload("res://game/waves/generator.gd")
 
 const MODES := {
 	"survival": {"name": "Survie · 20 vagues", "tag": "CAMPAGNE", "line": "4 paliers majeurs · poursuite en Infini",
-		"summary": "Traversez vingt vagues et défiez le Null Architect. Encaissez la victoire ou poursuivez la même partie en Infini."},
+		"summary": "Traversez vingt vagues et affrontez le tireur d’élite. Encaissez la victoire ou poursuivez la même partie en Infini."},
 	"short": {"name": "Survie · 10 vagues", "tag": "PATROUILLE", "line": "Format court · 2 affrontements majeurs",
-		"summary": "Dix vagues, des achats entre les assauts et un combat final contre le Reactor Warden."},
+		"summary": "Dix vagues, des achats entre les assauts et un combat final contre le commandant."},
 	"endless": {"name": "Infini", "tag": "ENDURANCE", "line": "Rythme progressif · sortie volontaire",
 		"summary": "Poursuivez jusqu’à la défaite ou encaissez le bilan après une vague réussie. Les apparitions simultanées restent limitées."},
-	"trial": {"name": "Défi chronométré", "tag": "CHRONO", "line": "90 secondes · 15 robots · classement",
+	"trial": {"name": "Défi chronométré", "tag": "CHRONO", "line": "90 secondes · 15 cibles · classement",
 		"summary": "Neutralisez toutes les cibles avant la fermeture du secteur. Chaque seconde restante compte."},
 	"boss_rush": {"name": "Boss Rush", "tag": "BOSS", "line": "4 boss · 3 ravitaillements",
-		"summary": "Défiez successivement Apex, Warden, Colossus et Architect, chacun avec son escorte. Achetez et équipez-vous entre les combats."},
+		"summary": "Défiez successivement le chef blindé, le commandant, le démineur lourd et le tireur d’élite, chacun avec son escorte. Achetez et équipez-vous entre les combats."},
 	"training": {"name": "Entraînement", "tag": "ATELIER", "line": "4 cibles mobiles · 8 armes en prêt",
 		"summary": "Toutes les armes sont disponibles, même verrouillées. La console de départ réarme le pilote et réinitialise les cibles."},
 	"explore": {"name": "Exploration", "tag": "VISITE", "line": "Arène libre · zéro adversaire",
-		"summary": "Explorez les voies et testez vos déplacements. Changez de style dans les paramètres pendant la visite."},
+		"summary": "Explorez les voies et testez vos déplacements. La carte reste libre de tout adversaire."},
 	"relax": {"name": "Détente", "tag": "REPRISE", "line": "5 vagues · rythme modéré",
-		"summary": "Cinq vagues avec des robots moins puissants et des renforts espacés. Les crédits restent dans la partie."},
+		"summary": "Cinq vagues avec des adversaires moins puissants et des renforts espacés. Les crédits restent dans la partie."},
 }
 const ICON := preload("res://assets/art/rift.svg")
 
 var layer: CanvasLayer
 var canvas: Control
 var view: Control
+var matte: Livery
 var screen := "menu"
 var session
 var hud_panel: Hud
@@ -86,9 +90,9 @@ func _ready() -> void:
 	canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	canvas.theme = Palette.theme()
-	if Prefs.mobile():
-		get_window().size_changed.connect(_safe_canvas)
-		_safe_canvas.call_deferred()
+	get_window().size_changed.connect(_safe_canvas)
+	canvas.resized.connect(_fit_menu)
+	_safe_canvas.call_deferred()
 	coop = Coop.new()
 	coop.name = "Coop"
 	coop.app = self
@@ -115,17 +119,14 @@ func _process(delta: float) -> void:
 	if not is_instance_valid(title_cam) or not Prefs.values.ui_motion:
 		return
 	orbit += delta
-	var angle := 0.53 + sin(orbit * 0.26) * 0.12
-	title_cam.position = Vector3(sin(angle) * 16.9, 3.8 + sin(orbit * 0.32) * 0.37, cos(angle) * 16.9)
-	title_cam.look_at(Vector3(-5.4, 2.58, -0.8), Vector3.UP)
+	var shift := sin(orbit * 0.11)
+	title_cam.position = Vector3(12.9 + shift * 1.34, 3.31, 18.6 + shift * 0.59)
+	title_cam.look_at(Vector3(-3.5, 2.82, -5.6), Vector3.UP)
 
 func _new_screen(name: String, treatment := "page") -> void:
 	if Prefs.mobile():
 		Input.emulate_mouse_from_touch = true
-	if is_instance_valid(view):
-		canvas.remove_child(view)
-		view.queue_free()
-		view = null
+	_drop_menu_view()
 	settings = null
 	lobby = null
 	shop_clock = null
@@ -133,57 +134,75 @@ func _new_screen(name: String, treatment := "page") -> void:
 	confirmation_cancel = Callable()
 	view = Control.new()
 	view.name = "Screen_" + name
-	canvas.add_child(view)
-	view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var matte := Livery.new()
+	matte = Livery.new()
 	matte.mode = treatment
-	view.add_child(matte)
-	if Prefs.values.ui_motion:
-		view.modulate.a = 0.61
-		var fade := view.create_tween()
-		fade.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		fade.tween_property(view, "modulate:a", 1.0, 0.19)
+	canvas.add_child(matte)
+	canvas.add_child(view)
+	view.size = FRAME
+	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fit_menu()
+	if Prefs.values.ui_motion and not Prefs.mobile():
+		view.modulate.a = 0.84
+		view.create_tween().tween_property(view, "modulate:a", 1.0, 0.15)
+
+func _drop_menu_view() -> void:
+	if is_instance_valid(view):
+		canvas.remove_child(view)
+		view.queue_free()
+		view = null
+	if is_instance_valid(matte):
+		canvas.remove_child(matte)
+		matte.queue_free()
+		matte = null
 
 func _footer(copy: String) -> void:
-	Palette.label(view, Rect2(56, 673, 1100, 45), copy, 13, Palette.MUTED, Palette.MONO)
-	Palette.label(view, Rect2(1107, 673, 116, 45), "BUILD 3.0.0", 12, Art.palette().ui, Palette.MONO, HORIZONTAL_ALIGNMENT_RIGHT)
+	Palette.label(view, Rect2(57, 671, 1030, 35), copy, 13, Palette.MUTED)
+	Palette.label(view, Rect2(1050, 671, 172, 35), VERSION_LABEL, 13, Palette.MUTED, Palette.BOLD, HORIZONTAL_ALIGNMENT_RIGHT)
 
 func _safe_canvas() -> void:
-	if not OS.has_feature("android"):
+	canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	if OS.has_feature("android"):
+		var extent := get_window().get_visible_rect().size
+		var safe := DisplayServer.get_display_safe_area()
+		if safe.has_area():
+			var inverse := get_window().get_final_transform().affine_inverse()
+			var allowed := Rect2(Vector2.ZERO, extent).intersection(inverse * Rect2(safe))
+			if allowed.has_area():
+				var x := maxf(allowed.position.x, extent.x - allowed.end.x) + 4.0
+				var y := maxf(allowed.position.y, extent.y - allowed.end.y) + 4.0
+				canvas.offset_left = x
+				canvas.offset_right = -x
+				canvas.offset_top = y
+				canvas.offset_bottom = -y
+	_fit_menu()
+
+func _fit_menu() -> void:
+	if not is_instance_valid(view):
 		return
-	var extent := get_window().get_visible_rect().size
-	var logical := Rect2(Vector2.ZERO, extent)
-	var safe := DisplayServer.get_display_safe_area()
-	if safe.has_area():
-		var inverse := get_window().get_final_transform().affine_inverse()
-		var visible: Rect2 = inverse * Rect2(safe)
-		if logical.intersects(visible):
-			logical = logical.intersection(visible)
-	logical = logical.grow(-9.0)
-	var factor := clampf(minf(logical.size.x / extent.x, logical.size.y / extent.y), 0.50, 1.0)
-	canvas.scale = Vector2.ONE * factor
-	canvas.position = logical.get_center() - extent * factor * 0.5
+	var factor := minf(canvas.size.x / FRAME.x, canvas.size.y / FRAME.y)
+	view.scale = Vector2.ONE * factor
+	view.position = (canvas.size - FRAME * factor) * 0.5
 
 func _header(index: String, name: String, description: String) -> void:
-	Palette.label(view, Rect2(56, 29, 840, 33), "NEON RIFT  /  " + index, 14, Palette.CYAN, Palette.MONO)
-	Palette.label(view, Rect2(53, 71, 1140, 78), name, 60, Palette.TEXT, Palette.HEAD)
-	if description != "":
-		Palette.label(view, Rect2(57, 151, 1155, 35), description, 17, Palette.MUTED)
+	Palette.label(view, Rect2(57, 27, 840, 27), index, 15, Palette.AMBER, Palette.BOLD)
+	Palette.label(view, Rect2(54, 61, 1140, 79), name, 57, Palette.TEXT, Palette.HEAD)
+	if not description.is_empty():
+		Palette.label(view, Rect2(57, 143, 1155, 36), description, 17, Palette.MUTED)
+	Palette.rule(view, Rect2(57, 185, 1166, 1))
 
 func _make_backdrop() -> void:
 	if is_instance_valid(backdrop):
 		return
-	backdrop = Arena.new()
+	backdrop = Depot.new()
 	backdrop.is_backdrop = true
 	add_child(backdrop)
 	title_cam = Camera3D.new()
 	title_cam.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
-	title_cam.position = Vector3(8.5, 3.8, 14.6)
+	title_cam.position = Vector3(12.9, 3.31, 18.6)
 	title_cam.fov = 64.0
 	title_cam.far = 160.0
 	add_child(title_cam)
-	title_cam.look_at_from_position(title_cam.position, Vector3(-5.4, 2.58, -0.8), Vector3.UP)
+	title_cam.look_at_from_position(title_cam.position, Vector3(-3.5, 2.82, -5.6), Vector3.UP)
 	title_cam.current = true
 
 func _drop_backdrop() -> void:
@@ -203,46 +222,59 @@ func menu() -> void:
 	_free_cursor()
 	Sounds.duck = false
 	Sounds.set_track("menu")
-	Sounds.set_region("reactor")
+	Sounds.set_region("skyline")
 	_new_screen("menu", "home")
 	var mark := TextureRect.new()
 	mark.texture = ICON
 	mark.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	mark.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Palette.at(view, mark, Rect2(55, 37, 42, 42))
-	Palette.label(view, Rect2(109, 37, 455, 43), "PROGRAMME DE CONFINEMENT  /  07", 14, Art.palette().ui, Palette.MONO)
-	Palette.label(view, Rect2(46, 104, 635, 115), "NEON RIFT.", 91, Palette.TEXT, Palette.BRAND)
-	Palette.rule(view, Rect2(58, 217, 41, 3), Palette.CYAN)
-	Palette.label(view, Rect2(112, 197, 455, 40), "C O M P L E T E   R E F O R G E   /   3", 16, Art.palette().ui, Palette.MONO)
-	Palette.label(view, Rect2(58, 253, 488, 48), "Reprenez le contrôle du réacteur.", 21, Palette.TEXT, Palette.BOLD)
-	var start := Palette.button(view, Rect2(58, 322, 386, 59), "01     JOUER                                          ›", select_session, true)
-	Palette.button(view, Rect2(58, 391, 187, 49), "ENTRAÎNEMENT", func(): begin("training", selected_difficulty, selected_map))
-	Palette.button(view, Rect2(255, 391, 189, 49), "Coop · 2–4", open_lobby)
-	Palette.button(view, Rect2(58, 450, 187, 44), "Arsenal", open_hub.bind("arsenal"))
-	Palette.button(view, Rect2(255, 450, 189, 44), "Boutique", open_hub.bind("shop"))
-	Palette.button(view, Rect2(58, 503, 187, 44), "Profil", show_profile.bind("profile"))
-	Palette.button(view, Rect2(255, 503, 189, 44), "Contrats", show_profile.bind("contracts"))
-	Palette.button(view, Rect2(58, 556, 187, 44), "Classements", show_profile.bind("records"))
-	Palette.button(view, Rect2(255, 556, 189, 44), "Paramètres", open_settings.bind("menu"))
-	Palette.button(view, Rect2(58, 609, 187, 44), "Crédits", credits)
-	Palette.button(view, Rect2(255, 609, 189, 44), "Quitter", _quit)
-	Palette.button(view, Rect2(937, 408, 285, 48), "FPS CLASSIQUE    ›", open_classic, true)
+	Palette.at(view, mark, Rect2(56, 46, 48, 48))
+	Palette.label(view, Rect2(118, 45, 278, 48), VERSION_LABEL, 16, Palette.MUTED, Palette.BOLD)
+	Palette.label(view, Rect2(52, 122, 615, 113), "RIFLE ARENA", 104, Palette.TEXT, Palette.BRAND)
+	Palette.label(view, Rect2(58, 245, 475, 38), "FPS d’arène  •  Solo et coop", 22, Palette.MUTED)
+	var start := Palette.button(view, Rect2(57, 306, 355, 66), "Jouer", play_menu, true)
+	start.add_theme_font_size_override("font_size", 23)
+	Palette.button(view, Rect2(57, 384, 355, 52), "Arsenal", open_hub.bind("arsenal"))
+	Palette.button(view, Rect2(57, 447, 355, 52), "Progression", show_profile.bind("profile"))
+	Palette.button(view, Rect2(57, 510, 355, 52), "Paramètres", open_settings.bind("menu"))
+	Palette.button(view, Rect2(57, 594, 157, 45), "Crédits", credits)
+	Palette.button(view, Rect2(225, 594, 187, 45), "Quitter", _quit)
+	var plate := Palette.panel(view, Rect2(1004, 571, 216, 69), Color(0.093, 0.106, 0.088, 0.76))
+	Palette.label(plate, Rect2(13, 7, 189, 22), "ARÈNE", 12, Palette.MUTED, Palette.BOLD)
+	Palette.label(plate, Rect2(12, 27, 191, 31), Catalog.MAPS.skyline.name, 22, Palette.TEXT, Palette.HEAD)
 	start.grab_focus()
-	Palette.panel(view, Rect2(937, 514, 285, 103), Color(0.035, 0.079, 0.095, 0.88))
-	Palette.rule(view, Rect2(937, 514, 44, 2), Palette.AMBER)
-	Palette.label(view, Rect2(954, 523, 246, 28), "SECTEUR 07  /  VUE DIRECTE", 12, Palette.AMBER, Palette.MONO)
-	Palette.label(view, Rect2(954, 549, 250, 46), "Reactor Court", 30, Palette.TEXT, Palette.HEAD)
-	Palette.label(view, Rect2(943, 473, 278, 31), "NIVEAU %02d  ·  %d PIÈCES" % [
-		Profile.level(Prefs.profile.data.xp), Prefs.profile.data.coins], 15, Palette.AMBER, Palette.MONO, HORIZONTAL_ALIGNMENT_RIGHT)
-	var styles := OptionButton.new()
-	styles.accessibility_name = "Style du monde"
-	for style in Art.LABELS:
-		styles.add_item(style)
-	styles.select(Prefs.values.art_style)
-	styles.item_selected.connect(func(i: int): Prefs.change_value("art_style", i))
-	Palette.at(view, styles, Rect2(937, 624, 285, 36))
-	_footer(("COMMANDES TACTILES" if Prefs.mobile() else "CLAVIER + SOURIS") + "  /  PROGRESSION LOCALE")
+	_footer("Commandes tactiles" if Prefs.mobile() else "Clavier et souris")
+
+func play_menu() -> void:
+	_new_screen("play")
+	_header("Menu", "Jouer", "Choisissez votre type de partie.")
+	_play_card(Rect2(57, 217, 574, 168), "Match contre les bots",
+		"Chacun pour soi, équipes, capture et domination.", "reactor", open_classic, true)
+	_play_card(Rect2(649, 217, 574, 168), "Survie",
+		"Vagues, défis, boss et ravitaillement.", "cryo", select_session)
+	_play_card(Rect2(57, 403, 574, 168), "Entraînement",
+		"Essayez les huit armes sur des cibles.", "district",
+		func(): begin("training", selected_difficulty, selected_map))
+	_play_card(Rect2(649, 403, 574, 168), "Coop",
+		"Hébergez ou rejoignez une partie de 2 à 4.", "skyline", open_lobby)
+	Palette.button(view, Rect2(57, 593, 166, 53), "Retour", menu)
+	_footer("Parties locales et salons privés")
+
+func _play_card(rect: Rect2, title: String, description: String, map_id: String, action: Callable, featured := false) -> void:
+	var button := Palette.button(view, rect, "", action)
+	button.accessibility_name = title
+	var picture := TextureRect.new()
+	picture.texture = load("res://assets/maps/%s.jpg" % map_id)
+	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	Palette.at(button, picture, Rect2(351, 12, 211, 144))
+	Palette.label(button, Rect2(22, 32, 320, 47), title, 31, Palette.TEXT, Palette.HEAD)
+	Palette.label(button, Rect2(23, 82, 303, 55), description, 16, Palette.MUTED, Palette.BODY,
+		HORIZONTAL_ALIGNMENT_LEFT, true)
+	if featured:
+		button.grab_focus()
 
 func open_lobby() -> void:
 	_make_backdrop()
@@ -250,12 +282,12 @@ func open_lobby() -> void:
 	Sounds.duck = false
 	Sounds.set_track("menu")
 	_new_screen("lobby")
-	_header("SALLE DE COMMANDE", "Opération en coop", "Survie et Infini en équipe, sur le réseau local ou via l’IP de l’hôte.")
+	_header("Jouer", "Coop", "Jouez en équipe sur le réseau local ou via l’adresse de l’hôte.")
 	lobby = Lobby.new()
 	lobby.net = coop
-	lobby.back = menu
+	lobby.back = play_menu
 	view.add_child(lobby)
-	_footer("PROTOCOLE 02  /  ENET · UDP  /  PARTIES PRIVÉES")
+	_footer("2 à 4 joueurs")
 
 func leave_coop() -> void:
 	coop.stop()
@@ -314,10 +346,10 @@ func open_classic() -> void:
 	_make_backdrop()
 	_free_cursor()
 	_new_screen("classic")
-	_header("MATCH LOCAL", "FPS Classique", "Escarmouches sans vagues, objectifs et réapparitions.")
+	_header("Jouer", "Match contre les bots", "Choisissez une carte, un format et le nombre de bots.")
 	classic_setup = ClassicSetup.new()
 	classic_setup.build(view, last_map if not initial.is_empty() else selected_map,
-		last_difficulty if not initial.is_empty() else selected_difficulty, initial, _start_classic, menu)
+		last_difficulty if not initial.is_empty() else selected_difficulty, initial, _start_classic, play_menu)
 	_footer("SCORE LOCAL   /   LES RÈGLES DU MATCH DÉFINISSENT LE CLASSEMENT")
 
 func _start_classic(mode: String, difficulty: String, map_id: String, seed: int, rules: Dictionary) -> void:
@@ -330,19 +362,19 @@ func _mode_name(mode: String) -> String:
 
 func select_session() -> void:
 	_new_screen("select")
-	_header("SÉLECTION", "Protocoles de combat", "Choisissez une opération et la difficulté du secteur.")
+	_header("Jouer", "Survie et défis", "Choisissez le mode, la carte et la difficulté.")
 	mode_buttons.clear()
 	var index := 0
 	for kind in MODES:
-		var protocol := MODES[kind] as Dictionary
+		var mode := MODES[kind] as Dictionary
 		var rect := Rect2(57, 194 + index * 44, 438, 42)
 		var card := Palette.button(view, rect, "", _choose_mode.bind(kind))
-		card.accessibility_name = protocol.name
+		card.accessibility_name = mode.name
 		mode_buttons[kind] = card
-		Palette.label(card, Rect2(13, 0, 390, 23), protocol.name, 20, Palette.TEXT, Palette.HEAD)
-		Palette.label(card, Rect2(14, 21, 392, 20), protocol.line, 12, Palette.MUTED)
+		Palette.label(card, Rect2(13, 0, 390, 23), mode.name, 20, Palette.TEXT, Palette.HEAD)
+		Palette.label(card, Rect2(14, 21, 392, 20), mode.line, 12, Palette.MUTED)
 		index += 1
-	Palette.panel(view, Rect2(526, 213, 699, 405), Color("#10252d"))
+	Palette.panel(view, Rect2(526, 213, 699, 405), Color("#272b24"))
 	select_title = Palette.label(view, Rect2(551, 226, 387, 44), "", 33, Palette.TEXT, Palette.HEAD)
 	select_line = Palette.label(view, Rect2(552, 275, 387, 24), "", 13, Palette.CYAN, Palette.MONO)
 	select_copy = Palette.label(view, Rect2(552, 302, 376, 64), "", 15, Palette.MUTED,
@@ -375,7 +407,7 @@ func select_session() -> void:
 		)
 		Palette.at(view, maps, Rect2(881, 421, 319, 48))
 	else:
-		Palette.panel(view, Rect2(881, 421, 319, 48), Color("#172f36"))
+		Palette.panel(view, Rect2(881, 421, 319, 48), Color("#34382e"))
 		Palette.label(view, Rect2(894, 423, 291, 43), Catalog.MAPS[selected_map].name, 18, Palette.TEXT, Palette.BOLD)
 	select_map_copy = Palette.label(view, Rect2(552, 479, 638, 51), "", 14, Palette.MUTED,
 		Palette.BODY, HORIZONTAL_ALIGNMENT_LEFT, true)
@@ -385,9 +417,9 @@ func select_session() -> void:
 	seed_input.placeholder_text = "Graine facultative"
 	seed_input.max_length = 10
 	Palette.at(view, seed_input, Rect2(57, 612, 438, 43))
-	Palette.button(view, Rect2(57, 553, 133, 54), "Retour", menu)
+	Palette.button(view, Rect2(57, 553, 133, 54), "Retour", play_menu)
 	start_button = Palette.button(view, Rect2(205, 553, 290, 54), "DÉMARRER    ›", _start_selected, true)
-	Palette.button(view, Rect2(881, 623, 319, 35), "FPS Classique · partie personnalisée", open_classic)
+	Palette.button(view, Rect2(881, 623, 319, 44), "Match contre les bots", open_classic)
 	_refresh_selection()
 	mode_buttons[selected_mode].grab_focus()
 	_footer(_short_controls())
@@ -399,7 +431,7 @@ func _choose_mode(mode: String) -> void:
 func _refresh_selection() -> void:
 	for kind in mode_buttons:
 		var control: Button = mode_buttons[kind]
-		control.add_theme_stylebox_override("normal", Palette.box(Color("#1d3539") if kind == selected_mode else Palette.PANEL,
+		control.add_theme_stylebox_override("normal", Palette.box(Color("#3d3e32") if kind == selected_mode else Palette.PANEL,
 			Palette.CYAN if kind == selected_mode else Palette.LINE, 6))
 	var spec: Dictionary = MODES[selected_mode]
 	select_title.text = spec.name
@@ -484,10 +516,7 @@ func hud() -> void:
 	session.player.input_blocked = false
 	screen = "hud"
 	Sounds.duck = false
-	if is_instance_valid(view):
-		canvas.remove_child(view)
-		view.queue_free()
-		view = null
+	_drop_menu_view()
 	if not is_instance_valid(hud_panel):
 		hud_panel = Hud.new()
 		hud_panel.session = session
@@ -654,9 +683,9 @@ func pause() -> void:
 
 func _show_pause() -> void:
 	_new_screen("pause", "overlay")
-	_header("PAUSE", "Menu du pilote" if coop.in_match() else "Opération suspendue",
+	_header("En partie", "Pause",
 		"L’opération continue pour votre équipe." if coop.in_match() else "%s    /    %s" % [_mode_name(last_mode), Catalog.MAPS[last_map].name])
-	var resume := Palette.button(view, Rect2(57, 229, 440, 58), "REPRENDRE     ›", hud, true)
+	var resume := Palette.button(view, Rect2(57, 229, 440, 58), "Reprendre", hud, true)
 	Palette.button(view, Rect2(57, 298, 440, 51), "Paramètres", func(): open_settings("pause"))
 	Palette.button(view, Rect2(57, 359, 440, 51), "Commandes", controls)
 	if not coop.in_match():
@@ -667,17 +696,17 @@ func _show_pause() -> void:
 	Palette.button(view, Rect2(57, 481, 440, 51), "Quitter la partie" if coop.in_match() else "Retour au menu", func():
 		var copy := "Fermer le salon déconnectera tous les pilotes." if coop.in_match() and coop.hosting else "Votre progression dans la partie en cours sera effacée."
 		confirm("Retourner au menu ?", copy, menu, _show_pause))
-	Palette.panel(view, Rect2(534, 229, 690, 303), Color("#10252d"))
-	Palette.label(view, Rect2(559, 242, 620, 56), "ÉTAT DU PILOTE", 31, Palette.CYAN, Palette.HEAD)
+	Palette.panel(view, Rect2(534, 229, 690, 303), Color("#272b24"))
+	Palette.label(view, Rect2(559, 242, 620, 56), "Partie en cours", 31, Palette.CYAN, Palette.HEAD)
 	Palette.rule(view, Rect2(560, 307, 634, 1))
-	Palette.label(view, Rect2(560, 321, 634, 61), "INTÉGRITÉ  %03d    /    BOUCLIER  %03d" % [
+	Palette.label(view, Rect2(560, 321, 634, 61), "Santé %d    ·    Protection %d" % [
 		ceili(session.player.health), ceili(session.player.shield)], 17, Palette.TEXT, Palette.MONO)
-	Palette.label(view, Rect2(560, 384, 634, 67), "ÉQUIPEMENT   %s" % session.player.arsenal.spec().name.to_upper(), 17, Palette.TEXT, Palette.MONO)
-	Palette.label(view, Rect2(560, 451, 634, 54), "TEMPS DE COMBAT   %s" % Palette.clock(session.director.elapsed), 17, Palette.MUTED, Palette.MONO)
+	Palette.label(view, Rect2(560, 384, 634, 67), "Arme   %s" % session.player.arsenal.spec().name, 17, Palette.TEXT, Palette.MONO)
+	Palette.label(view, Rect2(560, 451, 634, 54), "Durée   %s" % Palette.clock(session.director.elapsed), 17, Palette.MUTED, Palette.MONO)
 	if last_mode == "training":
 		Palette.button(view, Rect2(534, 551, 344, 53), "Configurer les cibles", open_training)
 	resume.grab_focus()
-	_footer("ÉCHAP  /  REPRENDRE")
+	_footer("Échap pour reprendre" if not Prefs.mobile() else "")
 
 func open_training() -> void:
 	_new_screen("training_setup", "overlay")
@@ -708,7 +737,7 @@ func _training_option(title: String, x: int, labels: Array[String], selected: in
 func confirm(title: String, copy: String, accept: Callable, cancel: Callable) -> void:
 	_new_screen("confirm", "overlay")
 	confirmation_cancel = cancel
-	Palette.panel(view, Rect2(315, 211, 650, 296), Color("#10232c"), Palette.AMBER)
+	Palette.panel(view, Rect2(315, 211, 650, 296), Color("#282b24"), Palette.AMBER)
 	Palette.label(view, Rect2(345, 234, 588, 43), "VALIDATION DE L’OPÉRATION", 14, Palette.AMBER, Palette.MONO)
 	Palette.label(view, Rect2(343, 279, 595, 56), title, 38, Palette.TEXT, Palette.HEAD)
 	Palette.label(view, Rect2(346, 343, 565, 52), copy, 16, Palette.MUTED, Palette.BODY, HORIZONTAL_ALIGNMENT_LEFT, true)
@@ -745,7 +774,7 @@ func _close_settings() -> void:
 
 func controls() -> void:
 	_new_screen("controls", "overlay")
-	_header("COMMANDES", "Prendre les commandes", "Les touches affichées suivent votre profil clavier.")
+	_header("Pause", "Commandes", "Commandes tactiles" if Prefs.mobile() else "Les touches affichées suivent votre profil clavier.")
 	var lines := [
 		["Se déplacer", _movement_keys()],
 		["Tirer et viser à la lunette", "Clic gauche  /  Clic droit"],
@@ -755,15 +784,24 @@ func controls() -> void:
 		["Interagir et afficher le journal", "%s  /  %s" % [_key("interact"), _key("stats")]],
 		["Activer le gadget et inspecter l’arme", "%s  /  %s" % [_key("gadget"), _key("inspect")]],
 	]
-	Palette.panel(view, Rect2(57, 207, 1166, 335), Color("#10252d"))
+	if Prefs.mobile():
+		lines = [
+			["Se déplacer", "Joystick. Pousser vers l’avant à fond pour sprinter."],
+			["Orienter la caméra", "Glisser dans la moitié droite ou sur le bouton de tir."],
+			["Tirer et viser", "Garder le bouton de tir enfoncé. Toucher l’icône de visée pour basculer."],
+			["Sauter et glisser", "Toucher la flèche pour sauter. Glisser vers le bas pour s’accroupir."],
+			["Recharger et changer d’arme", "Toucher les munitions pour recharger, les flèches pour changer."],
+			["Utiliser le gadget", "Glisser la flèche de saut vers le côté."],
+		]
+	Palette.panel(view, Rect2(57, 207, 1166, 335), Color("#272b24"))
 	for i in lines.size():
 		var y := 217 + i * 44
-		Palette.label(view, Rect2(75, y, 567, 40), lines[i][0], 17, Palette.TEXT, Palette.BOLD)
-		Palette.label(view, Rect2(645, y, 555, 40), lines[i][1], 16, Palette.CYAN, Palette.MONO)
+		Palette.label(view, Rect2(75, y, 461, 40), lines[i][0], 17, Palette.TEXT, Palette.BOLD)
+		Palette.label(view, Rect2(538, y, 658, 40), lines[i][1], 15, Palette.CYAN, Palette.BODY, HORIZONTAL_ALIGNMENT_LEFT, true)
 		if i < lines.size() - 1:
 			Palette.rule(view, Rect2(75, y + 41, 1128, 1))
 	Palette.button(view, Rect2(57, 571, 247, 54), "Retour à la pause", _show_pause, true).grab_focus()
-	_footer("ÉCHAP  /  RETOUR")
+	_footer("" if Prefs.mobile() else "Échap pour revenir")
 
 func _result(victory: bool, owner: Node3D) -> void:
 	if not is_instance_valid(owner) or owner != session or coop.dedicated:
@@ -836,12 +874,12 @@ func _result(victory: bool, owner: Node3D) -> void:
 
 func credits() -> void:
 	_new_screen("credits")
-	_header("DOSSIER DE VOL", "Crédits", "NEON RIFT — ARENA  /  Version 3.0")
-	Palette.panel(view, Rect2(57, 225, 1167, 298), Color("#10252d"))
+	_header("DOSSIER DE VOL", "Crédits", "Rifle Arena · " + VERSION_LABEL)
+	Palette.panel(view, Rect2(57, 225, 1167, 298), Color("#272b24"))
 	var credit := [
 		["DÉVELOPPEMENT", "Conçu et réalisé avec Codex"],
 		["MOTEUR", "Godot Engine 4.6.3 · GDScript · Compatibility · licence MIT"],
-		["DIRECTION ARTISTIQUE ET AUDIO", "Arène, robots, équipements et sons originaux, générés pour le projet"],
+		["DÉCORS ET AUDIO", "Arènes, armes, personnages, textures et sons créés pour le jeu"],
 		["TYPOGRAPHIE", "Open Sans et DejaVu Sans Mono · licences incluses"],
 	]
 	for i in credit.size():
@@ -849,11 +887,11 @@ func credits() -> void:
 		Palette.label(view, Rect2(76, y, 365, 50), credit[i][0], 14, Palette.CYAN, Palette.MONO)
 		Palette.label(view, Rect2(451, y, 729, 50), credit[i][1], 17, Palette.TEXT)
 	Palette.button(view, Rect2(57, 556, 234, 56), "Retour au menu", menu, true).grab_focus()
-	_footer("RCT 07   /   FIN DU DOSSIER")
+	_footer("")
 
 func _short_controls() -> String:
 	if Prefs.mobile():
-		return "JOYSTICK  /  GLISSER POUR VISER  /  APPUYER POUR TIRER"
+		return "Joystick pour avancer  ·  Glisser à droite pour viser"
 	return "%s  /  SOURIS  /  ESPACE  /  MOLETTE  /  %s RECHARGE" % [_movement_keys(), _key("reload")]
 
 func _movement_keys() -> String:
@@ -892,10 +930,7 @@ func _quit() -> void:
 	coop.stop()
 	_drop_session()
 	_drop_backdrop()
-	if is_instance_valid(view):
-		canvas.remove_child(view)
-		view.queue_free()
-		view = null
+	_drop_menu_view()
 	Sounds.stop_all()
 	await get_tree().create_timer(0.14, true, false, true).timeout
 	get_tree().quit()
@@ -911,7 +946,8 @@ func _back() -> void:
 		"hud": pause()
 		"pause": hud()
 		"upgrade": _leave_intermission()
-		"select", "classic", "result", "credits", "hub", "profile", "lobby", "career": menu()
+		"select", "classic", "lobby": play_menu()
+		"play", "result", "credits", "hub", "profile", "career": menu()
 		"touch_editor": open_settings(options_origin)
 		"controls", "training_setup": _show_pause()
 		"settings":
@@ -943,7 +979,7 @@ func show_profile(page := "profile", notice := "") -> void:
 	var data: Dictionary = Prefs.profile.data
 	var title: String = "Contrats locaux" if page == "contracts" else ("Classements locaux" if page == "records" else data.name)
 	_header("DOSSIER PILOTE", title, "NIVEAU %02d   ·   %d XP   ·   %d PIÈCES" % [Profile.level(data.xp), data.xp, data.coins])
-	Palette.panel(view, Rect2(57, 207, 1166, 361), Color("#142730"))
+	Palette.panel(view, Rect2(57, 207, 1166, 361), Color("#282b24"))
 	if page == "contracts":
 		var row := 0
 		for id in Profile.CONTRACTS:
@@ -994,7 +1030,7 @@ func show_profile(page := "profile", notice := "") -> void:
 	else:
 		var stats: Dictionary = data.stats
 		var lines := [
-			"%d opérations   /   %d victoires   /   %d robots" % [stats.runs, stats.wins, stats.kills],
+			"%d parties   ·   %d victoires   ·   %d neutralisations" % [stats.runs, stats.wins, stats.kills],
 			"Record personnel  ·  vague %d   /   %d boss neutralisés" % [stats.best_wave, stats.bosses],
 			"Précision  ·  %d %%   /   %d tirs   /   %d CR dépensés" % [
 				roundi(100.0 * stats.hits / maxi(1, stats.shots)), stats.shots, stats.spent],
