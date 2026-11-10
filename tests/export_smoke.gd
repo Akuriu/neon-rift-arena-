@@ -6,7 +6,7 @@ func _initialize() -> void:
 	call_deferred("run")
 
 func run() -> void:
-	check(ProjectSettings.get_setting("application/config/version") == "2.0.0", "Version exportée 2.0.0")
+	check(ProjectSettings.get_setting("application/config/version") == "3.0.0", "Version exportée 3.0.0")
 	var app = load("res://scenes/App.tscn").instantiate()
 	root.add_child(app)
 	check(app.screen == "menu" and app.coop != null, "Scène d’entrée et gestionnaire coop dans le paquet")
@@ -28,7 +28,12 @@ func run() -> void:
 	check(stage.shots > 0 and stage.player.arsenal.scope > 0.95, "Le paquet tire et ouvre sa lunette")
 	Input.action_release("ads")
 	Input.action_release("fire")
-	check(root.get_node("Sounds").bank.size() == 41, "41 échantillons audio chargés depuis le paquet")
+	check(root.get_node("Sounds").bank.size() == 45, "45 échantillons audio chargés depuis le paquet")
+	app.begin("domination", "discovery", "station", 882, "", false, {"bots": 4})
+	for frame in 185:
+		await physics_frame
+	check(app.session.classic.zones.size() == 3 and app.session.units.size() == 4,
+		"Domination, bots et carte Transit Hall chargés depuis le paquet")
 	if failures == 0:
 		await app._quit()
 	else:

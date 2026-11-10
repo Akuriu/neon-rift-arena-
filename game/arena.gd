@@ -2,6 +2,7 @@ extends Node3D
 
 const Fabric := preload("res://game/fabric.gd")
 const Routes := preload("res://game/routes.gd")
+const Scenery := preload("res://art/scenery.gd")
 const FONT := preload("res://assets/fonts/OpenSans-CondBold.ttf")
 const START := Vector3(0, 0.06, 18.0)
 const TERMINAL := Vector3(3.2, 1.0, 17.0)
@@ -26,10 +27,15 @@ var batches := Fabric.Batch.new()
 var structure: Node3D
 var collision: StaticBody3D
 var sun: DirectionalLight3D
+var atmosphere: Environment
+var dome: ShaderMaterial
+var daylight: Node3D
+var air: CPUParticles3D
 var deck_surface: ShaderMaterial
 var turbine: Node3D
 var sleeve: Node3D
 var is_backdrop := false
+var emergency := false
 var map_id := "reactor"
 var start_at := START
 var terminal_at := TERMINAL
@@ -37,11 +43,13 @@ var half_size := HALF
 var practice_points: Array[Vector3] = [
 	Vector3(-4.1, 0.05, 9.9), Vector3(0, 0.05, 7.2), Vector3(7.0, 0.05, 4.6), Vector3(-11.9, 0.05, -4.5),
 ]
+var control_points: Array[Vector3] = [Vector3(-14, 0.06, 10), Vector3(0, 0.06, 7), Vector3(13, 0.06, -10)]
 
 func _ready() -> void:
 	name = {"reactor": "ReactorCourt", "skyline": "SkylineDepot", "cryo": "CryoFoundry"}.get(map_id, "Arena")
 	structure = Node3D.new()
 	structure.name = "Architecture"
+	batches.world_materials = true
 	add_child(structure)
 	if not is_backdrop:
 		collision = StaticBody3D.new()
@@ -50,9 +58,13 @@ func _ready() -> void:
 	_light()
 	_build_layout()
 	batches.commit(structure)
+	if map_id != "station":
+		daylight = Scenery.build(self)
 	if not is_backdrop:
 		routes.setup(footprints, half_size)
 	apply_quality()
+	Art.changed.connect(apply_art)
+	apply_art()
 
 func _build_layout() -> void:
 	_deck()
@@ -66,7 +78,12 @@ func apply_quality() -> void:
 	sun.shadow_enabled = Prefs.values.quality in [1, 2]
 	sun.directional_shadow_max_distance = 47.0 if Prefs.values.quality == 2 else 28.0
 	if is_instance_valid(deck_surface):
-		deck_surface.set_shader_parameter("low_detail", Prefs.values.quality == 3)
+		deck_surface.set_shader_parameter("low_detail", Prefs.values.quality in [0, 3])
+	dome.set_shader_parameter("low_detail", Prefs.values.quality in [0, 3])
+	atmosphere.fog_enabled = Prefs.values.fog and Prefs.values.quality in [1, 2]
+	if is_instance_valid(daylight):
+		daylight.visible = Prefs.values.art_style != 1 and Prefs.values.quality != 3
+	_apply_weather()
 
 func _process(delta: float) -> void:
 	if is_instance_valid(turbine):
@@ -74,35 +91,66 @@ func _process(delta: float) -> void:
 		sleeve.rotate_y(-delta * 0.53)
 
 func _light() -> void:
-	var sunrise := map_id == "skyline"
-	var cold := map_id == "cryo"
 	var world := WorldEnvironment.new()
-	var atmosphere := Environment.new()
+	atmosphere = Environment.new()
 	atmosphere.background_mode = Environment.BG_COLOR
-	atmosphere.background_color = Color("#22323f")
 	atmosphere.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	atmosphere.ambient_light_color = Color("#baccfa") if sunrise else Color("#c9e6ed")
-	atmosphere.ambient_light_energy = 0.79
+	atmosphere.fog_sky_affect = 0.0
 	world.environment = atmosphere
 	add_child(world)
-	var dome := ShaderMaterial.new()
+	dome = ShaderMaterial.new()
 	dome.shader = preload("res://assets/art/horizon.gdshader")
-	if cold:
-		dome.set_shader_parameter("zenith", Color("#162c46"))
-		dome.set_shader_parameter("haze", Color("#739eb1"))
-	if sunrise:
-		dome.set_shader_parameter("zenith", Color("#353b59"))
-		dome.set_shader_parameter("haze", Color("#c88e7d"))
-		dome.set_shader_parameter("sun_tint", Color("#eeb491"))
-	Fabric.place(structure, Fabric.orb(116.0, 232.0, 32), dome, Vector3.ZERO, Vector3.ZERO, false)
+	Fabric.place(structure, Fabric.orb(116.0, 232.0, 28), dome, Vector3.ZERO, Vector3.ZERO, false)
 	sun = DirectionalLight3D.new()
 	sun.name = "Sun"
-	sun.rotation_degrees = Vector3(-27, 37, 0) if sunrise else Vector3(-46, -28, 0)
-	sun.light_color = Color("#c4eeff") if cold else (Color("#ffd0a4") if sunrise else Color("#ffe5c8"))
-	sun.light_energy = 1.13 if sunrise else 1.08
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-	sun.shadow_bias = 0.11
+	sun.shadow_bias = 0.09
+	sun.shadow_normal_bias = 0.72
 	add_child(sun)
+
+func apply_art() -> void:
+	var colors: Dictionary = Art.world(map_id)
+	atmosphere.background_color = colors.horizon
+	atmosphere.ambient_light_color = colors.ambient
+	atmosphere.ambient_light_energy = 0.67 if Prefs.values.art_style == 1 else 0.78
+	atmosphere.fog_enabled = Prefs.values.fog and Prefs.values.quality in [1, 2]
+	atmosphere.fog_density = colors.mist
+	atmosphere.fog_light_color = colors.horizon
+	dome.set_shader_parameter("zenith", colors.sky)
+	dome.set_shader_parameter("haze", colors.horizon)
+	dome.set_shader_parameter("sun_tint", colors.sun)
+	dome.set_shader_parameter("cloud_amount", [0.34, 0.07, 0.19, 0.30][Prefs.values.art_style])
+	sun.rotation_degrees = colors.angle
+	sun.light_color = colors.sun
+	sun.light_energy = colors.power * (0.82 if emergency else 1.0)
+	if emergency:
+		sun.light_color = colors.sun.lerp(Color("#f6c2a8"), 0.30)
+	dome.set_shader_parameter("sun_direction", sun.basis.z)
+	if is_instance_valid(deck_surface):
+		deck_surface.set_shader_parameter("base_color", colors.floor)
+		deck_surface.set_shader_parameter("groove_color", colors.seam)
+		deck_surface.set_shader_parameter("ground_path", map_id == "grove" and Prefs.values.art_style != 1)
+	if is_instance_valid(daylight):
+		daylight.visible = Prefs.values.art_style != 1 and Prefs.values.quality != 3
+	for child in structure.get_children():
+		if child is Label3D and child.has_meta("original_ink"):
+			var original: Color = child.get_meta("original_ink")
+			child.modulate = original if Prefs.values.art_style == 1 else original.lerp(colors.dark, 0.62)
+	_apply_weather()
+
+func alert_lighting(enabled: bool) -> void:
+	if enabled != emergency:
+		emergency = enabled
+		apply_art()
+
+func _apply_weather() -> void:
+	var kind: String = Art.MAP_NOTES.get(map_id, Art.MAP_NOTES.reactor).weather
+	var enabled: bool = Prefs.values.weather and Prefs.values.quality != 3 and not is_backdrop and not kind.is_empty()
+	if enabled and not is_instance_valid(air):
+		air = Scenery.weather(self, kind == "snow")
+	if is_instance_valid(air):
+		air.emitting = enabled
+		air.visible = enabled
 
 func _deck() -> void:
 	var finish := ShaderMaterial.new()
@@ -225,13 +273,15 @@ func _reactor() -> void:
 		_box(Vector3(side * 13.55, 5.0, 0), Vector3(1.26, 1.20, 2.24), SLATE, false, Vector3.ZERO, 0.28)
 		_box(Vector3(side * 13.55, 4.76, 1.17), Vector3(0.63, 0.15, 0.08), GOLD, true)
 	turbine = Node3D.new()
+	turbine.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	turbine.position.y = 5.73
 	add_child(turbine)
 	sleeve = Node3D.new()
+	sleeve.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	sleeve.position.y = 3.53
 	add_child(sleeve)
-	Fabric.place(turbine, Fabric.ring(2.42, 0.12), Fabric.paint(CYAN, true), Vector3.ZERO, Vector3(0.16, 0, 0.07), false)
-	Fabric.place(sleeve, Fabric.ring(2.84, 0.18), Fabric.paint(COPPER), Vector3.ZERO, Vector3(-0.16, 0, 0.09))
+	Fabric.place(turbine, Fabric.ring(2.42, 0.12), Art.surface(Fabric.paint(CYAN, true)), Vector3.ZERO, Vector3(0.16, 0, 0.07), false)
+	Fabric.place(sleeve, Fabric.ring(2.84, 0.18), Art.surface(Fabric.paint(COPPER)), Vector3.ZERO, Vector3(-0.16, 0, 0.09))
 	for i in 5:
 		var angle := TAU * i / 5.0
 		Fabric.place(turbine, Fabric.bevel(Vector3(0.48, 0.22, 0.43), 0.12),
@@ -356,6 +406,7 @@ func _stencil(text: String, at: Vector3, rot: Vector3, pixels: float, color: Col
 	label.outline_size = 0
 	label.pixel_size = pixels
 	label.modulate = color
+	label.set_meta("original_ink", color)
 	label.position = at
 	label.rotation = rot
 	structure.add_child(label)

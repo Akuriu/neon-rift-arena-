@@ -3,6 +3,7 @@ extends Node3D
 const Arena := preload("res://game/arena.gd")
 const Skyline := preload("res://game/skyline.gd")
 const Cryo := preload("res://game/maps/cryo.gd")
+const Frontiers := preload("res://game/maps/frontiers.gd")
 const Pilot := preload("res://scenes/Pilot.tscn")
 const Drone := preload("res://scenes/Drone.tscn")
 const Director := preload("res://game/wave_director.gd")
@@ -12,6 +13,9 @@ const Pickup := preload("res://game/pickup.gd")
 const Hazard := preload("res://game/hazard.gd")
 const Catalog := preload("res://game/catalog.gd")
 const Wallet := preload("res://game/economy/field_wallet.gd")
+const Match := preload("res://game/modes/classic.gd")
+const Rules := preload("res://game/modes/rules.gd")
+const Generator := preload("res://game/waves/generator.gd")
 signal intermission_updated
 
 const PRACTICE := ["scout", "sentinel", "specter", "bulwark"]
@@ -21,7 +25,9 @@ var player
 var net: Node
 var pilots := {}
 var wallets := {}
-var director: Director
+var director: Node
+var classic: Match
+var match_rules := {}
 var effects: Effects
 var projectiles: Node3D
 var projectile_bin: Node3D
@@ -57,6 +63,11 @@ var radio := ""
 var radio_time := 0.0
 var nearby: Node3D
 var drop_serial := 0
+var ray_parameters := PhysicsRayQueryParameters3D.new()
+var relay_progress := 0.0
+var relay_state := 0
+var training_options := {"targets": "moving", "distance": 0, "time": 0}
+var training_ended := false
 
 func _ready() -> void:
 	if run_seed < 0:
@@ -66,6 +77,7 @@ func _ready() -> void:
 	match map_id:
 		"skyline": arena = Skyline.new()
 		"cryo": arena = Cryo.new()
+		"bastion", "district", "grove", "station": arena = Frontiers.new(map_id)
 		_: arena = Arena.new()
 	add_child(arena)
 	effects = Effects.new()
@@ -84,16 +96,21 @@ func _ready() -> void:
 		player = add_pilot(1, {"name": Prefs.profile.data.name, "gear": pilot_gear()}, true)
 		wallet = wallets[1]
 	upgrades = player.modules
-	director = Director.new()
-	director.configure(mode, Catalog.DIFFICULTIES[difficulty], run_seed)
-	director.cap_override = 7 if Prefs.values.quality == 3 else 12
+	if Rules.LABELS.has(mode):
+		classic = Match.new()
+		director = classic
+		classic.configure(self, mode, match_rules)
+	else:
+		director = Director.new()
+		director.configure(mode, Catalog.DIFFICULTIES[difficulty], run_seed)
+		director.cap_override = 7 if Prefs.values.quality == 3 else 12
+		director.player_count = pilots.size()
+		director.spawn_requested.connect(_spawn)
+		director.wave_opened.connect(_wave_opened)
+		director.wave_secured.connect(_wave_secured)
 	add_child(director)
-	director.player_count = pilots.size()
 	if is_instance_valid(net) and not net.hosting:
 		director.set_physics_process(false)
-	director.spawn_requested.connect(_spawn)
-	director.wave_opened.connect(func(_wave): sound("wave"))
-	director.wave_secured.connect(_wave_secured)
 	director.finished.connect(_match_finished)
 	if mode == "training":
 		_reset_training()
@@ -114,7 +131,14 @@ func _physics_process(delta: float) -> void:
 		_scan_pickups(false)
 		return
 	_scan_pickups()
+	if relay_state == 1 and director.phase == Director.Phase.ACTIVE:
+		_tick_relay(delta)
 	if mode == "training":
+		if not training_ended and training_options.time > 0 and director.elapsed >= training_options.time:
+			training_ended = true
+			player.round_lock = true
+			player.arsenal.cancel_trigger()
+			show_radio("Exercice terminé · réarmez au terminal pour recommencer", 4.0)
 		for index in range(respawn_queue.size() - 1, -1, -1):
 			var entry := respawn_queue[index]
 			entry.left -= delta
@@ -130,6 +154,35 @@ func _match_finished(_victory: bool) -> void:
 		pilot.round_lock = true
 	for unit in units:
 		unit.set_physics_process(false)
+
+func _wave_opened(wave: int) -> void:
+	sound("wave")
+	var mutation: String = director.current_wave.get("mutation", "")
+	arena.alert_lighting(mutation == "alert")
+	if not mutation.is_empty():
+		show_radio(Generator.MODIFIERS[mutation], 2.6)
+	relay_state = 0
+	relay_progress = 0.0
+	if not is_instance_valid(net) and mode in ["survival", "short", "endless"] and wave % 4 == 3:
+		relay_state = 1
+		if mutation.is_empty():
+			show_radio("Option · stabilisez le relais près du terminal", 3.0)
+
+func _tick_relay(delta: float) -> void:
+	var ground := arena.terminal_at - Vector3.UP
+	var holding: bool = player.alive and player.position.distance_squared_to(ground) < 8.4
+	if holding:
+		for unit in units:
+			if unit.position.distance_squared_to(ground) < 9.0:
+				holding = false
+				break
+	relay_progress = move_toward(relay_progress, 6.0 if holding else 0.0, delta * (1.0 if holding else 0.18))
+	if relay_progress >= 6.0:
+		relay_state = 2
+		wallet.grant(48)
+		show_radio("Relais stabilisé · +48 CR", 2.7)
+		sound("upgrade")
+		effects.wave(ground + Vector3.UP * 0.065, Color("#b7dabc"), 2.9)
 
 func _spawn(kind: String) -> void:
 	var forced := spawn_misses >= 3
@@ -191,13 +244,19 @@ func _spawn_in_view(at: Vector3, camera: Camera3D) -> bool:
 				return true
 	return false
 
-func spawn_unit(kind: String, at: Vector3, practice := false, mirror_id := -1) -> CharacterBody3D:
+func spawn_unit(kind: String, at: Vector3, practice := false, mirror_id := -1, slot := -1) -> CharacterBody3D:
 	var unit := Drone.instantiate()
 	unit.kind = kind
-	unit.tuning = Catalog.DIFFICULTIES[difficulty].duplicate()
-	if director.current_wave.get("mutation") == "rush" and kind not in Catalog.BOSSES:
-		unit.tuning.tempo *= 0.85
-	unit.target = nearest_pilot(at)
+	unit.tuning = (director.tuning if mode == "relax" else Catalog.DIFFICULTIES[difficulty]).duplicate()
+	if kind not in Catalog.BOSSES:
+		var mutation: String = director.current_wave.get("mutation", "")
+		if mutation == "rush" or director.current_wave.get("risk", false):
+			unit.tuning.tempo *= 0.85
+		if mutation == "armor":
+			unit.tuning.hp *= 1.15
+	unit.target = nearest_pilot(at) if slot < 0 else null
+	unit.arena_slot = slot
+	unit.arena_side = classic.side_for(slot) if slot >= 0 else 1
 	unit.replica = mirror_id >= 0
 	unit.replica_at = at
 	unit.session = self
@@ -215,12 +274,18 @@ func spawn_unit(kind: String, at: Vector3, practice := false, mirror_id := -1) -
 		boss = unit
 		show_radio("%s détecté" % Catalog.UNITS[kind].name, 3.2)
 		sound("boss", at)
+		Sounds.set_track("pressure")
 	return unit
 
 func _on_defeated(unit: CharacterBody3D, points: int) -> void:
 	units.erase(unit)
 	effects.sparks(unit.center(), unit.spec.tint, 30, 6.0)
 	sound("kill", unit.center())
+	if is_instance_valid(classic):
+		classic.eliminated(unit, unit.last_attacker)
+		if director.phase == Director.Phase.ACTIVE and random.randf() < 0.20:
+			_drop_pickup("energy", unit.position)
+		return
 	if mode != "training" and director.phase in [Director.Phase.ACTIVE, Director.Phase.TRIAL]:
 		var major: bool = unit.kind in Catalog.BOSSES
 		boss_kills += int(major)
@@ -235,6 +300,29 @@ func _on_defeated(unit: CharacterBody3D, points: int) -> void:
 	if director.kills % 3 == 0 or unit.kind in Catalog.BOSSES:
 		var kind := "repair" if director.kills % 2 == 0 or unit.kind == "elite" else "energy"
 		_drop_pickup(kind, unit.global_position)
+
+func match_spawn() -> Vector3:
+	var members := classic.combatants()
+	var chosen := Vector3.INF
+	var weight := -INF
+	for at in arena.spawn_points + arena.practice_points + [arena.start_at]:
+		var distance := 2000.0
+		for actor in members:
+			distance = minf(distance, actor.position.distance_squared_to(at))
+		if distance < 4.2:
+			continue
+		var visible: bool = player.alive and _spawn_in_view(at, player.head)
+		var value := sqrt(distance) - (6.0 if visible else 0.0) + random.randf() * 2.5
+		if value > weight:
+			weight = value
+			chosen = at
+	return chosen
+
+func target_for(unit: CharacterBody3D) -> CharacterBody3D:
+	return classic.target_for(unit) if is_instance_valid(classic) else nearest_pilot(unit.position)
+
+func can_damage(attacker: CharacterBody3D, victim: Object) -> bool:
+	return victim is CharacterBody3D and (not is_instance_valid(classic) or classic.enemies(attacker, victim))
 
 func record_shot(weapon: String, actor: CharacterBody3D = null) -> void:
 	if not is_instance_valid(actor):
@@ -253,7 +341,10 @@ func pilot_gear() -> Dictionary:
 
 func fire_rays(origin: Vector3, directions: Array[Vector3], data: Dictionary, muzzle: Vector3, boost: float,
 		actor: CharacterBody3D = null) -> void:
+	if not is_instance_valid(actor):
+		actor = player
 	record_shot(data.id, actor)
+	var emission := muzzle if ray(origin, muzzle, 1).is_empty() else origin
 	var weak := false
 	var total := 0.0
 	for direction in directions:
@@ -262,21 +353,21 @@ func fire_rays(origin: Vector3, directions: Array[Vector3], data: Dictionary, mu
 		if not result.is_empty():
 			end = result.position
 			var damage: float = 0.0
-			if result.collider.has_method("take_hit"):
+			if result.collider.has_method("take_hit") and can_damage(actor, result.collider):
 				var falloff := 1.0 if directions.size() == 1 else clampf(1.22 - origin.distance_to(end) * 0.049, 0.22, 1.0)
 				var unit = result.collider
 				var focus: bool = data.mode in ["rail", "lance"] and absf(end.y - unit.center().y - 0.20) < 0.28
-				damage = unit.take_hit(data.damage * falloff * boost * (1.22 if focus else 1.0), end, direction)
+				damage = unit.take_hit(data.damage * falloff * boost * (1.22 if focus else 1.0), end, direction, actor)
 				weak = weak or (focus and damage > 0.0)
 			total += damage
-			effects.sparks(end + result.normal * 0.04, data.tint if damage > 0.0 else Color("#d9bdae"), 6, 2.2)
-		var from := muzzle if origin.distance_squared_to(end) > origin.distance_squared_to(muzzle) else origin
+			effects.impact(end, result.normal, data.tint, map_id, damage > 0.0)
+		var from := emission if origin.distance_squared_to(end) > origin.distance_squared_to(emission) else origin
 		var beam_width := 0.095 if data.mode == "lance" else (0.042 if directions.size() == 1 else 0.029)
 		effects.beam(from, end, data.tint, beam_width, 0.19 if data.mode in ["rail", "lance"] else 0.105)
 		if is_instance_valid(net):
 			net.visual("beam", from, end, data.tint, beam_width, 0.13)
 	if Prefs.values.flashes > 0.05:
-		effects.sparks(muzzle, data.tint, roundi(7.0 * Prefs.values.flashes), 2.2)
+		effects.sparks(emission, data.tint, roundi(7.0 * Prefs.values.flashes), 2.2)
 	_confirm_hit(total, weak, actor)
 
 func _confirm_hit(total: float, weak := false, actor: CharacterBody3D = null) -> void:
@@ -325,26 +416,30 @@ func recycle_bolt(bolt: Node3D) -> void:
 	bolt.reparent(projectile_bin, false)
 
 func projectile_impact(bolt: Node3D, collider: Object, at: Vector3, direction: Vector3) -> void:
+	var shooter: CharacterBody3D = bolt.shooter if is_instance_valid(bolt.shooter) else null
 	if not bolt.friendly:
-		if is_instance_valid(collider) and collider in pilots.values():
-			collider.take_damage(bolt.damage, at - direction * 2.0)
+		if is_instance_valid(collider) and can_damage(shooter, collider):
+			if collider.has_method("take_damage"):
+				collider.take_damage(bolt.damage, at - direction * 2.0, shooter)
+			elif is_instance_valid(classic) and collider.has_method("take_hit"):
+				collider.take_hit(bolt.damage, at, direction, shooter)
 		effects.sparks(at - direction * 0.055, bolt.tint, 9, 2.65)
 		return
 	var sum := 0.0
-	var shooter: CharacterBody3D = bolt.shooter
-	if is_instance_valid(collider) and collider.has_method("take_hit"):
-		sum += collider.take_hit(bolt.damage, at, direction)
+	if is_instance_valid(collider) and collider.has_method("take_hit") and can_damage(shooter, collider):
+		sum += collider.take_hit(bolt.damage, at, direction, shooter)
 	if bolt.splash > 0.0:
 		var blast := at - direction * 0.13
 		for unit in units.duplicate():
-			if unit == collider:
+			if unit == collider or not can_damage(shooter, unit):
 				continue
 			var center: Vector3 = unit.center()
 			var distance := center.distance_to(blast)
 			if distance < bolt.splash and ray(blast, center, 1).is_empty():
 				var fraction: float = lerpf(0.69, 0.25, distance / bolt.splash)
-				sum += unit.take_hit(bolt.damage * fraction, center, (center - blast).normalized())
+				sum += unit.take_hit(bolt.damage * fraction, center, (center - blast).normalized(), shooter)
 		effects.sparks(blast, bolt.tint, 30, 6.4)
+		effects.wave(blast, bolt.tint, bolt.splash)
 		for index in 8:
 			var angle := index * TAU / 8.0
 			var end: Vector3 = blast + Vector3(sin(angle), 0.16, cos(angle)) * bolt.splash * 0.75
@@ -378,9 +473,10 @@ func telegraph(unit: CharacterBody3D) -> void:
 	effects.sparks(at, unit.spec.tint, 8, 1.3)
 	sound("tell", at)
 
-func ray(origin: Vector3, end: Vector3, mask: int) -> Dictionary:
+func ray(origin: Vector3, end: Vector3, mask: int, exclude: Array[RID] = []) -> Dictionary:
 	var query := PhysicsRayQueryParameters3D.create(origin, end, mask)
 	query.hit_from_inside = true
+	query.exclude = exclude
 	return get_world_3d().direct_space_state.intersect_ray(query)
 
 func choices(actor: CharacterBody3D = null) -> Array[int]:
@@ -417,6 +513,8 @@ func choose_upgrade(which: int, actor: CharacterBody3D = null) -> bool:
 	return true
 
 func _wave_secured(_wave: int, bonus: int) -> void:
+	arena.alert_lighting(false)
+	Sounds.set_track("combat")
 	grant_team(bonus)
 	module_selected = false
 	_clear_group(projectiles)
@@ -426,6 +524,7 @@ func _wave_secured(_wave: int, bonus: int) -> void:
 		pilot.round_lock = is_instance_valid(net)
 		if not pilot.alive:
 			pilot.position = arena.start_at + Vector3.RIGHT * (float(pilots.values().find(pilot)) * 1.25)
+			pilot.reset_physics_interpolation()
 			pilot.health = 64.0
 			pilot.alive = true
 			pilot.collision_layer = 2
@@ -437,12 +536,12 @@ func _wave_secured(_wave: int, bonus: int) -> void:
 		pilot.damage_lock = 0.65
 		pilot.arsenal.supply_at_intermission()
 
-func ready_next_wave() -> void:
+func ready_next_wave(risk := false) -> void:
 	if director.phase == Director.Phase.UPGRADE:
 		for pilot in pilots.values():
 			pilot.round_lock = false
 		director.player_count = pilots.size()
-		director.next_wave()
+		director.next_wave(risk and not is_instance_valid(net))
 
 func buy_offer(id: String, actor: CharacterBody3D = null, nonce := -1) -> Dictionary:
 	if not is_instance_valid(actor):
@@ -485,27 +584,71 @@ func result_data(victory: bool, actor: CharacterBody3D = null) -> Dictionary:
 	var bank: Wallet = wallets[actor.peer_id]
 	var fired: int = actor.stats.shots
 	var connected: int = actor.stats.hits
-	return {"score": director.score, "wave": director.cleared,
+	var report := {"score": director.score, "wave": director.cleared,
 		"seconds": roundi(director.elapsed), "kills": director.kills,
 		"accuracy": roundi(100.0 * connected / maxi(1, fired)), "victory": victory,
 		"bosses": boss_kills, "shots": fired, "hits": connected,
 		"credits": bank.earned, "spent": bank.spent, "mastery": actor.stats.mastery.duplicate(),
 		"participated": not is_instance_valid(net) or connected > 0 or actor.stats.support > 0.0}
+	if is_instance_valid(classic):
+		report.participated = classic.enemies_limit > 0 and (classic.kills > 0 or classic.objective_time >= 3.0)
+		report.objectives = floori(classic.objective_time)
+		report.rules = Rules.key(classic.options)
+		report.rival = classic.rival_score()
+		report.outcome = classic.outcome
+		report.deaths = classic.deaths
+	elif mode == "relax":
+		report.participated = false
+	report.seed = run_seed
+	return report
 
 func _reset_training() -> void:
 	for unit in units:
+		unit.set_physics_process(false)
+		unit.collision_layer = 0
 		unit.queue_free()
 	units.clear()
 	respawn_queue.clear()
 	_clear_group(projectiles)
+	var points := _training_points()
 	for index in PRACTICE.size():
-		spawn_unit(PRACTICE[index], arena.practice_points[index], true)
+		var kind: String = "skimmer" if training_options.targets == "air" else PRACTICE[index]
+		spawn_unit(kind, points[index], true)
+	training_ended = false
+	player.round_lock = false
 	director.live = units.size()
 	director.kills = 0
+	director.elapsed = 0.0
 	shots = 0
 	hits = 0
 	player.stats = {"shots": 0, "hits": 0, "support": 0.0, "mastery": {}}
 	player.arsenal.reset_supply()
+
+func configure_training(targets: String, distance: int, duration: int) -> void:
+	if mode != "training":
+		return
+	training_options = {"targets": targets if targets in ["fixed", "moving", "air"] else "moving",
+		"distance": distance if distance in [0, 8, 16, 24] else 0,
+		"time": duration if duration in [0, 30, 60, 90] else 0}
+	_reset_training()
+
+func _training_points() -> Array[Vector3]:
+	var points: Array[Vector3] = arena.practice_points.duplicate()
+	if training_options.distance == 0:
+		return points
+	var from := Vector2(arena.start_at.x, arena.start_at.z)
+	var applied := 0
+	for i in [0, -1, 1, -2, 2, -3, 3, -4, 4, -5, 5]:
+		var aim := Vector2(0.0, -training_options.distance).rotated(i * 0.19)
+		var at := from + aim
+		if not Rect2(-arena.half_size, arena.half_size * 2.0).grow(-2.0).has_point(at):
+			continue
+		if arena.routes.clear_segment(from, at, 0.70):
+			points[applied] = Vector3(at.x, 0.06, at.y)
+			applied += 1
+			if applied == points.size():
+				break
+	return points
 
 func _clear_group(group: Node3D) -> void:
 	for child in group.get_children():
@@ -545,7 +688,7 @@ func _scan_pickups(authority := true) -> void:
 		if mode == "training":
 			pickup_hint = "Réarmer et réinitialiser les cibles"
 		elif director.phase == Director.Phase.PREP:
-			pickup_hint = "Lancer le chrono" if mode == "trial" else "Lancer la vague maintenant"
+			pickup_hint = "Lancer le match" if is_instance_valid(classic) else ("Lancer le chrono" if mode == "trial" else "Lancer la vague maintenant")
 	if authority and is_instance_valid(net):
 		for pilot in living_pilots():
 			if pilot == player:
@@ -641,10 +784,19 @@ func find_patient(medic: CharacterBody3D) -> CharacterBody3D:
 	return patient
 
 func resolve_stall(unit: CharacterBody3D) -> void:
+	if is_instance_valid(classic):
+		var recovery := match_spawn()
+		if recovery.is_finite() and not _spawn_in_view(recovery, player.head):
+			unit.position = recovery
+			unit.reset_physics_interpolation()
+			unit.path.clear()
+			unit.decision = 0.0
+		return
 	var at := find_spawn(true)
 	if unit.relocations < 2 and at.is_finite():
 		unit.relocations += 1
 		unit.position = at
+		unit.reset_physics_interpolation()
 		unit.path.clear()
 		unit.velocity = Vector3.ZERO
 		unit.timer = 0.95
@@ -716,6 +868,9 @@ func restore_pilot(pilot: CharacterBody3D, state: Dictionary) -> void:
 	gun.supply_at_intermission()
 
 func _pilot_eliminated(_id: int) -> void:
+	if is_instance_valid(classic):
+		classic.eliminated(player, player.last_attacker)
+		return
 	if (not is_instance_valid(net) or net.hosting) and living_pilots().is_empty():
 		director.finish(false)
 

@@ -24,6 +24,7 @@ func _ready() -> void:
 func arm(at: Vector3, impulse: Vector3, power: float, color: Color, allied: bool,
 		radius: float, curve: float, owner_pilot: CharacterBody3D, equipment: String) -> void:
 	global_position = at
+	reset_physics_interpolation()
 	velocity = impulse
 	damage = power
 	tint = color
@@ -49,7 +50,12 @@ func _physics_process(delta: float) -> void:
 	velocity.y -= gravity * delta
 	var end := start + velocity * delta
 	var mask := (1 | 4) if friendly else (1 | 2)
-	var hit: Dictionary = session.ray(start, end, mask)
+	var exclude: Array[RID] = []
+	if is_instance_valid(session.classic) and not friendly:
+		mask = 1 | 2 | 4
+		if is_instance_valid(shooter):
+			exclude.append(shooter.get_rid())
+	var hit: Dictionary = session.ray(start, end, mask, exclude)
 	life -= delta
 	var heading := velocity.normalized()
 	if not hit.is_empty() or life <= 0.0:

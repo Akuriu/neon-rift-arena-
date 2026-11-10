@@ -7,8 +7,8 @@ if not defined RIFT_ENGINE if exist "%CD%\godot.exe" set "RIFT_ENGINE=%CD%\godot
 if not defined RIFT_ENGINE for %%G in ("%CD%\Godot_v*_win64.exe") do if exist "%%~fG" set "RIFT_ENGINE=%%~fG"
 if not defined RIFT_ENGINE for /f "delims=" %%G in ('where godot.exe 2^>nul') do if not defined RIFT_ENGINE set "RIFT_ENGINE=%%G"
 if not defined RIFT_ENGINE goto no_engine
-if not exist "%CD%\build\NeonRiftArenaV2.pck" goto no_pack
-start "" "%RIFT_ENGINE%" --main-pack "%CD%\build\NeonRiftArenaV2.pck"
+if not exist "%CD%\build\NeonRiftArenaV3.pck" goto no_pack
+start "" "%RIFT_ENGINE%" --main-pack "%CD%\build\NeonRiftArenaV3.pck"
 popd
 exit /b 0
 

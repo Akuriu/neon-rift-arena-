@@ -37,6 +37,7 @@ var cap_override := 12
 var current_wave := {}
 var milestone_reached := false
 var withdrawn := false
+var risk := false
 
 func configure(type: String, difficulty: Dictionary, world_seed := 1) -> void:
 	mode = type
@@ -45,9 +46,13 @@ func configure(type: String, difficulty: Dictionary, world_seed := 1) -> void:
 	cap = difficulty.cap
 	match mode:
 		"short": total_waves = 10
+		"relax":
+			total_waves = 5
+			tuning = Catalog.DIFFICULTIES.discovery.duplicate()
+			tuning.tempo = maxf(1.45, tuning.tempo)
 		"endless": total_waves = 0
 		"boss_rush": total_waves = Generator.BOSSES.size()
-		"training": phase = Phase.TRAINING
+		"training", "explore": phase = Phase.TRAINING
 
 func _physics_process(delta: float) -> void:
 	notice = maxf(0, notice - delta)
@@ -84,13 +89,22 @@ func open_wave() -> void:
 		cap = mini(int(tuning.cap), cap_override)
 	else:
 		phase = Phase.ACTIVE
-		current_wave = Generator.boss_rush(wave, run_seed) if mode == "boss_rush" else Generator.generate(wave, run_seed, tuning, player_count)
+		current_wave = preview_wave(wave)
+		if risk:
+			current_wave.wave_bonus += 60
+			current_wave.interval *= 0.85
+			current_wave["risk"] = true
 		pending.assign(current_wave.composition)
 		cap = mini(int(current_wave.cap), cap_override)
+		if mode == "relax":
+			cap = mini(cap, 4)
 	spawn_delay = 0.0
 	notice = 2.25
 	wave_opened.emit(wave)
 	changed.emit()
+
+func preview_wave(number: int) -> Dictionary:
+	return Generator.boss_rush(number, run_seed) if mode == "boss_rush" else Generator.generate(number, run_seed, tuning, player_count)
 
 func registered_spawn() -> void:
 	if pending.is_empty() or phase not in [Phase.ACTIVE, Phase.TRIAL]:
@@ -137,10 +151,11 @@ func _clear_wave() -> void:
 	else:
 		phase = Phase.UPGRADE
 
-func next_wave() -> void:
+func next_wave(extra_risk := false) -> void:
 	if phase != Phase.UPGRADE:
 		return
 	wave += 1
+	risk = extra_risk
 	clock = 2.6
 	combo = 0
 	combo_left = 0.0

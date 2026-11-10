@@ -11,7 +11,7 @@ const Director := preload("res://game/wave_director.gd")
 const Replication := preload("res://network/replication.gd")
 const Inputs := preload("res://game/player.gd")
 const Hazard := preload("res://game/hazard.gd")
-const PROTOCOL := 2
+const PROTOCOL := 3
 const PORT := 24562
 const MODES := ["survival", "short", "endless"]
 const SHOP_TIME := 55.0
@@ -264,7 +264,7 @@ func register(version: int, pilot_name: String, gear: Dictionary, passcode: Stri
 	if not handshakes.has(id) or roster.has(id) or gear.size() > 8 or pilot_name.length() > 50 or passcode.length() > 64 or resume.length() > 32:
 		return
 	if version != PROTOCOL:
-		_reject(id, "Version incompatible. Utilisez NEON RIFT 2.0.")
+		_reject(id, "Version incompatible. Utilisez NEON RIFT 3.0.")
 		return
 	if passcode != password_hash:
 		_reject(id, "Code du salon incorrect.")
@@ -316,7 +316,7 @@ func _gear(raw: Dictionary) -> Dictionary:
 	return {"slots": Arms.normalize_slots(raw.get("slots"), valid),
 		"gadget": gadget if gadget is String and gadget in ["gd_dash", "gd_aegis"] else "gd_dash",
 		"module": module if module is String and module in ["mod_cycle", "mod_rack"] else "",
-		"skin": skin if skin is String and skin in ["skin_copper", "skin_glacier"] else "",
+		"skin": skin if skin is String and skin in ["skin_copper", "skin_glacier", "skin_ash", "skin_aurora"] else "",
 		"reserve": raw.get("reserve", false) is bool and bool(raw.get("reserve", false))}
 
 func _broadcast_room() -> void:
@@ -597,7 +597,7 @@ func receive_frame(id: String, step: int, chunk: PackedByteArray, raw_size: int,
 		packed.append_array(incoming[fragment])
 	incoming.clear()
 	var value: Variant = bytes_to_var(packed.decompress(raw_size, FileAccess.COMPRESSION_DEFLATE))
-	if not value is Array or value.size() != 5:
+	if not Replication.valid(value):
 		return
 	if value[0][0] != stage.director.wave or value[0][10] != stage.director.phase:
 		return

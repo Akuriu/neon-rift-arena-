@@ -4,6 +4,7 @@ signal eliminated(drone: CharacterBody3D, points: int)
 
 const Catalog := preload("res://game/catalog.gd")
 const Models := preload("res://game/robot_models.gd")
+const Rig := preload("res://game/enemies/robot_motion.gd")
 
 enum State { ARRIVAL, CHASE, TELL, RECOVER, DEAD }
 var state := State.ARRIVAL
@@ -46,6 +47,11 @@ var relocations := 0
 var replica := false
 var replica_at := Vector3.ZERO
 var replica_yaw := 0.0
+var arena_slot := -1
+var arena_side := 1
+var last_attacker: CharacterBody3D
+var motion := Rig.new()
+var visual_wait := 0.0
 
 func major() -> bool:
 	return kind in ["warden", "colossus", "architect"]
@@ -74,14 +80,28 @@ func _ready() -> void:
 	hull = Node3D.new()
 	add_child(hull)
 	lens = Models.build(hull, kind, spec.tint)
+	motion.build(hull, kind)
 	paint = lens.material_override.duplicate()
 	paint.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
 	paint.emission_enabled = true
 	paint.emission = spec.tint
 	lens.material_override = paint
+	if arena_slot >= 0 and session.mode != "classic":
+		var badge := Label3D.new()
+		badge.position.y = 1.8
+		badge.font_size = 21
+		badge.pixel_size = 0.009
+		badge.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		badge.outline_size = 5
+		badge.text = "◇ ALLIÉ" if arena_side == 0 else "△ ADV."
+		badge.modulate = Color("#91c8f0") if arena_side == 0 else Color("#e9ad7e")
+		add_child(badge)
 
 func center() -> Vector3:
 	return global_position + Vector3.UP * (1.53 if major() else 1.02)
+
+func aim_point() -> Vector3:
+	return center()
 
 func _physics_process(delta: float) -> void:
 	if not alive:
@@ -91,10 +111,10 @@ func _physics_process(delta: float) -> void:
 	if replica:
 		position = position.lerp(replica_at, 1.0 - exp(-17.0 * delta))
 		rotation.y = lerp_angle(rotation.y, replica_yaw, 1.0 - exp(-17.0 * delta))
-		_animate()
+		_animate(delta)
 		return
 	if not is_instance_valid(target) or not target.alive:
-		target = session.nearest_pilot(position)
+		target = session.target_for(self)
 		if not is_instance_valid(target):
 			return
 	timer -= delta
@@ -127,21 +147,31 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	if not training:
 		_check_stall(delta, offset.length())
-	_animate()
+	_animate(delta)
 
-func _animate() -> void:
+func _animate(delta: float) -> void:
+	visual_wait += delta
+	if state not in [State.TELL, State.ARRIVAL] and hit_flash == 0.0 and is_instance_valid(session.player):
+		var distance: float = position.distance_squared_to(session.player.position)
+		if distance > 784.0 and visual_wait < (0.085 if Prefs.values.quality == 3 else 0.055):
+			return
+	var step := visual_wait
+	visual_wait = 0.0
 	var time := age + serial * 0.57
 	hull.position.y = sin(time * 4.3) * (0.12 if kind == "skimmer" else 0.065)
 	hull.rotation.z = lerpf(hull.rotation.z, -velocity.dot(global_basis.x) * 0.034, 0.19)
+	var prep := 1.0 - clampf(timer / maxf(0.01, spec.tell * tuning.tempo), 0.0, 1.0) if state == State.TELL else 0.0
+	hull.rotation.x = lerpf(hull.rotation.x, -prep * 0.13 + hit_flash * 0.065, 1.0 - exp(-14.0 * step))
+	motion.step(step, Vector2(velocity.x, velocity.z).length(), state == State.TELL, hit_flash, major())
 	hull.scale = Vector3.ONE * (0.55 + 0.45 * clampf(1.0 - timer / 0.48, 0.0, 1.0)) \
 		if state == State.ARRIVAL else Vector3.ONE
 	var warning := 0.0
 	if state == State.TELL:
 		warning = (0.65 + 0.33 * sin(time * 20.0)) * Prefs.values.flashes + 0.45
-	var base: Color = spec.tint
+	var base: Color = Art.effect_color(spec.tint)
 	if major() and phase > 1:
 		base = base.lerp(Color("#ff7297") if phase == 2 else Color("#fff0b2"), 0.52)
-	var energy: float = 0.42 + warning + hit_flash * Prefs.values.flashes
+	var energy: float = 0.19 + warning + hit_flash * Prefs.values.flashes
 	var color := base.lerp(Color.WHITE, hit_flash * 0.55)
 	if absf(lens_energy - energy) > 0.015:
 		lens_energy = energy
@@ -173,7 +203,7 @@ func _pursuit(delta: float, distance: float, toward: Vector3) -> Vector3:
 	if decision <= 0.0:
 		decision = (0.27 if distance < 20.0 else 0.47) + (serial % 4) * 0.043
 		if not training:
-			var nearest: CharacterBody3D = session.nearest_pilot(position)
+			var nearest: CharacterBody3D = session.target_for(self)
 			if is_instance_valid(nearest):
 				target = nearest
 		if kind == "medic" and not training and repairs_left > 0:
@@ -182,15 +212,22 @@ func _pursuit(delta: float, distance: float, toward: Vector3) -> Vector3:
 				_begin_tell()
 				session.effects.beam(center(), patient.center(), spec.tint, 0.045, timer)
 				return Vector3.ZERO
-		var clear: bool = session.ray(center(), target.head.global_position, 1).is_empty()
-		var elevation: float = absf(target.head.global_position.y - center().y)
+		var target_at: Vector3 = target.aim_point()
+		var clear: bool = session.ray(center(), target_at, 1).is_empty()
+		var elevation: float = absf(target_at.y - center().y)
 		var withdraw := kind in ["sentinel", "medic", "artillery"] and distance < 5.8
 		if not training and not withdraw and distance < spec.range and (kind != "scout" or elevation < 1.65) and clear:
 			_begin_tell()
 			return Vector3.ZERO
 		var goal: Vector3 = target.global_position
+		if is_instance_valid(session.classic) and not clear:
+			var objective: Vector3 = session.classic.objective_for(self)
+			if objective.is_finite() and position.distance_squared_to(objective) > 4.0:
+				goal = objective
 		var tangent := Vector3(-toward.z, 0, toward.x)
 		if training:
+			if session.training_options.targets == "fixed":
+				return Vector3.ZERO
 			var step := sin(age * 0.72 + serial * 0.5) * 2.8
 			goal = patrol_origin + Vector3(step, 0, cos(age * 0.6 + serial) * 0.76)
 		elif withdraw and clear:
@@ -221,7 +258,7 @@ func _begin_tell() -> void:
 	state = State.TELL
 	attack_number += 1
 	timer = spec.tell * tuning.tempo
-	aim_at = target.head.global_position - Vector3.UP * 0.21
+	aim_at = target.aim_point()
 	wave_attack = kind in ["disruptor", "artillery"] or (major() and (phase >= 2 or kind == "architect") and attack_number % 2 == 0)
 	if wave_attack:
 		var floor_at: Vector3 = target.global_position
@@ -249,11 +286,15 @@ func attack() -> void:
 		patient = null
 		return
 	if kind == "scout":
-		var distance: float = center().distance_to(target.head.global_position)
+		var at: Vector3 = target.aim_point()
+		var distance := center().distance_to(at)
 		session.effects.sparks(center(), spec.tint, 12, 2.0)
 		session.sound("slash", center())
-		if distance < 3.05 and session.ray(center(), target.head.global_position, 1).is_empty():
-			target.take_damage(spec.damage * tuning.power, global_position)
+		if distance < 3.05 and session.ray(center(), at, 1).is_empty() and session.can_damage(self, target):
+			if target.has_method("take_damage"):
+				target.take_damage(spec.damage * tuning.power, global_position, self)
+			else:
+				target.take_hit(spec.damage * tuning.power, at, (at - center()).normalized(), self)
 		return
 	if wave_attack:
 		return
@@ -287,7 +328,7 @@ func attack() -> void:
 			angles = [-0.35, -0.23, -0.12, 0.0, 0.12, 0.23, 0.35] if phase == 3 else [-0.22, -0.11, 0.0, 0.11, 0.22]
 	for angle in angles:
 		session.launch(start, direction.rotated(Vector3.UP, angle), speed, spec.damage * tuning.power,
-			spec.tint, false)
+			spec.tint, false, 0.0, 0.0, self)
 	session.sound("heavy" if (major() or kind in ["elite", "bulwark"]) else "enemy", start)
 
 func _dodge() -> void:
@@ -298,7 +339,7 @@ func _dodge() -> void:
 		dodge_direction = tangent
 		dodge_left = 0.23
 
-func take_hit(amount: float, at: Vector3, direction: Vector3) -> float:
+func take_hit(amount: float, at: Vector3, direction: Vector3, attacker: CharacterBody3D = null) -> float:
 	if not alive or replica:
 		return 0.0
 	hit_flash = 1.0
@@ -324,6 +365,12 @@ func take_hit(amount: float, at: Vector3, direction: Vector3) -> float:
 	if health == 0.0:
 		alive = false
 		state = State.DEAD
+		last_attacker = attacker
+		collision_layer = 0
 		eliminated.emit(self, spec.points)
-		queue_free()
+		var shutdown := create_tween().set_parallel(true).set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+		shutdown.tween_property(hull, "scale", Vector3.ONE * 0.34, 0.21)
+		shutdown.tween_property(hull, "position:y", -0.30, 0.21)
+		shutdown.tween_property(paint, "emission_energy_multiplier", 0.0, 0.12)
+		shutdown.chain().tween_callback(queue_free)
 	return amount

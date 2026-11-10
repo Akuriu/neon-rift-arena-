@@ -15,7 +15,15 @@ const THEMES := [
 	{"name": "Escorte blindée", "pool": ["bulwark", "bulwark", "sentinel", "medic"]},
 	{"name": "Brouillage", "pool": ["disruptor", "specter", "skimmer", "sentinel"]},
 	{"name": "Batterie orbitale", "pool": ["artillery", "sentinel", "medic", "scout"]},
+	{"name": "Tenaille", "pool": ["specter", "specter", "scout", "artillery"]},
+	{"name": "Relais médical", "pool": ["medic", "medic", "bulwark", "sentinel"]},
+	{"name": "Balayage", "pool": ["skimmer", "skimmer", "artillery", "specter"]},
+	{"name": "Veilleurs", "pool": ["sentinel", "sentinel", "artillery", "scout"]},
+	{"name": "Avant-garde", "pool": ["scout", "scout", "bulwark", "skimmer"]},
+	{"name": "Circuit lourd", "pool": ["bulwark", "bulwark", "artillery", "disruptor"]},
+	{"name": "Batterie mixte", "pool": ["artillery", "disruptor", "medic", "skimmer"]},
 ]
+const MODIFIERS := {"rush": "Unités rapides", "armor": "Coques renforcées", "light": "Gravité douce", "alert": "Éclairage d’urgence"}
 const BOSSES := ["elite", "warden", "colossus", "architect"]
 const ESCORTS := [
 	["scout", "sentinel", "scout"],
@@ -38,7 +46,7 @@ static func generate(index: int, run_seed: int, difficulty: Dictionary, players 
 	var group := clampi(players, 1, 4)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = ("%d/%d/%d" % [run_seed, wave, group]).hash()
-	var theme: Dictionary = THEMES[0] if wave <= 3 else THEMES[rng.randi_range(0, THEMES.size() - 1)]
+	var theme: Dictionary = THEMES[0] if wave <= 3 else THEMES[rng.randi_range(0, 4 if wave <= 20 else THEMES.size() - 1)]
 	var boss := BOSSES[posmod(wave / 5 - 1, BOSSES.size())] as String if wave % 5 == 0 else ""
 	var pressure := mini(24, roundi(log(float(mini(wave, 2000)) + 1.0) * 5.2))
 	var difficulty_bonus := mini(wave / 3, maxi(0, int(difficulty.cap) - 5))
@@ -70,9 +78,15 @@ static func generate(index: int, run_seed: int, difficulty: Dictionary, players 
 		pending.append(chosen)
 		counts[chosen] = int(counts.get(chosen, 0)) + 1
 		spent += COST[chosen]
+	var mutation := ""
+	if wave > 20 and wave % 5 in [2, 4]:
+		mutation = MODIFIERS.keys()[posmod(wave + run_seed, MODIFIERS.size())]
+	var interval := clampf(0.76 - minf(wave, 30) * 0.013, 0.36, 0.76)
+	if wave > 20:
+		interval *= [0.86, 1.08, 0.92, 1.30][wave % 4]
 	return {"wave": wave, "seed": run_seed, "theme": theme.name, "boss": boss,
 		"budget": budget, "cost": spent, "composition": pending,
 		"cap": clampi(int(difficulty.cap) + group - 1, 4, 12),
-		"interval": clampf(0.76 - minf(wave, 30) * 0.013, 0.36, 0.76),
+		"interval": interval,
 		"wave_bonus": 60 + mini(wave, 40) * 7,
-		"mutation": "rush" if wave >= 25 and wave % 5 == 2 else ""}
+		"mutation": mutation}

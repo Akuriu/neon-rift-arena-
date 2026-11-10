@@ -6,13 +6,17 @@ signal saved(success: bool)
 const SAVE := "user://pilot_profile.json"
 const BACKUP := "user://pilot_profile.json.bak"
 const TEMP := "user://pilot_profile.json.tmp"
-const VERSION := 3
+const VERSION := 4
 const Profile := preload("res://services/profile.gd")
+const Rules := preload("res://game/modes/rules.gd")
+const TouchLayout := preload("res://ui/mobile/layout.gd")
 const LEGACY_BACKUP := "user://pilot_profile.v1.json"
+const V2_BACKUP := "user://pilot_profile.v2.json"
 const RESET_BACKUP := "user://pilot_profile.before_reset.json"
 const LOCK := "user://pilot_profile.lock"
 const RESOLUTIONS := [Vector2i(960, 540), Vector2i(1280, 720), Vector2i(1600, 900), Vector2i(1920, 1080)]
 const FPS_OPTIONS := [30, 60, 90, 120, 0]
+const MOBILE_FPS := [30, 45, 60]
 const SCALES := [0.76, 0.89, 1.0, 0.64]
 const AZERTY := {
 	"forward": KEY_Z, "back": KEY_S, "left": KEY_Q, "right": KEY_D,
@@ -28,18 +32,29 @@ const DEFAULTS := {
 	"telemetry": false, "reticle": 0, "reticle_tint": 0,
 	"fps_limit": 60, "fps_counter": false, "hud_scale": 1.0,
 	"master": 0.8, "music": 0.45, "sfx": 0.8, "ambience": 0.6,
+	"steady_cam": false, "motion_strength": 0.62, "shake": 0.50, "sprint_toggle": false,
+	"crouch_toggle": false, "auto_slide": false, "scope_shade": 0.54, "ui_motion": true,
+	"art_style": 0, "hud_tone": 0, "emission": 0.72, "fog": true, "weather": false, "high_contrast": false,
+	"touch_x": 1.05, "touch_y": 0.95, "touch_dead": 0.13, "touch_invert": false,
+	"touch_left": false, "touch_float": true, "touch_haptic": false, "touch_compact": false,
+	"particles": 0.85, "audio_alerts": true, "audio_hits": true, "audio_dynamic": true,
 }
 const RANGES := {
 	"layout": [0, 1], "sensitivity": [0.035, 0.70], "fov": [66.0, 108.0],
 	"ads_sensitivity": [0.25, 1.0], "reticle": [0, 2], "reticle_tint": [0, 3], "flashes": [0.0, 1.0], "quality": [0, 3], "resolution": [0, 3], "hud_scale": [0.80, 1.20],
 	"master": [0.0, 1.0], "music": [0.0, 1.0], "sfx": [0.0, 1.0], "ambience": [0.0, 1.0],
+	"motion_strength": [0.0, 1.0], "shake": [0.0, 1.0], "scope_shade": [0.1, 0.85],
+	"art_style": [0, 3], "hud_tone": [0, 3], "emission": [0.0, 1.0],
+	"touch_x": [0.25, 3.0], "touch_y": [0.25, 3.0], "touch_dead": [0.04, 0.35],
+	"particles": [0.0, 1.0],
 }
 const BUSES := {"master": "Master", "music": "Musique", "sfx": "SFX", "ambience": "Ambiance"}
-const MODES := ["survival", "short", "endless", "trial", "coop", "boss_rush"]
+const MODES := ["survival", "short", "endless", "trial", "coop", "boss_rush", "classic", "teams", "capture", "domination"]
 const DIFFICULTIES := ["discovery", "standard", "expert"]
-const MAPS := ["reactor", "skyline", "cryo"]
+const MAPS := ["reactor", "skyline", "cryo", "bastion", "district", "grove", "station"]
 
 var values := DEFAULTS.duplicate()
+var touch_layout := TouchLayout.defaults()
 var keys := AZERTY.duplicate()
 var records: Dictionary = {}
 var profile := Profile.new()
@@ -65,8 +80,23 @@ func _process(delta: float) -> void:
 			save_disk()
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_CLOSE_REQUEST and dirty:
+	if what in [NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_APPLICATION_PAUSED] and dirty:
 		save_disk()
+
+func mobile() -> bool:
+	return OS.has_feature("android") or "--touch" in OS.get_cmdline_user_args()
+
+func default_values() -> Dictionary:
+	var base := DEFAULTS.duplicate()
+	if mobile():
+		base.merge({"quality": 3, "fps_limit": 45, "fog": false, "weather": false,
+			"hud_scale": 0.86, "damage_numbers": false, "motion_strength": 0.34}, true)
+	return base
+
+func set_touch_layout(layout: Variant) -> void:
+	touch_layout = TouchLayout.normalize(layout)
+	queue_save()
+	changed.emit("touch_layout")
 
 func keyboard(layout: int) -> Dictionary:
 	var result := AZERTY.duplicate()
@@ -125,6 +155,9 @@ func apply_keys() -> void:
 	for action in ["fire", "ads"]:
 		if not InputMap.has_action(action):
 			InputMap.add_action(action)
+		InputMap.action_erase_events(action)
+		if mobile():
+			continue
 			var click := InputEventMouseButton.new()
 			click.button_index = MOUSE_BUTTON_LEFT if action == "fire" else MOUSE_BUTTON_RIGHT
 			InputMap.action_add_event(action, click)
@@ -135,7 +168,7 @@ func apply_video() -> void:
 	window.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
 	window.scaling_3d_scale = SCALES[values.quality]
 	window.msaa_3d = Viewport.MSAA_2X if values.quality == 2 else Viewport.MSAA_DISABLED
-	if DisplayServer.get_name() == "headless":
+	if DisplayServer.get_name() == "headless" or OS.has_feature("android"):
 		return
 	var desired_mode := Window.MODE_FULLSCREEN if values.fullscreen else Window.MODE_WINDOWED
 	if DisplayServer.window_get_vsync_mode() != (DisplayServer.VSYNC_ENABLED if values.vsync else DisplayServer.VSYNC_DISABLED):
@@ -162,7 +195,8 @@ func apply_audio() -> void:
 			AudioServer.set_bus_volume_db(bus, linear_to_db(maxf(0.0001, values[key])))
 
 func reset_settings() -> void:
-	values = DEFAULTS.duplicate()
+	values = default_values()
+	touch_layout = TouchLayout.defaults()
 	keys = keyboard(0)
 	apply_keys()
 	apply_audio()
@@ -177,7 +211,7 @@ func _valid_value(key: String, value: Variant) -> Variant:
 	if typeof(value) not in [TYPE_FLOAT, TYPE_INT] or not is_finite(float(value)):
 		return fallback
 	if key == "fps_limit":
-		return int(value) if int(value) in FPS_OPTIONS else fallback
+		return int(value) if int(value) in (MOBILE_FPS if mobile() else FPS_OPTIONS) else (45 if mobile() else fallback)
 	var range_for_key: Array = RANGES[key]
 	var number := clampf(float(value), range_for_key[0], range_for_key[1])
 	return roundi(number) if typeof(fallback) == TYPE_INT else number
@@ -203,11 +237,13 @@ func load_disk() -> void:
 	if not _recognizable(document):
 		document = _read(BACKUP)
 	profile.restore(document.get("progression", {}))
-	values = DEFAULTS.duplicate()
+	values = default_values()
 	var stored: Variant = document.get("settings", document.get("prefs", {}))
 	if stored is Dictionary:
 		for key in DEFAULTS:
-			values[key] = _valid_value(key, stored.get(key, DEFAULTS[key]))
+			if stored.has(key):
+				values[key] = _valid_value(key, stored[key])
+	touch_layout = TouchLayout.normalize(document.get("touch_layout"))
 	keys = keyboard(values.layout)
 	var bindings: Variant = document.get("bindings", {})
 	if bindings is Dictionary:
@@ -223,6 +259,13 @@ func load_disk() -> void:
 					var rows := _record_rows(entry)
 					if not rows.is_empty():
 						records[key] = rows
+		for key in stored_records:
+			var parts := String(key).split("|")
+			if parts.size() == 4 and Rules.LABELS.has(parts[0]) and parts[1] in DIFFICULTIES \
+				and parts[2] in MAPS and Rules.valid_key(parts[3]) and records.size() < 430:
+				var rows := _record_rows(stored_records[key])
+				if not rows.is_empty():
+					records[key] = rows
 	dirty = false
 	apply_keys()
 	apply_audio()
@@ -288,11 +331,12 @@ func _better(a: Dictionary, b: Dictionary) -> bool:
 		return a.victory
 	return a.seconds < b.seconds
 
-func category(mode: String, difficulty: String, map_id: String) -> String:
-	return "%s|%s|%s" % [mode, difficulty, map_id]
+func category(mode: String, difficulty: String, map_id: String, rules := "") -> String:
+	var base := "%s|%s|%s" % [mode, difficulty, map_id]
+	return base + "|" + rules if Rules.LABELS.has(mode) and Rules.valid_key(rules) else base
 
-func leaderboard(mode: String, difficulty: String, map_id: String) -> Array:
-	return records.get(category(mode, difficulty, map_id), [])
+func leaderboard(mode: String, difficulty: String, map_id: String, rules := "") -> Array:
+	return records.get(category(mode, difficulty, map_id, rules), [])
 
 func log_result(mode: String, difficulty: String, map_id: String, report: Dictionary) -> bool:
 	if not mode in MODES or not difficulty in DIFFICULTIES or not map_id in MAPS or report.score <= 0:
@@ -323,18 +367,22 @@ func profile_action(action: Callable) -> Dictionary:
 	return result
 
 func complete_run(id: String, mode: String, difficulty: String, map_id: String, report: Dictionary) -> Dictionary:
+	if mode == "relax" or (Rules.LABELS.has(mode) and not report.get("participated", false)):
+		return {"ok": true, "message": "Session libre · aucun gain permanent.", "best": false}
 	if mode not in MODES or difficulty not in DIFFICULTIES or map_id not in MAPS:
 		return {"ok": false, "message": "Session hors classement."}
 	var old_records := records.duplicate(true)
 	var before := profile.data.duplicate(true)
 	var pending := dirty
-	var result := profile.settle(id, mode, difficulty, report)
+	var detail := report.duplicate()
+	detail.map = map_id
+	var result := profile.settle(id, mode, difficulty, detail)
 	if not result.ok:
 		return result
-	var key := category(mode, difficulty, map_id)
+	var key := category(mode, difficulty, map_id, report.get("rules", ""))
 	var rows: Array = records.get(key, []).duplicate()
 	result.best = report.score > 0 and (rows.is_empty() or _better(report, rows[0]))
-	if report.score > 0:
+	if report.score > 0 and (records.has(key) or records.size() < 430):
 		rows.append(report)
 		records[key] = _record_rows(rows)
 	if not save_disk():
@@ -387,16 +435,16 @@ func _write_locked() -> String:
 	if version > VERSION:
 		return "Ce profil appartient à une version plus récente du jeu."
 	var path := profile_file(SAVE)
-	var legacy := profile_file(LEGACY_BACKUP)
+	var legacy := profile_file(V2_BACKUP if version == 3 else LEGACY_BACKUP)
 	if _recognizable(previous) and version < VERSION and not FileAccess.file_exists(legacy):
 		if DirAccess.copy_absolute(path, legacy) != OK:
-			return "Impossible de copier le profil 1.0 avant migration."
+			return "Impossible de copier l’ancien profil avant migration."
 	var temporary := profile_file(TEMP)
 	var file := FileAccess.open(temporary, FileAccess.WRITE)
 	if file == null:
 		return "Impossible d’ouvrir le fichier temporaire."
 	file.store_string(JSON.stringify({"version": VERSION, "settings": values, "bindings": keys,
-		"records": records, "progression": profile.data}, "\t"))
+		"records": records, "progression": profile.data, "touch_layout": touch_layout}, "\t"))
 	file.flush()
 	var error := file.get_error()
 	file.close()

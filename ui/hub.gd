@@ -4,6 +4,7 @@ const Palette := preload("res://ui/skin.gd")
 const Arms := preload("res://game/weapons/catalog.gd")
 const Profile := preload("res://services/profile.gd")
 const Models := preload("res://game/weapon_models.gd")
+const Career := preload("res://services/career.gd")
 const GROUPS := ["Armes", "Gadgets", "Modules", "Apparences", "Améliorations"]
 
 var app: Node
@@ -51,6 +52,7 @@ func _ready() -> void:
 	)
 	Palette.at(self, sort, Rect2(256, 255, 180, 41))
 	var scroll := ScrollContainer.new()
+	scroll.follow_focus = true
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	Palette.at(self, scroll, Rect2(70, 307, 366, 296))
 	list = VBoxContainer.new()
@@ -62,6 +64,21 @@ func _ready() -> void:
 	Palette.button(self, Rect2(56, 630, 136, 40), "Retour", app.menu).grab_focus()
 	Palette.button(self, Rect2(205, 630, 190, 40), "Contrats locaux", app.show_profile.bind("contracts"))
 	Palette.button(self, Rect2(407, 630, 175, 40), "Profil du pilote", app.show_profile.bind("profile"))
+	var presets := OptionButton.new()
+	presets.add_item("Configuration rapide")
+	var ids: Array = Career.Presets.keys() + ["save", "own"]
+	for id in ids:
+		presets.add_item(Career.Presets[id].name if Career.Presets.has(id)
+			else ("Enregistrer mes choix" if id == "save" else "Rétablir mes choix"))
+	presets.set_item_disabled(0, true)
+	presets.item_selected.connect(func(i: int):
+		var result := Prefs.profile_action(Prefs.profile.loadout.bind(ids[i - 1]))
+		notice = result.message
+		presets.select(0)
+		_rebuild()
+	)
+	Palette.at(self, presets, Rect2(597, 630, 265, 40))
+	Palette.button(self, Rect2(875, 630, 160, 40), "Transactions", app.show_career.bind("ledger"))
 	_rebuild()
 
 func _category(group: String) -> void:
@@ -93,6 +110,8 @@ func _empty(node: Node) -> void:
 
 func _rebuild() -> void:
 	balance.text = "%d  PIÈCES DU PILOTE" % Prefs.profile.data.coins
+	var focused := get_viewport().gui_get_focus_owner()
+	var restore := is_instance_valid(focused) and list.is_ancestor_of(focused)
 	_empty(list)
 	var ids := _entries()
 	if selected not in ids:
@@ -100,7 +119,8 @@ func _rebuild() -> void:
 	for id in ids:
 		var item := Profile.item(id)
 		var label := Button.new()
-		label.text = "%s   ·   %s" % [item.name, "Acquis" if Prefs.profile.owns(id) else "%d pièces" % item.price]
+		var cost := "Vague %d" % item.wave if item.has("wave") else "%d pièces" % item.price
+		label.text = "%s   ·   %s" % [item.name, "Acquis" if Prefs.profile.owns(id) else cost]
 		label.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		label.custom_minimum_size.y = 40
 		if id == selected:
@@ -110,6 +130,8 @@ func _rebuild() -> void:
 			_rebuild()
 		)
 		list.add_child(label)
+		if restore and id == selected:
+			label.grab_focus()
 	_show_detail()
 
 func _show_detail() -> void:
@@ -141,8 +163,10 @@ func _show_detail() -> void:
 		Palette.label(detail, Rect2(24, 161, 450, 25), "MAÎTRISE %02d   /   %d IMPULSIONS" % [mastery, points], 13, Palette.MUTED, Palette.MONO)
 		var active_id: String = Prefs.profile.data.slots[slot]
 		var active := Profile.item(active_id)
-		Palette.label(detail, Rect2(24, 191, 445, 28),
-			"EMPLACEMENT %d  ·  %s  (%+d impact)" % [slot + 1, active.name, roundi(item.damage - active.damage)], 13, Palette.TEXT, Palette.MONO)
+		Palette.label(detail, Rect2(24, 185, 445, 36),
+			"S%d  %s   %+d impact  /  %+d charges  /  %+.2fs" % [slot + 1, active.name,
+			roundi(item.damage - active.damage), int(item.mag) - int(active.mag), item.cadence - active.cadence],
+			12, Palette.TEXT, Palette.MONO)
 		var slots := OptionButton.new()
 		for name in ["Principale  1", "Secondaire  2", "Appui  3", "Lourde  4"]:
 			slots.add_item(name)
@@ -154,9 +178,10 @@ func _show_detail() -> void:
 		Palette.at(detail, slots, Rect2(24, 223, 205, 42))
 		Palette.button(detail, Rect2(455, 274, 265, 44), "Tester au stand", app.practice_weapon.bind(selected))
 	if not owned:
-		var buy := Palette.button(detail, Rect2(24, 274, 280, 44), "Débloquer · %d pièces" % item.price, _buy.bind(selected), true)
-		buy.disabled = Prefs.profile.data.coins < int(item.price)
-		if buy.disabled:
+		var text := "Récompense · vague %d" % item.wave if item.has("wave") else "Débloquer · %d pièces" % item.price
+		var buy := Palette.button(detail, Rect2(24, 274, 280, 44), text, _buy.bind(selected), true)
+		buy.disabled = Prefs.profile.data.coins < int(item.price) or Prefs.profile.data.stats.best_wave < item.get("wave", 0)
+		if buy.disabled and not item.has("wave"):
 			Palette.label(detail, Rect2(312, 274, 139, 44), "Solde insuffisant", 13, Palette.MUTED)
 	elif index >= 0 or not selected.begins_with("perk_"):
 		var equipped: bool = selected in Prefs.profile.data.slots or selected in [

@@ -17,7 +17,7 @@ static func snapshot(stage: Node3D) -> Array:
 			pilot.health, pilot.shield, pilot.shield_max, pilot.alive, gun.active, gun.rounds(), gun.reserve(),
 			gun.heat[gun.active], gun.charge, gun.reload_left, gun.cycle_length, gun.capacity_bonus,
 			pilot.gadget_left, stage.wallets[id].balance, pilot.module_selected, pilot.modules.duplicate(),
-			pilot.stats.shots, pilot.stats.hits, stage.wallets[id].levels, pilot.damage_from])
+			pilot.stats.shots, pilot.stats.hits, stage.wallets[id].levels, pilot.damage_from, pilot.pose_flags()])
 	var units := []
 	for unit in stage.units:
 		units.append([unit.serial, KINDS.find(unit.kind), unit.position, unit.rotation.y, unit.health,
@@ -31,6 +31,30 @@ static func snapshot(stage: Node3D) -> Array:
 		if not item.is_queued_for_deletion():
 			pickups.append([item.serial, item.kind, item.position])
 	return [board, pilots, units, projectiles, pickups]
+
+static func valid(data: Variant) -> bool:
+	if not data is Array or data.size() != 5 or not data[0] is Array or data[0].size() != 11:
+		return false
+	if not data[0][0] is int or not data[0][10] is int:
+		return false
+	for index in range(1, 5):
+		if not data[index] is Array or data[index].size() > [0, 4, 12, 20, 48][index]:
+			return false
+	for row in data[1]:
+		if not row is Array or row.size() != 27 or not row[0] is int or not row[1] is Vector3 \
+			or not row[1].is_finite() or not row[21] is Array or row[21].size() != 6 or not row[24] is Dictionary:
+			return false
+	for row in data[2]:
+		if not row is Array or row.size() != 9 or not row[0] is int or not row[1] is int \
+			or row[1] < 0 or row[1] >= KINDS.size() or not row[2] is Vector3 or not row[2].is_finite():
+			return false
+	for row in data[3]:
+		if not row is Array or row.size() != 3 or not row[0] is Vector3 or not row[1] is Vector3 or not row[2] is Color:
+			return false
+	for row in data[4]:
+		if not row is Array or row.size() != 3 or not row[0] is int or row[1] not in ["energy", "repair"] or not row[2] is Vector3:
+			return false
+	return true
 
 static func apply(stage: Node3D, data: Array, known: Dictionary) -> void:
 	var director = stage.director
@@ -51,9 +75,12 @@ static func apply(stage: Node3D, data: Array, known: Dictionary) -> void:
 			continue
 		var pilot = stage.pilots[id]
 		pilot.replica_pos = row[1]
-		pilot.replica_yaw = row[2]
-		pilot.replica_pitch = row[3]
 		pilot.replica_speed = row[4]
+		pilot.replica_flags = row[26]
+		pilot.replica_weapon = row[10]
+		pilot.replica_reload = clampf(row[15] / maxf(0.001, row[16]), 0.0, 1.0)
+		if pilot != stage.player:
+			pilot.replica_poses.append(row[1], row[2], row[3], row[4], Time.get_ticks_msec() * 0.001)
 		pilot.height = row[5]
 		if row[6] < pilot.health:
 			pilot.hull_flash = 1.0

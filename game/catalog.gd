@@ -4,6 +4,10 @@ const MAPS := {
 	"cryo": {"name": "Cryo Foundry", "summary": "Fonderie de refroidissement. Alternez le couloir central de précision, les rangées de cuves et les deux voies de service surélevées."},
 	"reactor": {"name": "Reactor Court", "summary": "Cour énergétique et voies de maintenance. Exploitez les rampes et les couvertures de chaque côté du réacteur."},
 	"skyline": {"name": "Skyline Depot", "summary": "Dépôt de fret ouvert à l’aube. Traversez les îlots de conteneurs ou prenez la passerelle pour couvrir les longues lignes."},
+	"bastion": {"name": "Bastion Relay", "summary": "Poste de transmissions fictif. Soutes latérales, tour radio et rampes de la voie technique."},
+	"district": {"name": "Meridian District", "summary": "Quartier fermé. Enchaînez les passages entre immeubles et traversez la place du tram."},
+	"grove": {"name": "Ashgrove Ruins", "summary": "Enceinte forestière. Les ruines et leurs ouvertures entourent une clairière centrale."},
+	"station": {"name": "Transit Hall", "summary": "Station intérieure. Alternez hall central, quais et balcons de circulation."},
 }
 
 const Weapons := preload("res://game/weapons/catalog.gd")

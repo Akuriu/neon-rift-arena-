@@ -93,9 +93,10 @@ static func button(parent: Node, rect: Rect2, caption: String, action: Callable,
 	node.custom_minimum_size = Vector2(0, 38)
 	node.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	if primary:
-		node.add_theme_stylebox_override("normal", box(Color("#70e9de"), Color("#91fff1"), 4))
-		node.add_theme_stylebox_override("hover", box(Color("#a3fff0"), Color("#c5fff7"), 4))
-		node.add_theme_stylebox_override("pressed", box(Color("#53beb9"), Color("#8bf0e8"), 4))
+		var ink: Color = Art.palette().ui
+		node.add_theme_stylebox_override("normal", box(ink, ink.lightened(0.32), 4))
+		node.add_theme_stylebox_override("hover", box(ink.lightened(0.22), ink.lightened(0.52), 4))
+		node.add_theme_stylebox_override("pressed", box(ink.darkened(0.13), ink.lightened(0.28), 4))
 		node.add_theme_stylebox_override("focus", box(Color.TRANSPARENT, AMBER, 4, 2))
 		for key in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color"]:
 			node.add_theme_color_override(key, Color("#112b2e"))

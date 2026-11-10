@@ -93,6 +93,7 @@ static func place(parent: Node3D, mesh: Mesh, material: Material, at: Vector3,
 
 class Batch:
 	var groups := {}
+	var world_materials := false
 
 	func put(mesh: Mesh, material: Material, at: Vector3, rotation := Vector3.ZERO, sector := true) -> void:
 		var cell := Vector2i(floori(at.x / 13.0), floori(at.z / 13.0)) if sector else Vector2i.ZERO
@@ -114,6 +115,8 @@ class Batch:
 			var casts := shadows
 			if material is StandardMaterial3D:
 				casts = casts and material.shading_mode != BaseMaterial3D.SHADING_MODE_UNSHADED
+				if world_materials:
+					material = Art.surface(material)
 			var part := MeshInstance3D.new()
 			part.mesh = tool.commit()
 			part.material_override = material

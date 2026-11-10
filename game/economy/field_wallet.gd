@@ -33,6 +33,10 @@ func offer(id: String) -> Dictionary:
 func price(item: Dictionary) -> int:
 	return int(item.price) + int(levels.get(item.id, 0)) * 22 if int(item.limit) > 1 else int(item.price)
 
+func bought(item: Dictionary, wave: int) -> int:
+	var key: String = item.id if int(item.limit) > 1 else "%s:%d" % [item.id, wave]
+	return levels.get(key, 0)
+
 func buy(id: String, wave: int, token: int, apply: Callable) -> Dictionary:
 	var item := offer(id)
 	if item.is_empty() or wave < receipt_wave or token < 0:
@@ -43,7 +47,7 @@ func buy(id: String, wave: int, token: int, apply: Callable) -> Dictionary:
 	if receipts.has(token) or receipts.size() >= 12:
 		return {"ok": false, "message": "Achat déjà traité."}
 	var key: String = id if int(item.limit) > 1 else "%s:%d" % [id, wave]
-	if int(levels.get(key, 0)) >= int(item.limit):
+	if bought(item, wave) >= int(item.limit):
 		return {"ok": false, "message": "Limite atteinte."}
 	var cost := price(item)
 	if balance < cost:

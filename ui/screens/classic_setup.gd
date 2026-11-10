@@ -1,0 +1,99 @@
+extends RefCounted
+
+const Palette := preload("res://ui/skin.gd")
+const Rules := preload("res://game/modes/rules.gd")
+const Catalog := preload("res://game/catalog.gd")
+const MODES := ["classic", "teams", "capture", "domination"]
+const COPY := {
+	"classic": "Chacun pour soi. Un point par neutralisation. La première limite atteinte termine le match.",
+	"teams": "Deux équipes. Un point par neutralisation adverse. Les tirs alliés sont neutralisés.",
+	"capture": "Tenez le point central. L’équipe qui le contrôle marque chaque seconde.",
+	"domination": "Contrôlez A, B et C. Chaque zone tenue donne un point par seconde à son équipe.",
+}
+
+var root: Control
+var summary: Label
+var modes: OptionButton
+var targets: OptionButton
+var maps: OptionButton
+var detail: Label
+var preview: TextureRect
+
+func build(parent: Control, selected_map: String, selected_level: String, initial: Dictionary,
+	start: Callable, back: Callable) -> void:
+	root = parent
+	var mode: String = initial.get("mode", "classic")
+	var rules := Rules.normalize(initial.get("rules", {}), mode)
+	Palette.panel(root, Rect2(57, 206, 1166, 349), Color("#142730"))
+	var names: Array[String] = []
+	for id in MODES:
+		names.append(Rules.LABELS[id])
+	modes = _choice("FORMAT", 82, 220, names, MODES.find(mode))
+	names = []
+	for id in Prefs.MAPS:
+		names.append(Catalog.MAPS[id].name)
+	maps = _choice("ARÈNE", 457, 220, names, Prefs.MAPS.find(selected_map))
+	names = []
+	for id in Prefs.DIFFICULTIES:
+		names.append(Catalog.DIFFICULTIES[id].name)
+	var levels := _choice("DIFFICULTÉ", 832, 220, names, Prefs.DIFFICULTIES.find(selected_level))
+	names = []
+	var max_bots := 7 if Prefs.values.quality == 3 else 12
+	for count in range(max_bots + 1):
+		names.append("Exploration libre" if count == 0 else "%d bots" % count)
+	var bots := _choice("EFFECTIF", 82, 316, names, mini(max_bots, rules.bots))
+	var duration := _choice("DURÉE", 457, 316, ["5 minutes", "10 minutes", "15 minutes"], Rules.DURATIONS.find(rules.duration))
+	targets = _choice("LIMITE DE SCORE", 832, 316, ["10 points", "20 points", "35 points", "60 points", "100 points"], Rules.TARGETS.find(rules.target))
+	summary = Palette.label(root, Rect2(82, 414, 833, 43), "", 19, Palette.TEXT, Palette.BOLD,
+		HORIZONTAL_ALIGNMENT_LEFT, true)
+	detail = Palette.label(root, Rect2(82, 465, 833, 48), "", 16, Palette.MUTED, Palette.BODY,
+		HORIZONTAL_ALIGNMENT_LEFT, true)
+	preview = TextureRect.new()
+	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	Palette.at(root, preview, Rect2(944, 397, 233, 131))
+	modes.item_selected.connect(func(i: int):
+		targets.select(3 if MODES[i] in ["capture", "domination"] else 1)
+		_refresh()
+	)
+	maps.item_selected.connect(func(_i: int): _refresh())
+	_refresh()
+	var seed := LineEdit.new()
+	seed.placeholder_text = "Graine facultative"
+	seed.max_length = 10
+	if initial.has("seed"):
+		seed.text = str(initial.seed)
+	Palette.at(root, seed, Rect2(832, 572, 345, 51))
+	var styles := OptionButton.new()
+	styles.accessibility_name = "Style visuel"
+	for style in Art.LABELS:
+		styles.add_item(style)
+	styles.select(Prefs.values.art_style)
+	styles.item_selected.connect(func(index: int): Prefs.change_value("art_style", index))
+	Palette.at(root, styles, Rect2(509, 572, 300, 51))
+	Palette.button(root, Rect2(57, 572, 137, 51), "Retour", back)
+	Palette.button(root, Rect2(209, 572, 279, 51), "LANCER LE MATCH    ›", func():
+		var code := seed.text.strip_edges()
+		start.call(MODES[modes.selected], Prefs.DIFFICULTIES[levels.selected],
+			Prefs.MAPS[maps.selected], int(code) if code.is_valid_int() else -1,
+			{"bots": bots.selected, "duration": Rules.DURATIONS[duration.selected],
+				"target": Rules.TARGETS[targets.selected]})
+	, true)
+	modes.grab_focus()
+
+func _choice(label: String, x: int, y: int, names: Array[String], selected: int) -> OptionButton:
+	Palette.label(root, Rect2(x, y, 345, 24), label, 13, Palette.MUTED, Palette.MONO)
+	var choice := OptionButton.new()
+	choice.accessibility_name = label
+	for title in names:
+		choice.add_item(title)
+	choice.select(maxi(0, selected))
+	Palette.at(root, choice, Rect2(x, y + 30, 345, 45))
+	return choice
+
+func _refresh() -> void:
+	summary.text = COPY[MODES[modes.selected]]
+	var map_id: String = Prefs.MAPS[maps.selected]
+	detail.text = Catalog.MAPS[map_id].summary
+	preview.texture = load("res://assets/maps/%s.jpg" % map_id)

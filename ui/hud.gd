@@ -3,6 +3,7 @@ extends Control
 const Palette := preload("res://ui/skin.gd")
 const Catalog := preload("res://game/catalog.gd")
 const Director := preload("res://game/wave_director.gd")
+const Rules := preload("res://game/modes/rules.gd")
 const CYAN := Palette.CYAN
 const AMBER := Palette.AMBER
 const TEXT := Palette.TEXT
@@ -15,25 +16,34 @@ var entering := 0.0
 var sample_time := 0.0
 var frame_samples := PackedFloat32Array()
 var diagnostic := ""
+var render_wait := 0.0
+var scope_mesh: ArrayMesh
+var scope_extent := Vector2.ZERO
+var signal_ink := CYAN
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 func _process(delta: float) -> void:
-	if not is_visible_in_tree():
+	if not is_visible_in_tree() or not is_instance_valid(session) or not is_instance_valid(session.player):
 		return
 	entering += delta
 	if Prefs.values.telemetry:
 		_sample(delta)
-	queue_redraw()
+	render_wait -= delta
+	if render_wait <= 0.0 or entering < 0.65 or session.last_hit > 0.0 or session.player.arsenal.scope > 0.02:
+		render_wait = 1.0 / (25.0 if Prefs.values.quality == 3 else 36.0)
+		queue_redraw()
 
 func _draw() -> void:
 	if not is_instance_valid(session) or not is_instance_valid(session.player):
 		return
 	var pilot = session.player
 	var gun = pilot.arsenal
+	signal_ink = Art.hud_color()
 	var director = session.director
+	var match_mode := is_instance_valid(session.classic)
 	var tint: Color = gun.spec().tint
 	var center := size * 0.5
 	var zoom: float = Prefs.values.hud_scale
@@ -48,22 +58,38 @@ func _draw() -> void:
 		draw_rect(Rect2(Vector2(4, 4), size - Vector2(8, 8)), edge, false, 12.0)
 		draw_rect(Rect2(Vector2(11, 11), size - Vector2(22, 22)), Color(edge, edge.a * 0.42), false, 5.0)
 	draw_set_transform(Vector2(26, 24), 0.0, Vector2.ONE * zoom)
-	_frame(Rect2(0, 0, 244, 76), CYAN)
-	_print(Vector2(14, 23), "NR // " + Catalog.MAPS[session.map_id].name.to_upper(), 13, Palette.MONO, CYAN)
+	_frame(Rect2(0, 0, 244, 76), signal_ink)
+	_print(Vector2(14, 23), "NR // " + Catalog.MAPS[session.map_id].name.to_upper(), 13, Palette.MONO, signal_ink)
 	var objective := "VAGUE %02d / %02d" % [director.wave, director.total_waves] if director.total_waves > 0 else "VAGUE %02d  ·  ∞" % director.wave
-	if session.mode == "training":
+	if match_mode:
+		objective = {"classic": "CHACUN POUR SOI", "teams": "ÉQUIPES", "capture": "CAPTURE",
+			"domination": "DOMINATION"}[session.mode]
+	elif session.mode == "training":
 		objective = "ENTRAÎNEMENT"
+	elif session.mode == "explore":
+		objective = "EXPLORATION"
 	elif session.mode == "trial":
 		objective = "DÉFI CHRONOMÉTRÉ"
 	_print(Vector2(13, 56), objective, 27, Palette.HEAD, TEXT)
 	draw_set_transform(Vector2(size.x - 26.0 - 216.0 * zoom, 24), 0.0, Vector2.ONE * zoom)
 	_frame(Rect2(0, 0, 216, 76), AMBER)
 	_print(Vector2(13, 23), "SCORE", 12, Palette.MONO, AMBER)
-	_print(Vector2(137, 23), Palette.clock(Director.TRIAL_TIME - director.elapsed if session.mode == "trial" else director.elapsed), 13, Palette.MONO, MUTE)
-	_print(Vector2(12, 58), "%06d" % director.score, 30, Palette.MONO, TEXT)
-	var targets: int = director.remaining()
-	_print(Vector2(138, 54), "%02d  BOT" % targets, 13, Palette.MONO, MUTE)
-	if session.mode != "training":
+	var time: float = director.time_left() if match_mode else director.elapsed
+	if session.mode == "trial":
+		time = Director.TRIAL_TIME - director.elapsed
+	elif session.mode == "training" and session.training_options.time > 0:
+		time = maxf(0.0, session.training_options.time - director.elapsed)
+	_print(Vector2(137, 23), Palette.clock(time), 13, Palette.MONO, MUTE)
+	_print(Vector2(12, 58), "%02d : %02d" % [director.score, director.rival_score()] if match_mode else "%06d" % director.score,
+		28, Palette.MONO, TEXT)
+	if not match_mode:
+		_print(Vector2(138, 54), "%02d  BOT" % director.remaining(), 13, Palette.MONO, MUTE)
+	if match_mode:
+		_frame(Rect2(0, 84, 216, 30), AMBER)
+		_print(Vector2(13, 105), "LIMITE %d" % director.options.target, 13, Palette.MONO, AMBER)
+		if Prefs.values.fps_counter:
+			_print(Vector2(129, 105), "%d FPS" % Engine.get_frames_per_second(), 13, Palette.MONO, TEXT)
+	elif session.mode not in ["training", "explore"]:
 		_frame(Rect2(0, 84, 216, 30), AMBER)
 		_print(Vector2(13, 105), "%d CR" % session.wallet.balance, 14, Palette.MONO, AMBER)
 		if Prefs.values.fps_counter:
@@ -71,15 +97,15 @@ func _draw() -> void:
 	elif Prefs.values.fps_counter:
 		_print(Vector2(129, 96), "%d FPS" % Engine.get_frames_per_second(), 13, Palette.MONO, TEXT)
 	draw_set_transform(Vector2(26, size.y - 27 - 112.0 * zoom), 0.0, Vector2.ONE * zoom)
-	_frame(Rect2(0, 0, 272, 112), CYAN)
+	_frame(Rect2(0, 0, 272, 112), signal_ink)
 	var gadget := "GADGET PRÊT" if pilot.gadget_left <= 0.0 else "GADGET %.1f s" % pilot.gadget_left
 	_print(Vector2(14, 25), "%s  ·  %s" % [OS.get_keycode_string(Prefs.keys.gadget), gadget], 12, Palette.MONO, MUTE)
 	_meter(Vector2(14, 53), Vector2(197, 6), pilot.health / 100.0, TEXT)
 	_print(Vector2(14, 46), "INTÉGRITÉ", 12, Palette.MONO, TEXT)
 	_print(Vector2(219, 57), "%03d" % ceili(pilot.health), 18, Palette.MONO, TEXT)
-	_meter(Vector2(14, 92), Vector2(197, 6), pilot.shield / pilot.shield_max, CYAN)
-	_print(Vector2(14, 84), "BOUCLIER", 12, Palette.MONO, CYAN)
-	_print(Vector2(219, 96), "%03d" % ceili(pilot.shield), 18, Palette.MONO, CYAN)
+	_meter(Vector2(14, 92), Vector2(197, 6), pilot.shield / pilot.shield_max, signal_ink)
+	_print(Vector2(14, 84), "BOUCLIER", 12, Palette.MONO, signal_ink)
+	_print(Vector2(219, 96), "%03d" % ceili(pilot.shield), 18, Palette.MONO, signal_ink)
 	draw_set_transform(Vector2(size.x - 26 - 280.0 * zoom, size.y - 27 - 112.0 * zoom), 0.0, Vector2.ONE * zoom)
 	_frame(Rect2(0, 0, 280, 112), tint)
 	_print(Vector2(13, 24), "%02d / %s" % [gun.rack.find(gun.active) + 1, gun.spec().tag], 12, Palette.MONO, tint)
@@ -105,10 +131,12 @@ func _draw() -> void:
 		var screen_dir := Vector2(direction.dot(pilot.global_basis.x), direction.dot(pilot.global_basis.z)).normalized()
 		var at := center + screen_dir * 61.0
 		draw_line(at + screen_dir.orthogonal() * 8.0, at - screen_dir.orthogonal() * 8.0, Color(PINK, 0.75), 2.4, true)
-	if director.phase == Director.Phase.PREP:
+	if match_mode:
+		_classic(center, director, pilot)
+	elif director.phase == Director.Phase.PREP:
 		_notice(Vector2(center.x, 159), "CALIBRATION", ("Défi dans %.1f s" % director.clock if session.mode == "trial"
 			else "Vague %02d dans %.1f s" % [director.wave, director.clock]), AMBER)
-	if director.notice > 0.0 and director.phase in [Director.Phase.ACTIVE, Director.Phase.TRIAL]:
+	if not match_mode and director.notice > 0.0 and director.phase in [Director.Phase.ACTIVE, Director.Phase.TRIAL]:
 		var title := "PROTOCOLE LANCÉ" if session.mode == "trial" else "VAGUE %02d" % director.wave
 		var sub: String = director.current_wave.get("theme", "Unités actives dans le secteur")
 		var major: String = director.current_wave.get("boss", "")
@@ -130,6 +158,8 @@ func _draw() -> void:
 	if session.pickup_hint != "":
 		var key := OS.get_keycode_string(Prefs.keys.interact)
 		_mid(Vector2(center.x, size.y - 72), "[%s]  %s" % [key, session.pickup_hint], 16, Palette.BOLD, TEXT)
+	if session.relay_state == 1 and director.phase == Director.Phase.ACTIVE:
+		_mid(Vector2(center.x, size.y - 122), "RELAIS   %.1f / 6 s   ·   +48 CR" % session.relay_progress, 13, Palette.MONO, signal_ink)
 	if Prefs.values.telemetry and not diagnostic.is_empty():
 		_frame(Rect2(26, 120, 345, 39), CYAN)
 		_print(Vector2(36, 145), diagnostic, 12, Palette.MONO, TEXT)
@@ -140,8 +170,24 @@ func _draw() -> void:
 	if Input.is_action_pressed("stats"):
 		_stats()
 	if session.mode == "training":
-		var hint := "Tir • Changer avec 1–4 ou molette • Console de réarmement près du départ"
+		var accuracy := roundi(100.0 * session.hits / maxi(1, session.shots))
+		var hint := "%d NEUTRALISÉS  /  %d %% DE PRÉCISION  /  %d TIRS" % [director.kills, accuracy, session.shots]
 		_mid(Vector2(center.x, size.y - 41), hint, 13, Palette.BODY, TEXT)
+
+func _classic(center: Vector2, match_state: Node, pilot: CharacterBody3D) -> void:
+	if match_state.phase == Director.Phase.PREP:
+		_notice(Vector2(center.x, 156), Rules.LABELS[session.mode].to_upper(), "Départ dans %.1f s" % match_state.clock, AMBER)
+	if not pilot.alive and match_state.respawns.has(0):
+		_notice(Vector2(center.x, 245), "HORS COMBAT", "Redéploiement dans %.1f s" % maxf(0.0, match_state.respawns[0]), AMBER)
+	var width: float = match_state.zones.size() * 115.0
+	for i in match_state.zones.size():
+		var zone: Node3D = match_state.zones[i]
+		var at := Vector2(center.x - width * 0.5 + i * 115.0, 25.0)
+		var color := signal_ink if zone.owner_side == 0 else (AMBER if zone.owner_side == 1 else MUTE)
+		_frame(Rect2(at, Vector2(108, 48)), color)
+		var status := "NEUTRE" if zone.owner_side < 0 else ("ALLIÉS" if zone.owner_side == 0 else "ADVERSES")
+		_print(at + Vector2(9, 19), "%s  %s" % [zone.badge, "LUTTE" if zone.contested else status], 12, Palette.MONO, color)
+		_meter(at + Vector2(9, 31), Vector2(88, 5), absf(zone.control), color)
 
 func _team(at: Vector2) -> void:
 	var row := 0
@@ -161,17 +207,34 @@ func _team(at: Vector2) -> void:
 
 func _scope(center: Vector2, opacity: float, zoom: float, tint: Color) -> void:
 	var radius := minf(size.x, size.y) * 0.375
-	for i in 40:
-		var a := TAU * i / 40.0
-		var b := TAU * (i + 1) / 40.0
-		var side := Vector2.from_angle(a)
-		var next := Vector2.from_angle(b)
-		draw_colored_polygon(PackedVector2Array([center + side * radius, center + side * size.x,
-			center + next * size.x, center + next * radius]), Color(0.018, 0.043, 0.060, opacity * 0.82))
+	if scope_extent != size or scope_mesh == null:
+		_build_scope(center, radius)
+	draw_mesh(scope_mesh, null, Transform2D.IDENTITY, Color(0.018, 0.043, 0.060, opacity * Prefs.values.scope_shade))
 	draw_arc(center, radius, 0, TAU, 60, Color(tint, opacity * 0.72), 2.0, true)
 	for axis in [Vector2.RIGHT, Vector2.LEFT, Vector2.DOWN, Vector2.UP]:
 		draw_line(center + axis * 25, center + axis * (radius - 9), Color(TEXT, opacity * 0.40), 1.0, true)
+		for notch in 3:
+			var mark: Vector2 = center + axis * (42.0 + notch * 21.0)
+			var width: Vector2 = axis.orthogonal() * (3.0 + notch)
+			draw_line(mark - width, mark + width, Color(TEXT, opacity * 0.48), 1.0, true)
 	_mid(center + Vector2(0, radius - 21), "OPTIQUE  ×%.1f" % zoom, 13, Palette.MONO, tint)
+
+func _build_scope(center: Vector2, radius: float) -> void:
+	var vertices := PackedVector2Array()
+	for i in 48:
+		var side := Vector2.from_angle(TAU * i / 48.0)
+		var next := Vector2.from_angle(TAU * (i + 1) / 48.0)
+		var inner := center + side * radius
+		var outer := center + side * size.length()
+		var inner_next := center + next * radius
+		var outer_next := center + next * size.length()
+		vertices.append_array(PackedVector2Array([inner, outer, outer_next, inner, outer_next, inner_next]))
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	scope_mesh = ArrayMesh.new()
+	scope_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, Mesh.ARRAY_FLAG_USE_2D_VERTICES)
+	scope_extent = size
 
 func _crosshair(center: Vector2, tint: Color) -> void:
 	var colors := [tint, TEXT, CYAN, AMBER]
@@ -233,7 +296,7 @@ func _frame(rect: Rect2, accent: Color) -> void:
 	var b := rect.end
 	var points := PackedVector2Array([a, Vector2(b.x - 9, a.y), Vector2(b.x, a.y + 9),
 		b, Vector2(a.x + 9, b.y), Vector2(a.x, b.y - 9)])
-	draw_colored_polygon(points, INK)
+	draw_colored_polygon(points, Color("#090f14") if Prefs.values.high_contrast else INK)
 	points.append(a)
 	draw_polyline(points, Color("#345058"), 1.0, true)
 	draw_rect(Rect2(a, Vector2(24, 2)), accent)

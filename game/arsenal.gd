@@ -2,6 +2,9 @@ extends Node
 
 const Arms := preload("res://game/weapons/catalog.gd")
 const Models := preload("res://game/weapon_models.gd")
+const Fabric := preload("res://game/fabric.gd")
+const ViewMotion := preload("res://game/weapons/view_animation.gd")
+const SLOT_KEYS := ["slot_1", "slot_2", "slot_3", "slot_4"]
 const SPREAD := [Vector2.ZERO, Vector2(-0.094, 0), Vector2(0.094, 0),
 	Vector2(-0.046, 0.057), Vector2(0.046, 0.057), Vector2(-0.046, -0.057), Vector2(0.046, -0.057)]
 
@@ -23,6 +26,12 @@ var reload_boost := 1.0
 var damage_boost := 1.0
 var view: Node3D
 var core: MeshInstance3D
+var cell: MeshInstance3D
+var mechanism: MeshInstance3D
+var models := {}
+var visual_index := -1
+var animator := ViewMotion.new()
+var pose_clock := 0.0
 var held := false
 var burst_left := 0
 var burst_timer := 0.0
@@ -58,11 +67,9 @@ func _ready() -> void:
 		reserves.append(capacity(index) * (5 + reserve_bonus))
 		heat.append(0.0)
 	if pilot.local_view:
-		view = Node3D.new()
-		view.position = Vector3(0.28, -0.25, -0.52)
-		view.scale = Vector3.ONE * 0.92
-		pilot.head.add_child(view)
-		make_view()
+		for index in rack:
+			_cache_model(index)
+		show_model(active)
 
 func spec() -> Dictionary:
 	return Arms.WEAPONS[active]
@@ -95,21 +102,41 @@ func select(index: int) -> void:
 	charge = 0.0
 	burst_left = 0
 	aim_step = 0
-	scope = 0.0
 	inspecting = 0.0
 	held = pilot.down("fire")
-	swap_left = 0.29
+	swap_left = ViewMotion.SWAP
 	cooldown = maxf(cooldown, 0.23)
-	make_view()
 	pilot.session.sound("switch", Vector3.INF if pilot.local_view else pilot.global_position)
 
-func make_view() -> void:
-	if not is_instance_valid(view):
-		return
-	for child in view.get_children():
-		view.remove_child(child)
-		child.queue_free()
-	core = Models.make(view, active, spec().tint, pilot.gear.get("skin", ""))
+func _cache_model(index: int) -> void:
+	var model := Node3D.new()
+	model.name = "Weapon_" + Arms.WEAPONS[index].id
+	model.scale = Vector3.ONE * 0.92
+	pilot.presentation.add_child(model)
+	var tint: Color = Arms.WEAPONS[index].tint
+	var muzzle := Models.make(model, index, tint, pilot.gear.get("skin", ""))
+	var battery := Fabric.place(model, Fabric.bevel(Vector3(0.115, 0.104, 0.17), 0.026),
+		Fabric.paint(Color("#586975")), Vector3(0.005, -0.095, -0.074), Vector3.ZERO, false)
+	var slider := Fabric.place(model, Fabric.bevel(Vector3(0.087, 0.039, 0.17), 0.012),
+		Fabric.paint(tint.darkened(0.33)), Vector3(0.0, 0.076, -0.18), Vector3.ZERO, false)
+	Fabric.place(muzzle, Fabric.bevel(Vector3(0.077, 0.032, 0.18), 0.014), Fabric.paint(tint, true),
+		Vector3(0, 0, -0.034), Vector3.ZERO, false)
+	model.hide()
+	models[index] = [model, muzzle, battery, slider]
+
+func show_model(index: int) -> void:
+	if is_instance_valid(view):
+		view.hide()
+	if not models.has(index):
+		_cache_model(index)
+	var parts: Array = models[index]
+	view = parts[0]
+	core = parts[1]
+	cell = parts[2]
+	mechanism = parts[3]
+	core.hide()
+	view.show()
+	visual_index = index
 
 func aiming() -> bool:
 	return spec().has("zoom") and pilot.down("ads") and reload_left <= 0.0 and swap_left <= 0.0
@@ -134,6 +161,7 @@ func cycle() -> void:
 	reload_left = cycle_length
 	charge = 0.0
 	burst_left = 0
+	inspecting = 0.0
 	pilot.session.sound("reload", Vector3.INF if pilot.local_view else pilot.global_position)
 
 func refill(amount: int) -> void:
@@ -171,8 +199,9 @@ func cancel_trigger() -> void:
 	held = pilot.down("fire")
 
 func tick(delta: float) -> void:
+	clock += delta
 	for index in mini(rack.size(), 4):
-		if pilot.just("slot_%d" % (index + 1)):
+		if pilot.just(SLOT_KEYS[index]):
 			select_slot(index)
 	for index in rack:
 		heat[index] = maxf(0.0, heat[index] - delta * (0.29 * reload_boost))
@@ -183,9 +212,9 @@ func tick(delta: float) -> void:
 	var pressed := trigger and not held
 	var released := not trigger and held
 	held = trigger
-	if pilot.just("inspect") and not trigger and not aiming():
-		inspecting = 1.0
-	if trigger:
+	if pilot.just("inspect") and not trigger and not aiming() and not pilot.sprinting and reload_left <= 0.0:
+		inspecting = ViewMotion.inspection_time(active)
+	if trigger or aiming() or pilot.sprinting:
 		inspecting = 0.0
 	if pilot.just("reload"):
 		cycle()
@@ -302,24 +331,5 @@ func _check_supply() -> void:
 		pilot.session.sound("low", Vector3.INF if pilot.local_view else pilot.global_position)
 
 func pose(delta: float, motion: float, running: bool, wall_pull: float) -> void:
-	clock += delta
-	scope = move_toward(scope, 1.0 if aiming() else 0.0, delta * 8.0)
-	shot_kick = move_toward(shot_kick, 0.0, delta * 8.5)
-	if not is_instance_valid(view):
-		return
-	var change := swap_left / 0.29
-	var dip := sin(PI * reload_left / cycle_length) if reload_left > 0.0 else 0.0
-	var kick: float = shot_kick if Prefs.values.recoil else shot_kick * 0.3
-	var sway := sin(clock * 12.0) * motion * 0.015
-	var target := Vector3(0.274 + sway, -0.248 - dip * 0.16 - change * 0.22,
-		-0.52 + kick * 0.072 + wall_pull * 0.12)
-	target.y += sin(clock * 2.4) * 0.0025
-	target += Vector3(0.045, -0.08, 0.025) if running else Vector3.ZERO
-	target = target.lerp(Vector3(0.02, -0.30, -0.50), scope)
-	view.position = view.position.lerp(target, 1.0 - exp(-23.0 * delta))
-	view.visible = scope < 0.88
-	core.visible = (shot_kick > 0.54 or charge > 0.2) and Prefs.values.flashes > 0.05
-	core.scale = Vector3.ONE * (0.32 + maxf(shot_kick, charge) * Prefs.values.flashes)
-	var glance := sin(PI * inspecting) * 0.55
-	view.rotation = Vector3(-kick * 0.062 - dip * 0.68 - wall_pull * 0.72, -0.08 + glance,
-		-dip * 0.34 - change * 0.25 - (0.22 if running else 0.0) + glance * 0.4)
+	pose_clock = fmod(pose_clock + delta, TAU * 10.0)
+	animator.tick(self, delta, motion, running, wall_pull, Prefs.values)

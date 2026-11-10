@@ -10,6 +10,10 @@ static var cache := {}
 static func make(root: Node3D, index: int, tint: Color, skin := "") -> MeshInstance3D:
 	var key := "%d/%s" % [index, skin]
 	var shell := Color("#b86d4d") if skin == "skin_copper" else (Color("#7cabc7") if skin == "skin_glacier" else CERAMIC)
+	if skin == "skin_ash":
+		shell = Color("#d9d0b9")
+	elif skin == "skin_aurora":
+		shell = Color("#428878")
 	if cache.has(key):
 		for part in cache[key]:
 			Fabric.place(root, part[0], part[1], part[2], Vector3.ZERO, false)

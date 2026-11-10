@@ -98,6 +98,29 @@ def cycle_mix(track, signal, offset, pan=0.0):
     track[indices, 1] += signal * (1.0 + pan) * .65
 
 
+def make_v3_loops():
+    t = time(6)
+    for name, base, modulation in [("wind", 26, 0.5), ("canopy", 41, 0.3333333333333333), ("concourse", 66, 0.6666666666666666)]:
+        envelope = 0.66 + 0.34 * np.cos(2 * np.pi * modulation * t)
+        low = sum(np.sin(2 * np.pi * (base + step) * t) / (1 + step)
+                  for step in range(1, 16))
+        airy = sum(np.sin(2 * np.pi * (103 + j * 23) * t + j) / (4 + j)
+                   for j in range(12))
+        texture = low * envelope * 0.026 + airy * 0.006
+        write(name, np.column_stack((texture, low * envelope * 0.024 - airy * 0.005)))
+    beat = 0.38
+    track = np.zeros((round(32 * beat * RATE), 2))
+    for step in range(32):
+        root = [73.42, 69.30, 77.78, 65.41][step // 8]
+        if step % 2 == 0:
+            cycle_mix(track, voice(.54, root, root * .985, .17, .20, .04, .02), beat * step)
+        cycle_mix(track, voice(.31, root * (3 + step % 3), root * 2, .06, .15, .04),
+                  beat * step + .11, -.42 if step % 2 else .42)
+        if step % 4 in (0, 3):
+            cycle_mix(track, voice(.21, 110, 32, .21, .32, .09), beat * step)
+    write("pressure", track)
+
+
 def make_loops():
     t = time(8.0)
     hum = (.05 * np.sin(2 * np.pi * 48 * t) + .027 * np.sin(2 * np.pi * 60 * t)) \
@@ -132,3 +155,4 @@ if __name__ == "__main__":
 
 if __name__ == '__main__':
     make_uprising_effects()
+    make_v3_loops()

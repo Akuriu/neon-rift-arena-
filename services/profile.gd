@@ -1,6 +1,7 @@
 extends RefCounted
 
 const Arms := preload("res://game/weapons/catalog.gd")
+const Career := preload("res://services/career.gd")
 const CAP := 1000000000
 const GEAR := {
 	"gd_dash": {"name": "Propulseur", "class": "Gadgets", "price": 0, "info": "Dash court dans la direction du mouvement. Recharge de 7 s."},
@@ -9,6 +10,9 @@ const GEAR := {
 	"mod_rack": {"name": "Double cellule", "class": "Modules", "price": 120, "info": "Une charge supplémentaire par chargeur."},
 	"skin_copper": {"name": "Cuivre industriel", "class": "Apparences", "price": 65, "info": "Boîtier cuivré et couleur de pilote orange."},
 	"skin_glacier": {"name": "Verre glacial", "class": "Apparences", "price": 70, "info": "Boîtier bleu nuit et couleur de pilote turquoise."},
+	"skin_ash": {"name": "Cendre & ivoire", "class": "Apparences", "price": 85, "info": "Revêtement ivoire mat et armure graphite. Purement cosmétique."},
+	"skin_aurora": {"name": "Aurore", "class": "Apparences", "price": 0, "wave": 50,
+		"info": "Finition bleu pétrole et ivoire. Récompense cosmétique après la vague 50."},
 	"perk_reserve": {"name": "Sacoche renforcée", "class": "Améliorations", "price": 135, "info": "Démarre chaque partie avec deux chargeurs supplémentaires en réserve."},
 }
 const CONTRACTS := {
@@ -16,7 +20,8 @@ const CONTRACTS := {
 	"waves": {"name": "Tenir la ligne", "goal": 12, "coins": 45, "xp": 90},
 	"runs": {"name": "Double sortie", "goal": 2, "coins": 25, "xp": 50},
 }
-const STAT_KEYS := ["runs", "wins", "losses", "kills", "bosses", "shots", "hits", "seconds", "waves", "best_wave", "credits", "spent"]
+const STAT_KEYS := ["runs", "wins", "losses", "ties", "kills", "deaths", "objectives", "bosses",
+	"shots", "hits", "seconds", "waves", "best_wave", "credits", "spent"]
 var data: Dictionary = {}
 
 func _init() -> void:
@@ -53,7 +58,7 @@ func restore(raw: Variant) -> void:
 	var modes := {}
 	var raw_modes: Variant = source.get("modes")
 	if raw_modes is Dictionary:
-		for mode in ["survival", "short", "endless", "trial", "coop", "boss_rush"]:
+		for mode in Career.Modes:
 			if raw_modes.has(mode):
 				modes[mode] = _stats(raw_modes[mode])
 	var mastery := {}
@@ -74,7 +79,8 @@ func restore(raw: Variant) -> void:
 		"module": _equipped(source.get("module"), owned, "mod_", ""),
 		"skin": _equipped(source.get("skin"), owned, "skin_", ""),
 		"stats": stats, "modes": modes, "mastery": mastery, "settled": receipts,
-		"contracts": _contracts(source.get("contracts"))}
+		"contracts": _contracts(source.get("contracts")),
+		"career": Career.sanitize(source.get("career"), owned, number)}
 
 func _equipped(raw: Variant, owned: Array, prefix: String, fallback: String) -> String:
 	return raw if raw is String and raw.begins_with(prefix) and raw in owned else fallback
@@ -88,6 +94,13 @@ func _stats(raw: Variant) -> Dictionary:
 
 func _contracts(raw: Variant) -> Dictionary:
 	var today := Time.get_date_string_from_system()
+	if raw is Dictionary and raw.get("date") is String:
+		var previous: String = raw.date
+		var fields := previous.split("-")
+		if previous.length() == 10 and fields.size() == 3 and fields[0].is_valid_int() \
+			and fields[1].is_valid_int() and int(fields[1]) in range(1, 13) \
+			and fields[2].is_valid_int() and int(fields[2]) in range(1, 32) and previous > today:
+			today = previous
 	var out := {"date": today, "progress": {}, "claimed": {}}
 	for id in CONTRACTS:
 		out.progress[id] = 0
@@ -104,8 +117,9 @@ func _contracts(raw: Variant) -> Dictionary:
 	return out
 
 func refresh_contracts() -> void:
-	if data.contracts.date != Time.get_date_string_from_system():
+	if data.contracts.date < Time.get_date_string_from_system():
 		data.contracts = _contracts({})
+	Career.refresh(data.career)
 
 func owns(id: String) -> bool:
 	return id in data.owned
@@ -114,10 +128,13 @@ func buy(id: String) -> Dictionary:
 	var offer := item(id)
 	if offer.is_empty() or owns(id):
 		return {"ok": false, "message": "Article indisponible ou déjà possédé."}
+	if offer.has("wave") and data.stats.best_wave < offer.wave:
+		return {"ok": false, "message": "Débloqué à la vague %d." % offer.wave}
 	if data.coins < int(offer.price):
 		return {"ok": false, "message": "Pièces du pilote insuffisantes."}
 	data.coins -= int(offer.price)
 	data.owned.append(id)
+	Career.transaction(data.career, "Achat · " + offer.name, -int(offer.price))
 	return {"ok": true, "message": "%s débloqué" % offer.name}
 
 func equip(id: String, slot: int) -> Dictionary:
@@ -140,6 +157,18 @@ func equip(id: String, slot: int) -> Dictionary:
 		return {"ok": false, "message": "Cet avantage est appliqué automatiquement."}
 	return {"ok": true, "message": "Équipement actualisé."}
 
+func loadout(id: String) -> Dictionary:
+	if id == "save":
+		data.career.saved = {"slots": data.slots.duplicate(), "gadget": data.gadget, "module": data.module}
+		return {"ok": true, "message": "Configuration personnelle enregistrée."}
+	var selection: Dictionary = data.career.saved if id == "own" else Career.Presets.get(id, {})
+	if selection.is_empty():
+		return {"ok": false, "message": "Enregistrez d’abord un équipement personnel."}
+	data.slots = Arms.normalize_slots(selection.slots, data.owned)
+	data.gadget = _equipped(selection.gadget, data.owned, "gd_", "gd_dash")
+	data.module = _equipped(selection.module, data.owned, "mod_", "")
+	return {"ok": true, "message": "%s · équipement actualisé." % selection.get("name", "Personnel")}
+
 static func level(experience: int) -> int:
 	return mini(500, 1 + floori(sqrt(float(maxi(0, experience)) / 80.0)))
 
@@ -151,6 +180,12 @@ static func rewards(report: Dictionary, difficulty: String) -> Dictionary:
 	var victory: bool = report.get("victory", false)
 	var factor := 1.28 if difficulty == "expert" else (0.85 if difficulty == "discovery" else 1.0)
 	var active: bool = report.get("participated", true) and (kills > 0 or waves > 0)
+	if report.has("outcome"):
+		var effort := mini(80, kills * 3 + number(report.get("objectives"), 120) / 3)
+		if not report.get("participated", false) or seconds < 30 or effort < 3:
+			return {"coins": 0, "xp": 0}
+		return {"coins": mini(125, floori((effort * 0.68 + (14 if victory else 2)) * factor)),
+			"xp": mini(340, floori((effort * 2.0 + minf(seconds, 600) * 0.10 + (40 if victory else 0)) * factor))}
 	var coins := floori((waves * 7.0 + kills * 0.9 + bosses * 9.0 + (35 if victory else 0)) * factor) if active else 0
 	var xp := floori((waves * 16.0 + kills * 2.7 + bosses * 21.0 + seconds * 0.18 + (80 if victory else 0)) * factor) if active else 0
 	return {"coins": mini(1800, coins), "xp": mini(5000, xp)}
@@ -173,16 +208,21 @@ func settle(id: String, mode: String, difficulty: String, report: Dictionary) ->
 			data.mastery[weapon] = mini(100000, int(data.mastery.get(weapon, 0)) + number(report.mastery[weapon], 2500))
 	refresh_contracts()
 	for key in CONTRACTS:
-		var gain := 1 if key == "runs" and reward.xp > 0 else number(report.get("wave" if key == "waves" else key))
+		var gain := 0
+		if reward.xp > 0:
+			gain = 1 if key == "runs" else number(report.get("wave" if key == "waves" else key))
 		data.contracts.progress[key] = mini(CONTRACTS[key].goal, data.contracts.progress[key] + gain)
+	reward.badges = Career.record(data, mode, difficulty, report, reward)
+	if data.stats.best_wave >= 50 and not owns("skin_aurora"):
+		data.owned.append("skin_aurora")
 	reward.ok = true
 	return reward
 
 func _add_stats(stats: Dictionary, report: Dictionary) -> void:
 	stats.runs = mini(CAP, stats.runs + 1)
-	var result := "wins" if bool(report.get("victory", false)) else "losses"
+	var result := "ties" if report.get("outcome", "") == "égalité" else ("wins" if report.get("victory", false) else "losses")
 	stats[result] = mini(CAP, stats[result] + 1)
-	for key in ["kills", "bosses", "shots", "hits", "seconds", "credits", "spent"]:
+	for key in ["kills", "deaths", "objectives", "bosses", "shots", "hits", "seconds", "credits", "spent"]:
 		stats[key] = mini(CAP, stats[key] + number(report.get(key)))
 	stats.hits = mini(stats.hits, stats.shots)
 	var wave := number(report.get("wave"))
@@ -197,4 +237,17 @@ func claim(contract: String) -> Dictionary:
 	data.contracts.claimed[contract] = true
 	data.coins = mini(CAP, data.coins + reward.coins)
 	data.xp = mini(CAP, data.xp + reward.xp)
+	Career.transaction(data.career, "Contrat · " + reward.name, reward.coins)
 	return {"ok": true, "message": "+%d pièces · +%d XP" % [reward.coins, reward.xp]}
+
+func claim_weekly() -> Dictionary:
+	refresh_contracts()
+	var current: Dictionary = data.career.weekly
+	var challenge := Career.challenge(current.period)
+	if current.claimed or current.value < challenge[2]:
+		return {"ok": false, "message": "Défi hebdomadaire incomplet ou déjà encaissé."}
+	current.claimed = true
+	data.coins = mini(CAP, data.coins + 70)
+	data.xp = mini(CAP, data.xp + 150)
+	Career.transaction(data.career, challenge[0], 70)
+	return {"ok": true, "message": "+70 pièces · +150 XP"}

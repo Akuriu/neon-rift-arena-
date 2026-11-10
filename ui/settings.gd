@@ -10,6 +10,7 @@ const KeyLabels := {
 }
 
 var close: Callable
+var edit_touch: Callable
 var active := 0
 var scroll: ScrollContainer
 var entries: VBoxContainer
@@ -27,11 +28,12 @@ func _ready() -> void:
 	Palette.panel(self, Rect2(55, 167, 248, 410), Color("#0c1d25"))
 	Palette.panel(self, Rect2(326, 167, 899, 410), Color("#0d2028"))
 	var labels := ["Vidéo", "Audio", "Jeu et confort", "Clavier"]
+	labels.append("Tactile")
 	for index in labels.size():
 		var tab := Palette.button(self, Rect2(67, 180 + index * 53, 222, 44),
 			"%02d     %s" % [index + 1, labels[index]], show_tab.bind(index))
 		tabs.append(tab)
-	Palette.label(self, Rect2(73, 420, 204, 111), "Les réglages s’appliquent pendant que vous jouez.", 15, Palette.MUTED,
+	Palette.label(self, Rect2(73, 452, 204, 89), "Les réglages s’appliquent pendant que vous jouez.", 15, Palette.MUTED,
 		Palette.BODY, HORIZONTAL_ALIGNMENT_LEFT, true)
 	scroll = ScrollContainer.new()
 	scroll.follow_focus = true
@@ -59,13 +61,21 @@ func show_tab(index: int) -> void:
 	button_by_action.clear()
 	match active:
 		0:
-			_choice("Qualité graphique", "quality", ["Ultra faible · 64 %", "Faible · 76 %", "Moyenne · 89 %", "Élevée · 100 %"], [3, 0, 1, 2])
-			_choice("Résolution fenêtrée", "resolution", ["960 × 540", "1280 × 720", "1600 × 900", "1920 × 1080"], [0, 1, 2, 3])
-			_toggle("Plein écran", "fullscreen")
-			_toggle("Fenêtre sans bordure", "borderless")
-			_toggle("Synchronisation verticale", "vsync")
+			_choice("Style du monde", "art_style", Art.LABELS, [0, 1, 2, 3])
+			_slider("Émissions lumineuses", "emission", 0, 1, 0.05, true)
+			_toggle("Brume de profondeur", "fog")
+			_toggle("Météo légère", "weather")
+			var low := "Mobile Ultra Léger · 64 %" if Prefs.mobile() else "Ultra faible · 64 %"
+			_choice("Qualité graphique", "quality", [low, "Faible · 76 %", "Moyenne · 89 %", "Élevée · 100 %"], [3, 0, 1, 2])
+			if not Prefs.mobile():
+				_choice("Résolution fenêtrée", "resolution", ["960 × 540", "1280 × 720", "1600 × 900", "1920 × 1080"], [0, 1, 2, 3])
+				_toggle("Plein écran", "fullscreen")
+				_toggle("Fenêtre sans bordure", "borderless")
+				_toggle("Synchronisation verticale", "vsync")
 			_toggle("Télémétrie détaillée", "telemetry")
-			_choice("Limite d’images par seconde", "fps_limit", ["30 FPS", "60 FPS", "90 FPS", "120 FPS", "Illimitée"], Prefs.FPS_OPTIONS)
+			var limits: Array = Prefs.MOBILE_FPS if Prefs.mobile() else Prefs.FPS_OPTIONS
+			var labels := limits.map(func(limit: int): return "%d FPS" % limit if limit > 0 else "Illimitée")
+			_choice("Limite d’images par seconde", "fps_limit", labels, limits)
 			_toggle("Afficher le compteur FPS", "fps_counter")
 			_slider("Taille du HUD", "hud_scale", 0.8, 1.2, 0.05, true)
 			_note("Les ombres s’activent en qualité Moyenne. Le mode Élevée ajoute l’anticrénelage 2×.")
@@ -74,29 +84,58 @@ func show_tab(index: int) -> void:
 			_slider("Musique", "music", 0, 1, 0.01, true)
 			_slider("Effets sonores", "sfx", 0, 1, 0.01, true)
 			_slider("Ambiance du réacteur", "ambience", 0, 1, 0.01, true)
+			_toggle("Alarmes sonores", "audio_alerts")
+			_toggle("Confirmation des impacts", "audio_hits")
+			_toggle("Variation de musique en combat", "audio_dynamic")
 			var sample := Button.new()
 			sample.text = "Écouter une impulsion"
 			sample.pressed.connect(Sounds.play.bind("pulse"))
 			entries.add_child(sample)
 		2:
+			_choice("Teinte du HUD", "hud_tone", ["Ivoire", "Glacier", "Sable", "Lilas"], [0, 1, 2, 3])
+			_toggle("Contraste renforcé du HUD", "high_contrast")
 			_slider("Sensibilité souris", "sensitivity", 0.035, 0.7, 0.005)
 			_slider("Sensibilité en visée", "ads_sensitivity", 0.25, 1.0, 0.05)
 			_toggle("Masque de lunette", "scope_overlay")
+			_slider("Ombre autour de la lunette", "scope_shade", 0.10, 0.85, 0.05, true)
 			_choice("Forme du réticule", "reticle", ["Croix", "Point", "Cercle"], [0, 1, 2])
 			_choice("Couleur du réticule", "reticle_tint", ["Selon l’arme", "Ivoire", "Cyan", "Ambre"], [0, 1, 2, 3])
 			_slider("Champ de vision vertical", "fov", 66, 108, 1)
 			_toggle("Inverser l’axe vertical", "invert_y")
 			_toggle("Oscillation légère en marche", "head_bob")
+			_toggle("Caméra stable", "steady_cam")
+			_slider("Mouvements de la caméra", "motion_strength", 0, 1, 0.05, true)
+			_slider("Réaction à l’atterrissage", "shake", 0, 1, 0.05, true)
 			_toggle("Champ de vision dynamique en sprint", "sprint_fov")
 			_toggle("Recul visuel de l’équipement", "recoil")
 			_slider("Intensité des flashes", "flashes", 0, 1, 0.05, true)
+			_slider("Densité des particules", "particles", 0, 1, 0.05, true)
 			_toggle("Chiffres de dégâts", "damage_numbers")
+			_toggle("Animations des menus", "ui_motion")
 		3:
 			_choice("Disposition du clavier", "layout", ["AZERTY · ZQSD", "QWERTY · WASD"], [0, 1])
+			_toggle("Sprint en bascule", "sprint_toggle")
+			_toggle("Accroupissement en bascule", "crouch_toggle")
+			_toggle("Glissade à pleine vitesse", "auto_slide")
 			_note("Changer de disposition rétablit les touches du profil sélectionné.")
 			for action in KeyLabels:
 				_binding(action)
 			_note("Clic gauche pour tirer, clic droit pour la lunette. En visant avec le Rail, la molette change le zoom.")
+		4:
+			var edit := Button.new()
+			edit.text = "Modifier la disposition des commandes"
+			edit.custom_minimum_size.y = 45
+			edit.pressed.connect(edit_touch)
+			entries.add_child(edit)
+			_slider("Sensibilité horizontale", "touch_x", 0.25, 3.0, 0.05, true)
+			_slider("Sensibilité verticale", "touch_y", 0.25, 3.0, 0.05, true)
+			_slider("Zone morte du joystick", "touch_dead", 0.04, 0.35, 0.01, true)
+			_toggle("Inverser l’axe vertical", "touch_invert")
+			_toggle("Disposition gaucher", "touch_left")
+			_toggle("Joystick flottant", "touch_float")
+			_toggle("Réduire les boutons contextuels", "touch_compact")
+			_toggle("Vibrations facultatives", "touch_haptic")
+			_note("En coop, la partie continue pendant une pause locale. La suspension peut entraîner une déconnexion.")
 
 func _row(caption: String) -> HBoxContainer:
 	var line := HBoxContainer.new()
