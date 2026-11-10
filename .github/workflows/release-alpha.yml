@@ -108,12 +108,15 @@ jobs:
           image='system-images;android-35;default;x86_64'
           "$sdk_tools/sdkmanager" emulator "$image"
           printf 'no\n' | "$sdk_tools/avdmanager" create avd --force --name rifle-ci --package "$image"
+          avd_config="$HOME/.android/avd/rifle-ci.avd/config.ini"
+          sed -i '/^disk.dataPartition.size=/d' "$avd_config"
+          printf 'disk.dataPartition.size=2048M\n' >> "$avd_config"
           sudo chown "$USER" /dev/kvm
           emulator="$ANDROID_HOME/emulator/emulator"
           adb="$ANDROID_HOME/platform-tools/adb"
           export ANDROID_SERIAL=emulator-5554
-          "$emulator" -avd rifle-ci -port 5554 -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect \
-            -memory 2048 -cores 2 > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          "$emulator" -avd rifle-ci -port 5554 -no-window -no-audio -no-snapshot -no-boot-anim -no-metrics -gpu swiftshader_indirect \
+            -memory 2560 -cores 2 -partition-size 2048 > "$RUNNER_TEMP/emulator.log" 2>&1 &
           emulator_pid=$!
           trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
           booted=false
