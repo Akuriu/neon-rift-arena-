@@ -3,7 +3,10 @@ name: Rifle Arena Alpha release
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/release-alpha.yml']
+    paths:
+      - '.github/workflows/release-alpha.yml'
+      - 'project.godot'
+      - 'export_presets.cfg'
   workflow_dispatch:
 
 concurrency:

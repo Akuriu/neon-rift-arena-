@@ -1,5 +1,7 @@
 extends SceneTree
 
+const Arms := preload("res://game/weapons/catalog.gd")
+
 var app
 var failures := 0
 
@@ -69,6 +71,17 @@ func run() -> void:
 	quit(failures)
 
 func play_step(stage, pilot, step: int) -> void:
+	var gun = pilot.arsenal
+	if gun.rounds() == 0 and gun.reserve() == 0:
+		var reach := 0.0
+		var alternative := -1
+		for index in gun.rack:
+			var distance: float = Arms.WEAPONS[index].range
+			if gun.magazines[index] + gun.reserves[index] > 0 and distance > reach:
+				alternative = index
+				reach = distance
+		if alternative >= 0:
+			gun.select(alternative)
 	var visible: CharacterBody3D
 	var nearest: CharacterBody3D
 	var best := INF
