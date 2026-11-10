@@ -1,0 +1,29 @@
+name: Rifle Arena checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, 'feature/**']
+    paths:
+      - '**.gd'
+      - '**.gdshader'
+      - '**.tscn'
+      - '**.tres'
+      - 'assets/**'
+      - 'tools/**'
+      - 'tests/**'
+      - 'project.godot'
+      - 'export_presets.cfg'
+      - '.github/workflows/**'
+
+concurrency:
+  group: rifle-check-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    uses: ./.github/workflows/build-alpha.yml

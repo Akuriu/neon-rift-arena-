@@ -1,4 +1,20 @@
-# Changements
+# Rifle Arena
+
+## v0.0.6-alpha
+
+- HUD tactile compact avec six commandes de combat, compteur de munitions tactile, objectif et chronomètre regroupés.
+- Joystick progressif sans double zone morte, course réglable et visée tactile indépendante de la densité d’écran. Courbe et plafond de vitesse facultatifs.
+- Sprint en bascule conservé à la pause et réinitialisé au KO. Les gestes ambigus ou annulés laissent les commandes au repos.
+- Aperçu des commandes plein écran, modes Simple, Complet, Gaucher et Personnalisé, réinitialisation d’un seul bouton.
+- Transitions de sprint, de changement d’arme et de recharge amorties. Les pas sont interpolés entre deux ticks physiques.
+- Télémétrie P50/P95/P99, temps physique CPU, appels de dessin et mémoire du moteur. Les classements des parties sans bots gardent leurs règles après relecture.
+- Contrôles automatiques sur les changements du jeu. Exports Windows et Android issus d’un seul commit, lancement sur les deux plateformes et sommes SHA-256.
+
+La coop conserve le protocole 4. La mise à jour Android sur une installation v0.0.5 dépend de la récupération de la clé de signature d’origine. Voir [le suivi QA](docs/V0.0.6_QA.md).
+
+## v0.0.5-alpha
+
+- Accueil mobile plein écran, sprint à bascule et animations des joueurs et des bots synchronisées en coop.
 
 ## 2.0.0 — UPRISING
 

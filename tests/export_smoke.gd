@@ -6,9 +6,11 @@ func _initialize() -> void:
 	call_deferred("run")
 
 func run() -> void:
-	check(ProjectSettings.get_setting("application/config/version") == "0.0.5-alpha", "Version exportée 0.0.5-alpha")
+	var version: String = ProjectSettings.get_setting("application/config/version")
+	check(version.ends_with("-alpha"), "Version Alpha déclarée dans le projet")
 	var app = load("res://scenes/App.tscn").instantiate()
 	root.add_child(app)
+	check(app.version_label == "v" + version.trim_suffix("-alpha") + " Alpha", "Version de l’accueil dérivée du projet")
 	check(app.screen == "menu" and app.coop != null, "Scène d’entrée et gestionnaire coop dans le paquet")
 	app.open_lobby()
 	check(app.screen == "lobby" and app.lobby.address.text == "127.0.0.1", "Interface coop dans le paquet")

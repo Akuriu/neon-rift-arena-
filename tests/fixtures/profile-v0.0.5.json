@@ -1,0 +1,247 @@
+{
+	"bindings": {
+		"back": 83,
+		"crouch": 4194326,
+		"forward": 90,
+		"gadget": 71,
+		"inspect": 73,
+		"interact": 69,
+		"jump": 32,
+		"left": 81,
+		"reload": 82,
+		"right": 68,
+		"slot_1": 49,
+		"slot_2": 50,
+		"slot_3": 51,
+		"slot_4": 52,
+		"sprint": 4194325,
+		"stats": 4194306
+	},
+	"progression": {
+		"career": {
+			"badges": [],
+			"history": [],
+			"ledger": [
+				{
+					"amount": -110,
+					"id": "47d73a9b6dcf20877e70a915",
+					"label": "Achat · DMR-762"
+				}
+			],
+			"maps": [],
+			"saved": {
+
+			},
+			"weekly": {
+				"claimed": false,
+				"period": 2967,
+				"value": 0
+			}
+		},
+		"coins": 790,
+		"contracts": {
+			"claimed": {
+				"kills": false,
+				"runs": false,
+				"waves": false
+			},
+			"date": "2026-11-10",
+			"progress": {
+				"kills": 0,
+				"runs": 0,
+				"waves": 0
+			}
+		},
+		"gadget": "gd_dash",
+		"id": "2f13a41fdffe31a0d39bd6dc",
+		"mastery": {
+
+		},
+		"modes": {
+
+		},
+		"module": "",
+		"name": "Pilote",
+		"owned": [
+			"wp_pulse",
+			"wp_volt",
+			"wp_prism",
+			"wp_nova",
+			"gd_dash",
+			"wp_eclipse"
+		],
+		"settled": [],
+		"skin": "",
+		"slots": [
+			"wp_pulse",
+			"wp_volt",
+			"wp_prism",
+			"wp_nova"
+		],
+		"stats": {
+			"best_wave": 0,
+			"bosses": 0,
+			"credits": 0,
+			"deaths": 0,
+			"hits": 0,
+			"kills": 0,
+			"losses": 0,
+			"objectives": 0,
+			"runs": 0,
+			"seconds": 0,
+			"shots": 0,
+			"spent": 0,
+			"ties": 0,
+			"waves": 0,
+			"wins": 0
+		},
+		"xp": 725
+	},
+	"records": {
+		"short|standard|skyline": [
+			{
+				"accuracy": 54,
+				"kills": 0,
+				"score": 5430,
+				"seconds": 348,
+				"victory": true,
+				"wave": 10
+			}
+		]
+	},
+	"settings": {
+		"ads_sensitivity": 0.66,
+		"ambience": 0.6,
+		"audio_alerts": true,
+		"audio_dynamic": true,
+		"audio_hits": true,
+		"auto_slide": false,
+		"borderless": false,
+		"crouch_toggle": false,
+		"damage_numbers": false,
+		"flashes": 0.8,
+		"fog": false,
+		"fov": 82.0,
+		"fps_counter": false,
+		"fps_limit": 45,
+		"fullscreen": false,
+		"head_bob": false,
+		"high_contrast": false,
+		"hud_scale": 0.86,
+		"hud_tone": 0,
+		"invert_y": false,
+		"layout": 0,
+		"master": 0.8,
+		"motion_strength": 0.34,
+		"music": 0.45,
+		"particles": 0.85,
+		"quality": 3,
+		"recoil": true,
+		"resolution": 1,
+		"reticle": 0,
+		"reticle_tint": 0,
+		"scope_overlay": true,
+		"scope_shade": 0.54,
+		"sensitivity": 0.18,
+		"sfx": 0.8,
+		"shake": 0.5,
+		"sprint_fov": true,
+		"sprint_toggle": false,
+		"steady_cam": false,
+		"telemetry": false,
+		"touch_aim_assist": true,
+		"touch_auto_sprint": false,
+		"touch_compact": true,
+		"touch_dead": 0.13,
+		"touch_float": true,
+		"touch_haptic": false,
+		"touch_invert": false,
+		"touch_left": true,
+		"touch_x": 1.35,
+		"touch_y": 0.95,
+		"ui_motion": true,
+		"vsync": true,
+		"weather": false
+	},
+	"touch_layout": {
+		"ads": {
+			"opacity": 0.87,
+			"size": 1.0,
+			"x": 0.806,
+			"y": 0.698
+		},
+		"crouch": {
+			"opacity": 0.87,
+			"size": 1.0,
+			"x": 0.96,
+			"y": 0.799
+		},
+		"fire": {
+			"opacity": 0.71,
+			"size": 1.13,
+			"x": 0.86,
+			"y": 0.57
+		},
+		"gadget": {
+			"opacity": 0.87,
+			"size": 1.0,
+			"x": 0.709,
+			"y": 0.764
+		},
+		"interact": {
+			"opacity": 0.87,
+			"size": 1.0,
+			"x": 0.697,
+			"y": 0.635
+		},
+		"jump": {
+			"opacity": 0.87,
+			"size": 1.0,
+			"x": 0.91,
+			"y": 0.804
+		},
+		"next": {
+			"opacity": 0.87,
+			"size": 1.0,
+			"x": 0.767,
+			"y": 0.897
+		},
+		"pause": {
+			"opacity": 0.87,
+			"size": 1.0,
+			"x": 0.95,
+			"y": 0.082
+		},
+		"reload": {
+			"opacity": 0.87,
+			"size": 1.0,
+			"x": 0.906,
+			"y": 0.935
+		},
+		"sprint": {
+			"opacity": 0.87,
+			"size": 1.0,
+			"x": 0.205,
+			"y": 0.581
+		},
+		"stats": {
+			"opacity": 0.87,
+			"size": 1.0,
+			"x": 0.056,
+			"y": 0.22
+		},
+		"stick": {
+			"opacity": 0.87,
+			"size": 1.0,
+			"x": 0.124,
+			"y": 0.743
+		},
+		"zoom": {
+			"opacity": 0.87,
+			"size": 1.0,
+			"x": 0.792,
+			"y": 0.522
+		}
+	},
+	"version": 5
+}
