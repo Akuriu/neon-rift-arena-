@@ -47,9 +47,9 @@ def check(process, log, name, deadline, require_pass=True):
     return good and not any(line.startswith(ERRORS) for line in output.splitlines())
 
 
-def scenario(engine, directory, name, *args, require_pass=True):
+def scenario(engine, directory, name, *args, require_pass=True, seconds=180):
     process, log = launch(engine, directory, name, args)
-    return check(process, log, name, time.monotonic() + 180, require_pass)
+    return check(process, log, name, time.monotonic() + seconds, require_pass)
 
 
 def coop(engine, directory, players):
@@ -119,7 +119,8 @@ def dedicated(engine, directory):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--godot", default=os.environ.get("GODOT", "godot"))
-    parser.add_argument("--suite", choices=["all", "solo", "coop2", "coop4", "dedicated"], default="all")
+    parser.add_argument("--suite", choices=["all", "solo", "coop2", "coop4", "dedicated", "soak"], default="all")
+    parser.add_argument("--soak-seconds", type=int, choices=range(10, 1801), default=1200, metavar="10–1800")
     parser.add_argument("--logs", type=Path, help="new directory for logs and disposable saves")
     args = parser.parse_args()
     engine = shutil.which(args.godot)
@@ -136,11 +137,16 @@ def main():
         outcomes = []
         if args.suite in ("all", "solo"):
             for script in ["regression", "v2_wave_generation", "v2_systems",
-                           "v3_feeling", "v3_modes", "v3_career", "v3_field"]:
+                           "v3_feeling", "v3_modes", "v3_career", "v3_field", "export_smoke"]:
                 outcomes.append(scenario(engine, directory, script, "--fixed-fps", "60",
                                          "--script", f"res://tests/{script}.gd"))
             outcomes.append(scenario(engine, directory, "v3_touch", "--fixed-fps", "60",
                                      "--script", "res://tests/v3_touch.gd", "--", "--touch"))
+            outcomes.append(scenario(engine, directory, "v6_acceptance", "--fixed-fps", "60",
+                                     "--script", "res://tests/v6_acceptance.gd", "--", "--touch"))
+            for fps in (30, 45, 60):
+                outcomes.append(scenario(engine, directory, f"v6_camera_{fps}", "--fixed-fps", str(fps),
+                                         "--script", "res://tests/v6_camera.gd"))
             for mode, arena in [("survival", "cryo"), ("short", "skyline"), ("trial", "reactor"), ("boss_rush", "reactor")]:
                 outcomes.append(scenario(engine, directory, mode, "--fixed-fps", "120",
                                          "--script", "res://tests/survival.gd", "--", mode, arena, "discovery"))
@@ -149,6 +155,10 @@ def main():
                 outcomes.append(coop(engine, directory, count))
         if args.suite in ("all", "dedicated"):
             outcomes.append(dedicated(engine, directory))
+        if args.suite == "soak":
+            outcomes.append(scenario(engine, directory, "v6_soak", "--script", "res://tests/v6_soak.gd",
+                                     "--", "--touch", f"--seconds={args.soak_seconds}",
+                                     seconds=args.soak_seconds + 60))
         return 0 if all(outcomes) else 1
 
 

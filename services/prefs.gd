@@ -38,6 +38,8 @@ const DEFAULTS := {
 	"touch_x": 1.05, "touch_y": 0.95, "touch_dead": 0.13, "touch_invert": false,
 	"touch_left": false, "touch_float": true, "touch_haptic": false, "touch_compact": true,
 	"touch_aim_assist": true, "touch_auto_sprint": false,
+	"touch_travel": 1.0, "touch_response": 0.28, "touch_look_curve": 0.0, "touch_look_limit": 0,
+	"touch_preset": 0,
 	"particles": 0.85, "audio_alerts": true, "audio_hits": true, "audio_dynamic": true,
 }
 const RANGES := {
@@ -47,6 +49,9 @@ const RANGES := {
 	"motion_strength": [0.0, 1.0], "shake": [0.0, 1.0], "scope_shade": [0.1, 0.85],
 	"hud_tone": [0, 3],
 	"touch_x": [0.25, 3.0], "touch_y": [0.25, 3.0], "touch_dead": [0.04, 0.35],
+	"touch_travel": [0.75, 1.25], "touch_response": [0.0, 0.75], "touch_look_curve": [0.0, 0.75],
+	"touch_look_limit": [0, 900],
+	"touch_preset": [0, 3],
 	"particles": [0.0, 1.0],
 }
 const BUSES := {"master": "Master", "music": "Musique", "sfx": "SFX", "ambience": "Ambiance"}
@@ -56,6 +61,7 @@ const MAPS := ["reactor", "skyline", "cryo", "bastion", "district", "grove", "st
 
 var values := DEFAULTS.duplicate()
 var touch_layout := TouchLayout.defaults()
+var default_touch_layout := TouchLayout.defaults()
 var keys := AZERTY.duplicate()
 var records: Dictionary = {}
 var profile := Profile.new()
@@ -95,9 +101,25 @@ func default_values() -> Dictionary:
 	return base
 
 func set_touch_layout(layout: Variant) -> void:
+	_activate_custom_touch()
 	touch_layout = TouchLayout.normalize(layout)
 	queue_save()
 	changed.emit("touch_layout")
+
+func active_touch_layout() -> Dictionary:
+	return touch_layout if values.touch_preset == 0 else default_touch_layout
+
+func compact_touch() -> bool:
+	return values.touch_compact if values.touch_preset == 0 else values.touch_preset != 2
+
+func left_touch() -> bool:
+	return values.touch_left if values.touch_preset == 0 else values.touch_preset == 3
+
+func _activate_custom_touch() -> void:
+	if values.touch_preset != 0:
+		values.touch_compact = compact_touch()
+		values.touch_left = left_touch()
+		values.touch_preset = 0
 
 func keyboard(layout: int) -> Dictionary:
 	var result := AZERTY.duplicate()

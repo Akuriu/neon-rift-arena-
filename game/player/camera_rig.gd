@@ -8,6 +8,7 @@ var travel := 0.0
 var lean := 0.0
 var spring := 0.0
 var step_weight := 0.0
+var sprint_weight := 0.0
 
 func _ready() -> void:
 	top_level = true
@@ -29,6 +30,7 @@ func present(delta: float) -> void:
 	var running := (flags & Track.RUN) != 0
 	var grounded: bool = (flags & Track.AIR) == 0 if pilot.replica else pilot.is_on_floor()
 	travel = lerpf(travel, motion, 1.0 - exp(-9.0 * delta))
+	sprint_weight = lerpf(sprint_weight, 1.0 if running else 0.0, 1.0 - exp(-12.0 * delta))
 	step_weight = lerpf(step_weight, motion if grounded else 0.0, 1.0 - exp(-11.0 * delta))
 	eye_height = lerpf(eye_height, pilot.height - 0.16, 1.0 - exp(-23.0 * delta))
 	spring = lerpf(spring, pilot.landing, 1.0 - exp(-27.0 * delta))
@@ -39,12 +41,12 @@ func present(delta: float) -> void:
 		1.0 - exp(-10.0 * delta))
 	var footfall := 0.0
 	if Prefs.values.head_bob:
-		footfall = (absf(sin(pilot.walk_phase)) - 0.54) * step_weight * 0.046 * strength
+		footfall = (absf(sin(pilot.rendered_step_phase())) - 0.54) * step_weight * 0.046 * strength
 	var eye: Vector3 = pilot.get_global_transform_interpolated().origin
 	var view_basis: Basis = pilot.head.global_basis * Basis(Vector3.BACK, lean)
 	eye.y += eye_height + footfall - spring * Prefs.values.shake * strength
 	global_transform = Transform3D(view_basis, eye)
-	var sprint_extra := 5.0 * travel if running and Prefs.values.sprint_fov and not stable else 0.0
+	var sprint_extra := 5.0 * travel * sprint_weight if Prefs.values.sprint_fov and not stable else 0.0
 	fov = lerpf(fov, pilot.arsenal.aim_fov(Prefs.values.fov + sprint_extra), 1.0 - exp(-15.0 * delta))
 	pilot.head.fov = fov
 	pilot.wall_pull = lerpf(pilot.wall_pull, pilot.wall_target, 1.0 - exp(-19.0 * delta))

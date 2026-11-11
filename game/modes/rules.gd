@@ -18,7 +18,7 @@ static func key(options: Dictionary) -> String:
 
 static func valid_key(value: String) -> bool:
 	var parts := value.split("-")
-	return parts.size() == 3 and parts[0].is_valid_int() and int(parts[0]) in range(1, 13) \
+	return parts.size() == 3 and parts[0].is_valid_int() and int(parts[0]) in range(0, 13) \
 		and str(int(parts[0])) == parts[0] and parts[1].is_valid_int() and int(parts[1]) in DURATIONS \
 		and str(int(parts[1])) == parts[1] and parts[2].is_valid_int() and int(parts[2]) in TARGETS \
 		and str(int(parts[2])) == parts[2]

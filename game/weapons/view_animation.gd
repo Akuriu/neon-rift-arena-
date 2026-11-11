@@ -20,6 +20,8 @@ var sprint := 0.0
 var travel := Vector3.ZERO
 var attitude := Vector3.ZERO
 var warmed := false
+var stow := 0.0
+var cell_weight := 0.0
 
 static func inspection_time(index: int) -> float:
 	return TUNES[index].z
@@ -32,6 +34,7 @@ func tick(gun: Node, delta: float, motion: float, running: bool, wall: float, se
 		return
 	if gun.swap_left <= HANDOFF and gun.visual_index != gun.active:
 		gun.show_model(gun.active)
+		cell_weight = 0.0
 	var tune: Vector4 = TUNES[gun.visual_index]
 	var comfort: float = 0.24 if settings.steady_cam else settings.motion_strength
 	var heat: float = gun.heat[gun.active]
@@ -40,7 +43,7 @@ func tick(gun: Node, delta: float, motion: float, running: bool, wall: float, se
 		kick *= 0.32
 	stride = lerpf(stride, motion, 1.0 - exp(-10.0 * delta))
 	sprint = lerpf(sprint, 1.0 if running else 0.0, 1.0 - exp(-12.0 * delta))
-	var walk: float = gun.pilot.walk_phase
+	var walk: float = gun.pilot.rendered_step_phase()
 	var base := REST + Vector3(0.0, -0.009, -0.10) if gun.visual_index == 2 else REST
 	var target := base + Vector3(sin(walk) * 0.016, (absf(cos(walk)) - 0.58) * 0.016, 0.0) * stride * comfort
 	target += Vector3(0, sin(gun.pose_clock * 2.2) * 0.003 * comfort, kick * tune.x)
@@ -78,12 +81,11 @@ func tick(gun: Node, delta: float, motion: float, running: bool, wall: float, se
 		angle = angle.lerp(Vector3(-kick * tune.y * 0.38, 0, 0), aim_weight)
 		if gun.aiming() and state != Pose.CHARGE and state != Pose.FIRE:
 			state = Pose.AIM
+	var stow_target := smoothstep(0.0, HANDOFF, gun.swap_left)
+	stow = lerpf(stow, stow_target, 1.0 - exp(-26.0 * delta))
+	target += Vector3(0.075, -0.34, 0.115) * stow
+	angle += Vector3(-0.82, tune.w * 0.48, -0.46) * stow
 	if gun.swap_left > 0.0:
-		var hide := smoothstep(0.0, HANDOFF, gun.swap_left)
-		if gun.swap_left > HANDOFF:
-			hide = 1.0 - smoothstep(HANDOFF, SWAP, gun.swap_left)
-		target += Vector3(0.075, -0.34, 0.115) * hide
-		angle += Vector3(-0.82, tune.w * 0.48, -0.46) * hide
 		state = Pose.STOW if gun.swap_left > HANDOFF else Pose.EQUIP
 	target += Vector3(0.042, -0.046, 0.19) * wall
 	angle.x -= wall * 0.67
@@ -96,11 +98,12 @@ func tick(gun: Node, delta: float, motion: float, running: bool, wall: float, se
 	gun.view.position = travel
 	gun.view.rotation = attitude
 	gun.view.visible = not gun.spec().has("zoom") or gun.scope < 0.90
+	cell_weight = lerpf(cell_weight, cell, 1.0 - exp(-32.0 * delta))
 	var home: Vector3 = gun.cell.get_meta("home")
-	gun.cell.position = home + Vector3(-0.035 * cell, -cell * (0.19 + tune.w * 0.06), 0.035 * cell)
-	gun.cell.rotation.z = -cell * 0.48
+	gun.cell.position = home + Vector3(-0.035, -(0.19 + tune.w * 0.06), 0.035) * cell_weight
+	gun.cell.rotation.z = -cell_weight * 0.48
 	var travel_distance := 0.10 if gun.visual_index == 1 else 0.036
-	gun.mechanism.position.z = (kick * 0.65 + cell * 0.35) * travel_distance
+	gun.mechanism.position.z = (kick * 0.65 + cell_weight * 0.35) * travel_distance
 	var intensity: float = settings.flashes
 	gun.flash.visible = intensity > 0.03 and gun.shot_kick > 0.77
 	gun.flash.scale = Vector3.ONE * (0.55 + gun.shot_kick * intensity * 0.56)

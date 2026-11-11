@@ -1,5 +1,8 @@
 extends SceneTree
 
+const Layout := preload("res://ui/mobile/layout.gd")
+const Response := preload("res://ui/mobile/response.gd")
+
 var app
 var layer
 var failures := 0
@@ -15,6 +18,8 @@ func run() -> void:
 	root.add_child(app)
 	var prefs = root.get_node("Prefs")
 	check(prefs.values.quality == 3 and prefs.values.fps_limit == 45, "Profil mobile Ultra Léger au premier lancement")
+	check_layout()
+	check_response()
 	await process_frame
 	var extent := root.get_visible_rect().size
 	app._apply_safe_insets(Rect2(Vector2(50, 8), extent - Vector2(50, 8)), extent)
@@ -33,9 +38,17 @@ func run() -> void:
 	var fire: Vector2 = layer._center("fire")
 	var look := Vector2(770, 289)
 	var sprint: Vector2 = layer._center("sprint")
+	tap(0, stick, true)
+	drag(0, stick + Vector2.UP * 21.0, Vector2.UP * 21.0)
+	check(pilot.steering().y < -0.05 and pilot.steering().y > -0.40, "Petits mouvements sans double zone morte")
+	tap(0, stick, false)
+	check(pilot.steering().is_zero_approx(), "Recentrage immédiat du joystick")
 	tap(8, sprint, true)
 	tap(8, sprint, false, true)
 	check(not pilot.down("sprint"), "Un toucher annulé ne bascule pas le sprint")
+	tap(8, sprint, true)
+	tap(8, sprint + Vector2.RIGHT * 120, false)
+	check(not pilot.down("sprint"), "Glisser hors du bouton annule la bascule")
 	tap(8, sprint, true)
 	tap(8, sprint, false)
 	tap(0, stick, true)
@@ -69,6 +82,13 @@ func run() -> void:
 	await ticks(20)
 	check(pilot.position.distance_to(start) > 0.5 and absf(pilot.rotation.y - yaw) > 0.1
 		and pilot.stats.shots > 0 and layer.fingers.size() == 3, "Trois doigts bougent, visent et tirent simultanément")
+	var prior_weapon: int = pilot.arsenal.active
+	var next_touch: Vector2 = layer._center("next")
+	tap(3, next_touch, true)
+	tap(3, next_touch, false)
+	check(pilot.arsenal.active != prior_weapon and layer.fingers.size() == 3
+		and Input.is_action_pressed("fire") and pilot.steering().y < -0.8,
+		"Le changement d’arme ne libère ni tir, ni visée, ni joystick")
 	var former_yaw: float = pilot.rotation.y
 	drag(2, fire + Vector2(-150, 0), Vector2(-150, 0))
 	await ticks(2)
@@ -92,6 +112,11 @@ func run() -> void:
 	check(Input.is_action_pressed("crouch"), "Glisser vers le bas déclenche l’accroupissement")
 	tap(7, jump, false)
 	check(not Input.is_action_pressed("crouch"), "Lever le doigt relâche l’accroupissement")
+	tap(7, jump, true)
+	drag(7, jump + Vector2(45, 45), Vector2(45, 45))
+	tap(7, jump, false)
+	check(not Input.is_action_pressed("gadget") and not Input.is_action_pressed("crouch")
+		and not Input.is_action_pressed("jump"), "Un geste diagonal ambigu reste sans action")
 	var gun = pilot.arsenal
 	var active: int = gun.active
 	var next: Vector2 = layer._center("next")
@@ -132,9 +157,51 @@ func run() -> void:
 	app.notification(Node.NOTIFICATION_APPLICATION_RESUMED)
 	app.hud()
 	check(not paused and app.screen == "hud", "Reprise tactile après retour à l’application")
+	app.begin("classic", "standard", "station", 73, "", false, {"bots": 0})
+	layer = app.touch_panel
+	pilot = app.session.player
+	await ticks(4)
+	sprint = layer._center("sprint")
+	tap(8, sprint, true)
+	tap(8, sprint, false)
+	check(pilot.down("sprint"), "Course activée avant le KO")
+	pilot.damage_lock = 0.0
+	pilot.take_damage(1000.0)
+	pilot.respawn(pilot.position)
+	await ticks(3)
+	check(pilot.alive and not pilot.down("sprint") and pilot.steering().is_zero_approx(),
+		"Le respawn réinitialise la bascule et le mouvement")
 	app.menu()
 	await process_frame
 	quit(failures)
+
+func check_layout() -> void:
+	var defaults := Layout.defaults()
+	for extent in [Vector2(1280, 720), Vector2(1560, 720), Vector2(1600, 720), Vector2(1152, 672)]:
+		for left_handed in [false, true]:
+			var centers := {}
+			var radii := {}
+			var separated := true
+			for id in Layout.CONTROLS:
+				var center := Layout.center(id, defaults[id], extent, left_handed)
+				var radius := Layout.radius(id, defaults[id], extent)
+				var margin := Vector2(radius * Layout.AMMO_WIDTH if id == "reload" else radius, radius)
+				if not Rect2(Vector2.ZERO, extent).grow(0.01).encloses(Rect2(center - margin, margin * 2.0)):
+					separated = false
+				for other in centers:
+					if Layout.overlaps(id, center, radius, other, centers[other], radii[other]):
+						separated = false
+				centers[id] = center
+				radii[id] = radius
+			check(separated, "Cibles séparées dans la zone sûre %s, gaucher=%s" % [extent, left_handed])
+
+func check_response() -> void:
+	var axes := Vector2(1.4, 0.7)
+	var a := Response.look(Vector2(55, 34), Vector2(1900, 320), Vector2(1280, 720), axes, 0.6, 360.0)
+	var b := Response.look(Vector2(110, 68), Vector2(3800, 640), Vector2(3200, 1440), axes, 0.6, 360.0)
+	var rate := Response.look(Vector2(3800, 640), Vector2(3800, 640), Vector2(3200, 1440), axes, 0.6, 360.0)
+	check(a.is_equal_approx(b), "Visée tactile identique à échelle physique et axes équivalents")
+	check(rate.length() * Response.LOOK_DEGREES <= 360.01, "Limiteur de vitesse de visée effectif")
 
 func check_aim(pilot: CharacterBody3D) -> void:
 	var stage = app.session
