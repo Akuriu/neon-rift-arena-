@@ -136,7 +136,7 @@ def main():
             return 1
         outcomes = []
         if args.suite in ("all", "solo"):
-            for script in ["regression", "v2_wave_generation", "v2_systems",
+            for script in ["regression", "profile_recovery", "v2_wave_generation", "v2_systems",
                            "v3_feeling", "v3_modes", "v7_gungame", "v7_parkour", "v7_interactions", "v7_motion", "v3_career", "v3_field", "export_smoke"]:
                 outcomes.append(scenario(engine, directory, script, "--fixed-fps", "60",
                                          "--script", f"res://tests/{script}.gd"))

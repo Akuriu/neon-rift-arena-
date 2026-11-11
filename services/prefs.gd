@@ -69,6 +69,7 @@ var records: Dictionary = {}
 var profile := Profile.new()
 var disk_stamp := ""
 var save_error := ""
+var profile_notice := ""
 var dirty := false
 var save_in := 0.0
 var test_profile_dir := ""
@@ -258,9 +259,17 @@ func _read(filename: String) -> Dictionary:
 
 func load_disk() -> void:
 	disk_stamp = _stamp()
+	profile_notice = ""
 	var document := _read(SAVE)
 	if not _recognizable(document):
 		document = _read(BACKUP)
+		if _recognizable(document):
+			profile_notice = "Profil chargé depuis la copie de secours."
+		elif FileAccess.file_exists(profile_file(SAVE)) or FileAccess.file_exists(profile_file(BACKUP)):
+			profile_notice = "Profil illisible. Une session de secours a été ouverte."
+	var version := _profile_version(document)
+	if version < 0 and profile_notice.is_empty():
+		profile_notice = "Version du profil illisible. Les données compatibles ont été chargées."
 	profile.restore(document.get("progression", {}))
 	values = default_values()
 	var stored: Variant = document.get("settings", document.get("prefs", {}))
@@ -268,7 +277,7 @@ func load_disk() -> void:
 		for key in DEFAULTS:
 			if stored.has(key):
 				values[key] = _valid_value(key, stored[key])
-	if int(document.get("version", 0)) < 5:
+	if version >= 0 and version < 5:
 		touch_layout = TouchLayout.defaults()
 		values.touch_compact = true
 	else:
@@ -464,6 +473,15 @@ func reset_progression() -> Dictionary:
 func _recognizable(document: Dictionary) -> bool:
 	return document.get("settings") is Dictionary or document.get("prefs") is Dictionary or document.get("records") is Dictionary
 
+func _profile_version(document: Dictionary) -> int:
+	var value: Variant = document.get("version", 0)
+	if value is String and value.is_valid_int():
+		return clampi(value.to_int(), -1, 1000)
+	if typeof(value) in [TYPE_INT, TYPE_FLOAT] and is_finite(float(value)) \
+		and float(value) >= 0.0 and floorf(float(value)) == float(value):
+		return int(minf(float(value), 1000.0))
+	return -1
+
 func _stamp() -> String:
 	var path := profile_file(SAVE)
 	return FileAccess.get_sha256(path) if FileAccess.file_exists(path) else ""
@@ -492,13 +510,22 @@ func _write_locked() -> String:
 	if _stamp() != disk_stamp:
 		return "Profil modifié par une autre instance. Rouvrez le jeu."
 	var previous := _read(SAVE)
-	var version := Profile.number(previous.get("version"), 1000)
+	var version := _profile_version(previous)
+	var path := profile_file(SAVE)
+	var migration_source := path
+	if not _recognizable(previous):
+		var backup := _read(BACKUP)
+		migration_source = profile_file(BACKUP) if _recognizable(backup) else ""
+		if not migration_source.is_empty():
+			version = _profile_version(backup)
 	if version > VERSION:
 		return "Ce profil appartient à une version plus récente du jeu."
-	var path := profile_file(SAVE)
+	var healthy := migration_source == path and version >= 0
+	if not healthy and FileAccess.file_exists(path) and not _archive_invalid_profile(path):
+		return "Impossible de conserver le profil illisible avant de le remplacer."
 	var legacy := profile_file("user://pilot_profile.v5.json" if version == 5 else (V2_BACKUP if version == 3 else LEGACY_BACKUP))
-	if _recognizable(previous) and version < VERSION and not FileAccess.file_exists(legacy):
-		if DirAccess.copy_absolute(path, legacy) != OK:
+	if not migration_source.is_empty() and version >= 0 and version < VERSION and not FileAccess.file_exists(legacy):
+		if DirAccess.copy_absolute(migration_source, legacy) != OK:
 			return "Impossible de copier l’ancien profil avant migration."
 	var temporary := profile_file(TEMP)
 	var file := FileAccess.open(temporary, FileAccess.WRITE)
@@ -511,11 +538,25 @@ func _write_locked() -> String:
 	file.close()
 	if error != OK or _read(TEMP).get("version") != VERSION:
 		return "Écriture incomplète du profil."
-	if _recognizable(previous) and DirAccess.copy_absolute(path, profile_file(BACKUP)) != OK:
+	if healthy and DirAccess.copy_absolute(path, profile_file(BACKUP)) != OK:
 		return "Impossible de créer la copie de secours."
 	if DirAccess.rename_absolute(temporary, path) != OK:
 		return "Impossible de remplacer le profil."
 	return ""
+
+func _archive_invalid_profile(path: String) -> bool:
+	if disk_stamp.is_empty():
+		return false
+	var archive := profile_file("user://pilot_profile.corrupt-%s.json" % disk_stamp)
+	if FileAccess.file_exists(archive):
+		return FileAccess.get_sha256(archive) == disk_stamp
+	var temporary := archive + ".tmp"
+	if DirAccess.copy_absolute(path, temporary) == OK and FileAccess.get_sha256(temporary) == disk_stamp \
+		and DirAccess.rename_absolute(temporary, archive) == OK:
+		return true
+	if FileAccess.file_exists(temporary):
+		DirAccess.remove_absolute(temporary)
+	return false
 
 func _failed_save(message: String) -> bool:
 	save_error = message
