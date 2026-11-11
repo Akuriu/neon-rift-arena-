@@ -1,6 +1,9 @@
 extends Node
 
-const Session := preload("res://scenes/Session.tscn")
+const SESSION_PATH := "res://scenes/Session.tscn"
+const SceneLoader := preload("res://services/threaded_scene.gd")
+const MapLoading := preload("res://ui/loading/map_loading.gd")
+const Tokens := preload("res://ui/design/tokens.gd")
 const Arena := preload("res://game/arena.gd")
 const Depot := preload("res://game/skyline.gd")
 const FRAME := Vector2(1280, 720)
@@ -86,8 +89,18 @@ var coop: Coop
 var lobby: Lobby
 var shop_clock: Label
 var version_label := ""
+var staged_loading := false
+var map_loader := SceneLoader.new()
+var map_layer: CanvasLayer
+var map_loading: MapLoading
+var match_request := {}
+var loading_origin := ""
+var loading_focus: Control
 
 func _ready() -> void:
+	if "--server" in OS.get_cmdline_user_args():
+		get_tree().change_scene_to_file.call_deferred("res://scenes/Dedicated.tscn")
+		return
 	var version: String = ProjectSettings.get_setting("application/config/version")
 	version_label = "v" + version.trim_suffix("-alpha") + " Alpha" if version.ends_with("-alpha") else "v" + version
 	layer = CanvasLayer.new()
@@ -112,11 +125,7 @@ func _ready() -> void:
 		get_window().focus_exited.connect(_focus_lost)
 		get_tree().auto_accept_quit = false
 		get_window().close_requested.connect(_quit)
-	var arguments := OS.get_cmdline_user_args()
-	if "--server" in arguments:
-		_dedicated(arguments)
-	else:
-		menu()
+	menu()
 
 func _process(delta: float) -> void:
 	if screen == "upgrade" and is_instance_valid(shop_clock) and coop.in_match():
@@ -135,6 +144,8 @@ func _new_screen(name: String, treatment := "page") -> void:
 		_freeze()
 	if Prefs.mobile():
 		Input.emulate_mouse_from_touch = true
+	if name != "menu":
+		_drop_backdrop()
 	_drop_menu_view()
 	settings = null
 	lobby = null
@@ -230,6 +241,7 @@ func _make_backdrop() -> void:
 		return
 	backdrop = Depot.new()
 	backdrop.is_backdrop = true
+	backdrop.build_landscape = false
 	add_child(backdrop)
 	title_cam = Camera3D.new()
 	title_cam.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
@@ -239,6 +251,17 @@ func _make_backdrop() -> void:
 	add_child(title_cam)
 	title_cam.look_at_from_position(title_cam.position, Vector3(-3.5, 2.82, -5.6), Vector3.UP)
 	title_cam.current = true
+
+func _reveal_backdrop(home: Control) -> void:
+	if Prefs.values.quality not in [1, 2] or DisplayServer.get_name() == "headless":
+		return
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	if not is_instance_valid(home) or view != home or exiting or Prefs.values.quality not in [1, 2]:
+		return
+	_make_backdrop()
+	matte.live = true
+	matte.queue_redraw()
 
 func _drop_backdrop() -> void:
 	if is_instance_valid(title_cam):
@@ -251,9 +274,9 @@ func _drop_backdrop() -> void:
 		backdrop = null
 
 func menu() -> void:
+	_clear_loading()
 	coop.stop()
 	_drop_session()
-	_make_backdrop()
 	_free_cursor()
 	Sounds.duck = false
 	Sounds.set_track("menu")
@@ -290,7 +313,8 @@ func menu() -> void:
 	Palette.rule(plate, Rect2(246, 18, 1, 62))
 	_glyph(plate, Rect2(263, 35, 31, 31), "target", Palette.AMBER)
 	start.grab_focus()
-	_footer("Commandes tactiles" if Prefs.mobile() else "Clavier et souris")
+	_footer(Prefs.profile_notice if not Prefs.profile_notice.is_empty() else ("Commandes tactiles" if Prefs.mobile() else "Clavier et souris"))
+	_reveal_backdrop(view)
 
 func _home_link(rect: Rect2, title: String, icon: String, action: Callable, primary := false) -> Button:
 	var button := Palette.button(view, rect, "", action, primary)
@@ -314,7 +338,7 @@ func play_menu() -> void:
 	PlayMenu.new().build(view, {"gungame": open_classic.bind("gungame"), "classic": open_classic,
 		"parkour": open_parkour,
 		"survival": select_session, "coop": open_lobby,
-		"training": func(): begin("training", selected_difficulty, selected_map)})
+		"training": func(): request_match("training", selected_difficulty, selected_map)})
 	_home_link(Rect2(57, 593, 166, 53), "Retour", "back", menu)
 	_footer("Parties locales et salons privés")
 
@@ -345,7 +369,6 @@ func _play_card(rect: Rect2, title: String, description: String, map_id: String,
 		button.grab_focus()
 
 func open_lobby() -> void:
-	_make_backdrop()
 	_free_cursor()
 	Sounds.duck = false
 	Sounds.set_track("menu")
@@ -381,31 +404,6 @@ func _coop_ended(_message: String) -> void:
 	if screen != "lobby":
 		open_lobby()
 
-func _dedicated(arguments: PackedStringArray) -> void:
-	var port := Coop.PORT
-	var map := "reactor"
-	var mode := "survival"
-	var difficulty := "standard"
-	var code := ""
-	for argument in arguments:
-		if argument.begins_with("--port="):
-			port = argument.get_slice("=", 1).to_int()
-		elif argument.begins_with("--map="):
-			map = argument.get_slice("=", 1)
-		elif argument.begins_with("--mode="):
-			mode = argument.get_slice("=", 1)
-		elif argument.begins_with("--difficulty="):
-			difficulty = argument.get_slice("=", 1)
-		elif argument.begins_with("--code="):
-			code = argument.substr(7)
-	if coop.host(port, 4, code, true):
-		coop.configure(map, mode, difficulty)
-		screen = "server"
-		print("COOP dedicated UDP ", port, " · ", coop.room)
-	else:
-		printerr(coop.status)
-		get_tree().quit(2)
-
 func open_classic(variant := "classic") -> void:
 	var initial := {}
 	if Rules.LABELS.has(last_mode) and (last_mode == "gungame") == (variant == "gungame"):
@@ -424,7 +422,7 @@ func open_classic(variant := "classic") -> void:
 	_footer("SCORE LOCAL   /   LES RÈGLES DU MATCH DÉFINISSENT LE CLASSEMENT")
 
 func _start_classic(mode: String, difficulty: String, map_id: String, seed: int, rules: Dictionary) -> void:
-	begin(mode, difficulty, map_id, seed, "", false, rules)
+	request_match(mode, difficulty, map_id, seed, "", rules)
 
 func open_parkour() -> void:
 	_drop_session()
@@ -433,7 +431,7 @@ func open_parkour() -> void:
 	_new_screen("parkour")
 	_header("Mouvement", "Parkour", "Traversez les portiques dans l’ordre. Une chute ou un retour au checkpoint ajoute deux secondes.")
 	ParkourSetup.new().build(view, func(route: String, ghost: bool):
-		begin("parkour", "standard", "skyline", -1, "", false, {"route": route, "ghost": ghost}))
+		request_match("parkour", "standard", "skyline", -1, "", {"route": route, "ghost": ghost}))
 	Palette.button(view, Rect2(57, 581, 166, 53), "Retour", play_menu)
 	_footer("CHRONOMÈTRES PERSONNELS / Départ au premier portique / Pause disponible")
 
@@ -540,9 +538,132 @@ func _refresh_selection() -> void:
 
 func _start_selected() -> void:
 	var value := seed_input.text.strip_edges() if is_instance_valid(seed_input) else ""
-	begin(selected_mode, selected_difficulty, selected_map, int(value) if value.is_valid_int() else -1)
+	request_match(selected_mode, selected_difficulty, selected_map, int(value) if value.is_valid_int() else -1)
+
+func request_match(mode: String, difficulty: String, map_id := "reactor", run_seed := -1, test_weapon := "", rules: Dictionary = {}) -> void:
+	if exiting or (is_instance_valid(map_loading) and screen == "loading"):
+		return
+	_clear_loading()
+	if not staged_loading:
+		begin(mode, difficulty, map_id, run_seed, test_weapon, false, rules)
+		return
+	loading_origin = screen
+	loading_focus = get_viewport().gui_get_focus_owner()
+	match_request = {"mode": mode, "difficulty": difficulty, "map": map_id, "seed": run_seed,
+		"weapon": test_weapon, "rules": rules.duplicate(true)}
+	if is_instance_valid(session):
+		_freeze()
+	else:
+		_free_cursor()
+	if is_instance_valid(view):
+		view.hide()
+	if Prefs.mobile():
+		Input.emulate_mouse_from_touch = true
+	screen = "loading"
+	map_layer = CanvasLayer.new()
+	map_layer.layer = 12
+	add_child(map_layer)
+	map_loading = MapLoading.new()
+	map_loading.mode = _mode_name(mode)
+	if mode == "parkour":
+		var route := Courses.normalize(rules.get("route"))
+		map_loading.title = Courses.ROUTES[route].name
+		map_loading.tip = "Franchissez les checkpoints dans l’ordre pour valider votre chrono."
+	else:
+		map_loading.title = Catalog.MAPS.get(map_id, Catalog.MAPS.reactor).name
+		map_loading.image = load("res://assets/maps/%s.jpg" % (map_id if Catalog.MAPS.has(map_id) else "reactor"))
+		map_loading.tip = _loading_tip(mode)
+	map_layer.add_child(map_loading)
+	map_loading.cancelled.connect(_cancel_loading)
+	map_loading.retry.connect(_resolve_match)
+	_resolve_match()
+
+func _loading_tip(mode: String) -> String:
+	match mode:
+		"gungame": return "Chaque élimination vous fait passer à l’arme suivante."
+		"training": return "Réarmez au terminal pour réinitialiser les cibles."
+		"explore": return "Vous pouvez explorer les passages et essayer les interactions à votre rythme."
+		"capture", "domination": return "Les objectifs et leur état sont indiqués sur le HUD."
+		"survival", "short", "endless", "boss_rush": return "Ravitaillez-vous et adaptez votre équipement entre les vagues."
+		_: return "Le bilan de partie affiche votre score et vos statistiques."
+
+func _resolve_match() -> void:
+	var overlay := map_loading
+	overlay.show_status("Chargement des ressources")
+	await _visible_frame()
+	if not is_instance_valid(overlay) or overlay != map_loading:
+		return
+	if map_loader.status in [SceneLoader.Status.IDLE, SceneLoader.Status.FAILED]:
+		map_loader.request(SESSION_PATH)
+	while map_loader.status == SceneLoader.Status.LOADING:
+		map_loader.poll()
+		if map_loader.status == SceneLoader.Status.LOADING and map_loader.progress != overlay.meter.fraction:
+			overlay.show_status("Chargement des ressources", map_loader.progress)
+		await get_tree().process_frame
+		if not is_instance_valid(overlay) or overlay != map_loading:
+			return
+	if map_loader.status != SceneLoader.Status.LOADED:
+		overlay.show_status("La carte n’a pas pu être chargée", -1.0, true, true)
+		return
+	overlay.show_status("Construction de l’arène", -1.0, false)
+	await _visible_frame()
+	if not is_instance_valid(overlay) or overlay != map_loading:
+		return
+	var request := match_request
+	_launch_session(map_loader.scene, request.mode, request.difficulty, request.map, request.seed,
+		request.weapon, false, request.rules, false)
+	await _visible_frame()
+	if not is_instance_valid(overlay) or overlay != map_loading:
+		return
+	overlay.show_status("Prêt", 1.0, false)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud()
+	if Prefs.values.ui_motion and DisplayServer.get_name() != "headless":
+		var reveal := overlay.create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		reveal.tween_property(overlay, "modulate:a", 0.0, Tokens.REVEAL_SECONDS)
+		await reveal.finished
+	if is_instance_valid(overlay) and overlay == map_loading:
+		_clear_loading()
+
+func _cancel_loading() -> void:
+	if not is_instance_valid(map_loading) or not map_loading.cancel_button.visible:
+		return
+	var origin := loading_origin
+	var focus := loading_focus
+	_clear_loading()
+	screen = origin
+	if is_instance_valid(view):
+		view.show()
+	if is_instance_valid(focus):
+		focus.grab_focus()
+	if screen == "hud":
+		hud()
+
+func _clear_loading() -> void:
+	if is_instance_valid(map_layer):
+		remove_child(map_layer)
+		map_layer.queue_free()
+	map_layer = null
+	map_loading = null
+	match_request.clear()
+	loading_focus = null
+
+func _visible_frame() -> void:
+	if DisplayServer.get_name() == "headless":
+		await get_tree().process_frame
+	else:
+		await RenderingServer.frame_post_draw
 
 func begin(mode: String, difficulty: String, map_id := "reactor", run_seed := -1, test_weapon := "", online := false, rules: Dictionary = {}) -> void:
+	_clear_loading()
+	var packed := load(SESSION_PATH) as PackedScene
+	if packed == null:
+		push_error("La scène de partie n’a pas pu être chargée.")
+		return
+	_launch_session(packed, mode, difficulty, map_id, run_seed, test_weapon, online, rules, true)
+
+func _launch_session(packed: PackedScene, mode: String, difficulty: String, map_id: String,
+		run_seed: int, test_weapon: String, online: bool, rules: Dictionary, interactive: bool) -> void:
 	if not online:
 		coop.stop()
 	_drop_session()
@@ -550,7 +671,7 @@ func begin(mode: String, difficulty: String, map_id := "reactor", run_seed := -1
 	last_mode = mode
 	last_difficulty = difficulty
 	last_map = map_id
-	session = Session.instantiate()
+	session = packed.instantiate()
 	session.mode = mode
 	session.difficulty = difficulty
 	session.map_id = map_id
@@ -574,7 +695,10 @@ func begin(mode: String, difficulty: String, map_id := "reactor", run_seed := -1
 	Sounds.duck = false
 	Sounds.set_region(last_map)
 	Sounds.set_track("menu" if mode == "explore" else "combat")
-	hud()
+	if interactive:
+		hud()
+	else:
+		_freeze()
 
 func _drop_session() -> void:
 	if is_instance_valid(touch_panel):
@@ -839,7 +963,7 @@ func _restart() -> void:
 		session.director.restart()
 		hud()
 		return
-	begin(last_mode, last_difficulty, last_map, last_seed if Rules.LABELS.has(last_mode) else -1, "", false, last_rules)
+	request_match(last_mode, last_difficulty, last_map, last_seed if Rules.LABELS.has(last_mode) else -1, "", last_rules)
 
 func open_settings(origin: String) -> void:
 	options_origin = origin
@@ -1057,6 +1181,7 @@ func _quit() -> void:
 	if exiting:
 		return
 	exiting = true
+	_clear_loading()
 	if Prefs.dirty:
 		Prefs.save_disk()
 	_free_cursor()
@@ -1076,6 +1201,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _back() -> void:
 	match screen:
+		"loading": _cancel_loading()
 		"hud": pause()
 		"pause": hud()
 		"upgrade": _leave_intermission()
@@ -1104,7 +1230,7 @@ func open_hub(page: String, group := "Armes", id := "", notice := "") -> void:
 	_footer("PIÈCES DU PILOTE  /  ACHATS LOCAUX")
 
 func practice_weapon(id: String) -> void:
-	begin("training", selected_difficulty, selected_map, -1, id)
+	request_match("training", selected_difficulty, selected_map, -1, id)
 
 func show_profile(page := "profile", notice := "") -> void:
 	Prefs.profile.refresh_contracts()
@@ -1213,7 +1339,7 @@ func replay_report(run: Dictionary) -> void:
 	if Rules.valid_key(run.rules):
 		var fields := String(run.rules).split("-")
 		rules = {"bots": int(fields[0]), "duration": int(fields[1]), "target": int(fields[2])}
-	begin(run.mode, run.difficulty, run.map, run.seed, "", false, rules)
+	request_match(run.mode, run.difficulty, run.map, run.seed, "", rules)
 
 func _rename_pilot(input: LineEdit) -> void:
 	var result := Prefs.profile_action(func():

@@ -1,6 +1,9 @@
 extends Control
 
+const DEPOT := preload("res://assets/maps/skyline.jpg")
+
 var mode := "page"
+var live := false
 var wash: GradientTexture2D
 var shade: GradientTexture2D
 
@@ -37,6 +40,12 @@ func _wash(axis: Vector2, stops: Array, values: Array, ink: Color) -> GradientTe
 func _draw() -> void:
 	if wash == null:
 		return
+	if mode == "home" and not live:
+		var source := DEPOT.get_size()
+		var factor := maxf(size.x / source.x, size.y / source.y)
+		var extent := source * factor
+		draw_texture_rect(DEPOT, Rect2((size - extent) * Vector2(0.62, 0.5), extent),
+			false, Color("#c4c7b9"))
 	draw_texture_rect(wash, Rect2(Vector2.ZERO, size), false)
 	if shade != null:
 		draw_texture_rect(shade, Rect2(Vector2.ZERO, size), false)

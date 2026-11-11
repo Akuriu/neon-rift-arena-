@@ -231,6 +231,9 @@ func save_tests() -> void:
 	DirAccess.remove_absolute(prefs.profile_file(prefs.BACKUP))
 	prefs.load_disk()
 	check(prefs.values.fov == 82.0 and prefs.keys.forward == KEY_Z, "Retour aux valeurs d’origine si le profil est absent")
+	check(sounds.bank.is_empty(), "Le parcours headless ne charge aucun échantillon")
+	for id in sounds.IDS:
+		sounds.get_sample(id)
 	check(sounds.bank.size() == 45 and sounds.bank.pulse.data.size() > 1000 \
 		and sounds.bank.combat.loop_mode == AudioStreamWAV.LOOP_FORWARD \
 		and absf(sounds.bank.combat.loop_end / float(sounds.bank.combat.mix_rate) - 13.44) < 0.025 \
