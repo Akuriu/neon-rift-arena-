@@ -101,6 +101,7 @@ func show_tab(index: int, refresh := false) -> void:
 			_slider("Musique", "music", 0, 1, 0.01, true)
 			_slider("Effets sonores", "sfx", 0, 1, 0.01, true)
 			_slider("Ambiance", "ambience", 0, 1, 0.01, true)
+			_toggle("Sons de l’interface", "audio_ui")
 			_toggle("Alarmes sonores", "audio_alerts")
 			_toggle("Confirmation des impacts", "audio_hits")
 			_toggle("Variation de musique en combat", "audio_dynamic")

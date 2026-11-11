@@ -42,7 +42,7 @@ const DEFAULTS := {
 	"touch_aim_assist": true, "touch_auto_sprint": false,
 	"touch_travel": 1.0, "touch_response": 0.28, "touch_look_curve": 0.0, "touch_look_limit": 0,
 	"touch_preset": 0,
-	"particles": 0.85, "audio_alerts": true, "audio_hits": true, "audio_dynamic": true,
+	"particles": 0.85, "audio_alerts": true, "audio_hits": true, "audio_dynamic": true, "audio_ui": true,
 }
 const RANGES := {
 	"layout": [0, 1], "sensitivity": [0.035, 0.70], "fov": [66.0, 108.0],

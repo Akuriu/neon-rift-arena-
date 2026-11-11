@@ -128,6 +128,10 @@ static func button(parent: Node, rect: Rect2, caption: String, action: Callable,
 		node.theme_type_variation = "DangerAction"
 	elif primary:
 		node.theme_type_variation = "PrimaryAction"
+	if caption.begins_with("Annuler"):
+		node.sound_cue = "ui_cancel"
+	elif primary or destructive:
+		node.sound_cue = "ui_confirm"
 	node.bind_action(action)
 	at(parent, node, rect)
 	return node

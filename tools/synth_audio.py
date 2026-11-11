@@ -147,6 +147,11 @@ def make_loops():
                     cycle_mix(track, voice(.105, 2200, 330, .047, .19, .8), (bar * 8 + j + .52) * beat, .29)
         write(name, track)
 
+def make_interface():
+    fx("ui_select", (0, .055, 820, 535, .16, .09, .015, .003))
+    fx("ui_confirm", (0, .082, 457, 500, .13, .16), (.027, .094, 685, 685, .12, .10))
+    fx("ui_cancel", (0, .061, 486, 370, .13, .11), (.032, .064, 339, 296, .079, .09))
+
 
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
@@ -156,3 +161,4 @@ if __name__ == "__main__":
 if __name__ == '__main__':
     make_uprising_effects()
     make_v3_loops()
+    make_interface()

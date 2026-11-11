@@ -29,6 +29,7 @@ func run() -> void:
 	app.queue_free()
 	await process_frame
 	await RenderingServer.frame_post_draw
+	await create_timer(0.28).timeout
 	quit(errors)
 
 func render(mode: String, map_id: String, rules: Dictionary) -> void:

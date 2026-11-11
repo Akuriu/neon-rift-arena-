@@ -681,6 +681,7 @@ func hud() -> void:
 func _freeze() -> void:
 	get_tree().paused = not coop.in_match()
 	Sounds.duck = true
+	Sounds.stop_world()
 	_free_cursor()
 	if is_instance_valid(session):
 		session.player.input_blocked = true

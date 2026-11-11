@@ -7,20 +7,27 @@ const IDS := [
 	"wave", "phase", "boss", "wave_hit", "win", "loss", "menu", "combat", "reactor",
 	"rail", "lance", "ion", "mortar", "boost", "repair",
 	"pressure", "wind", "canopy", "concourse",
+	"ui_select", "ui_confirm", "ui_cancel",
 ]
 const LOOPS := ["menu", "combat", "reactor", "pressure", "wind", "canopy", "concourse"]
+const UI_CUES := ["ui_select", "ui_confirm", "ui_cancel"]
+const REGIONS := {"skyline": "wind", "bastion": "wind", "grove": "canopy",
+	"station": "concourse", "district": "concourse"}
 var bank := {}
 var flat: Array[AudioStreamPlayer] = []
 var world: Array[AudioStreamPlayer3D] = []
 var music: Array[AudioStreamPlayer] = []
-var ambience: AudioStreamPlayer
+var ambience: Array[AudioStreamPlayer] = []
+var interface: Array[AudioStreamPlayer] = []
 var selected := -1
+var selected_region := -1
 var music_name := ""
 var mixing := [0.0, 0.0]
+var room_levels := [0.0, 0.0]
 var flat_cursor := 0
 var world_cursor := 0
+var ui_cursor := 0
 var duck := false
-var ambient_gain := 0.0
 var audible := false
 var region := ""
 var suspended := false
@@ -35,10 +42,11 @@ func _ready() -> void:
 		set_process(false)
 		return
 	audible = DisplayServer.get_name() != "headless"
-	for title in ["Musique", "SFX", "Ambiance"]:
+	for title in ["Musique", "SFX", "Ambiance", "Interface"]:
 		if AudioServer.get_bus_index(title) < 0:
 			AudioServer.add_bus()
 			AudioServer.set_bus_name(AudioServer.bus_count - 1, title)
+	AudioServer.set_bus_send(AudioServer.get_bus_index("Interface"), "SFX")
 	Prefs.apply_audio()
 	set_process(audible)
 
@@ -74,23 +82,13 @@ func set_track(id: String) -> void:
 func _start_track() -> void:
 	if music_name == requested_track or not bank.has(requested_track):
 		return
-	if music.is_empty():
-		for _i in 2:
-			music.append(_audio("Musique"))
 	music_name = requested_track
-	selected = 0 if selected < 0 else 1 - selected
-	var channel := music[selected]
-	mixing[selected] = 0.0
-	channel.volume_db = -70.0
-	channel.stream = bank[music_name]
-	channel.play()
-	channel.stream_paused = suspended
+	selected = _play_loop(music, mixing, music_name, selected, "Musique", 1.0)
 
 func set_region(id: String) -> void:
 	if not audible:
 		return
-	requested_region = {"skyline": "wind", "bastion": "wind", "grove": "canopy",
-		"station": "concourse", "district": "concourse"}.get(id, "reactor")
+	requested_region = REGIONS.get(id, "reactor")
 	region_pitch = 0.82 if id == "cryo" else 1.0
 	_request_loop(requested_region)
 	_start_region()
@@ -98,17 +96,31 @@ func set_region(id: String) -> void:
 func _start_region() -> void:
 	if not bank.has(requested_region):
 		return
-	if not is_instance_valid(ambience):
-		ambience = _audio("Ambiance")
-	ambience.pitch_scale = region_pitch
 	if requested_region == region:
+		ambience[selected_region].pitch_scale = region_pitch
 		return
 	region = requested_region
-	ambient_gain = 0.0
-	ambience.volume_db = -60.0
-	ambience.stream = bank[region]
-	ambience.play()
-	ambience.stream_paused = suspended
+	selected_region = _play_loop(ambience, room_levels, region, selected_region, "Ambiance", region_pitch)
+
+func _play_loop(channels: Array[AudioStreamPlayer], levels: Array, id: String, previous: int, bus: String, pitch: float) -> int:
+	if channels.is_empty():
+		for _index in 2:
+			channels.append(_audio(bus))
+	var sample: AudioStreamWAV = bank[id]
+	for index in channels.size():
+		if channels[index].playing and channels[index].stream == sample:
+			channels[index].pitch_scale = pitch
+			return index
+	var target := 0 if previous < 0 else 1 - previous
+	var channel := channels[target]
+	channel.stop()
+	channel.pitch_scale = pitch
+	channel.volume_db = -70.0
+	channel.stream = sample
+	levels[target] = 0.0
+	channel.play()
+	channel.stream_paused = suspended
+	return target
 
 func _request_loop(id: String) -> void:
 	if bank.has(id) or pending_loops.has(id):
@@ -130,12 +142,14 @@ func _poll_loops() -> void:
 		if sample == null:
 			push_error("Échantillon manquant  /  " + id)
 			continue
-		_cache(id, sample)
-	_start_track()
-	_start_region()
+		if audible:
+			_cache(id, sample)
+	if audible:
+		_start_track()
+		_start_region()
 
 func play(id: String, at := Vector3.INF) -> void:
-	if not audible or suspended or id not in IDS or id in LOOPS:
+	if not audible or suspended or id not in IDS or id in LOOPS or id in UI_CUES:
 		return
 	if (id in ["boss", "tell", "phase", "low"] and not Prefs.values.audio_alerts) or (id in ["hit", "armor"] and not Prefs.values.audio_hits):
 		return
@@ -175,6 +189,22 @@ func play(id: String, at := Vector3.INF) -> void:
 		speaker.pitch_scale = 1.0
 		speaker.play()
 
+func play_ui(id: String) -> void:
+	if not audible or suspended or not Prefs.values.audio_ui or id not in UI_CUES:
+		return
+	var sample := get_sample(id)
+	if sample == null:
+		return
+	if interface.is_empty():
+		for _index in 2:
+			interface.append(_audio("Interface"))
+	var speaker := interface[ui_cursor]
+	ui_cursor = (ui_cursor + 1) % interface.size()
+	speaker.stream = sample
+	speaker.pitch_scale = randf_range(0.97, 1.035)
+	speaker.volume_db = -11.0
+	speaker.play()
+
 func get_sample(id: String) -> AudioStreamWAV:
 	if id not in IDS:
 		return null
@@ -196,29 +226,36 @@ func _cache(id: String, sample: AudioStreamWAV) -> void:
 func _process(delta: float) -> void:
 	if not pending_loops.is_empty():
 		_poll_loops()
-	for i in music.size():
-		var gain := (0.39 if duck else 0.84) if i == selected else 0.0
-		mixing[i] = move_toward(mixing[i], gain, delta * 1.6)
-		music[i].volume_db = linear_to_db(maxf(0.0003, mixing[i]))
-		if i != selected and mixing[i] <= 0.0 and music[i].playing:
-			music[i].stop()
-	if is_instance_valid(ambience):
-		var target := (0.29 if duck else 0.73) if music_name in ["combat", "pressure"] else 0.32
-		ambient_gain = move_toward(ambient_gain, target, delta * 0.85)
-		ambience.volume_db = linear_to_db(maxf(0.0002, ambient_gain))
+	if not audible:
+		set_process(not pending_loops.is_empty())
+		return
+	if suspended:
+		return
+	_mix(music, mixing, selected, 0.39 if duck else 0.84, delta * 1.6)
+	var target := (0.29 if duck else 0.66) if music_name in ["combat", "pressure"] else 0.32
+	_mix(ambience, room_levels, selected_region, target, delta * 0.9)
+
+func _mix(channels: Array[AudioStreamPlayer], levels: Array, current: int, target: float, step: float) -> void:
+	for index in channels.size():
+		var gain := target if index == current else 0.0
+		var next := move_toward(float(levels[index]), gain, step)
+		if next != levels[index]:
+			levels[index] = next
+			channels[index].volume_db = linear_to_db(maxf(0.0003, next))
+		if index != current and next <= 0.0 and channels[index].playing:
+			channels[index].stop()
 
 func stop_all() -> void:
 	audible = false
-	set_process(false)
+	set_process(not pending_loops.is_empty())
 	requested_track = ""
 	requested_region = ""
-	pending_loops.clear()
 	var channels: Array[Node] = []
 	channels.append_array(flat)
 	channels.append_array(world)
 	channels.append_array(music)
-	if is_instance_valid(ambience):
-		channels.append(ambience)
+	channels.append_array(ambience)
+	channels.append_array(interface)
 	AudioServer.lock()
 	for source in channels:
 		if source.has_stream_playback():
@@ -228,16 +265,23 @@ func stop_all() -> void:
 		source.stop()
 		source.stream = null
 	selected = -1
+	selected_region = -1
 	music_name = ""
+	region = ""
 
 func suspend(paused: bool) -> void:
 	suspended = paused
 	for speaker in music:
 		speaker.stream_paused = paused
-	if is_instance_valid(ambience):
-		ambience.stream_paused = paused
+	for speaker in ambience:
+		speaker.stream_paused = paused
 	if paused:
 		for speaker in flat:
 			speaker.stop()
-		for speaker in world:
+		for speaker in interface:
 			speaker.stop()
+		stop_world()
+
+func stop_world() -> void:
+	for speaker in world:
+		speaker.stop()

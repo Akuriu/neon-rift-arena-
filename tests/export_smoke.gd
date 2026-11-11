@@ -38,7 +38,7 @@ func run() -> void:
 	var sounds := root.get_node("Sounds")
 	for id in sounds.IDS:
 		sounds.get_sample(id)
-	check(sounds.bank.size() == 45, "45 échantillons audio chargés à la demande depuis le paquet")
+	check(sounds.bank.size() == sounds.IDS.size(), "Tous les échantillons audio sont chargés à la demande")
 	app.begin("domination", "discovery", "station", 882, "", false, {"bots": 4})
 	for frame in 185:
 		await physics_frame

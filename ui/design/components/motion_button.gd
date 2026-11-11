@@ -4,6 +4,7 @@ const Motion := preload("res://ui/design/motion.gd")
 const Tokens := preload("res://ui/design/tokens.gd")
 
 var motion: Tween
+var sound_cue := "ui_select"
 
 func _ready() -> void:
 	_center_pivot()
@@ -17,7 +18,7 @@ func bind_action(action: Callable, cue := true) -> void:
 		if not is_inside_tree() or not is_visible_in_tree() or disabled or not action.is_valid():
 			return
 		if cue:
-			Sounds.play("click")
+			Sounds.play_ui(sound_cue)
 		action.call()
 	)
 
