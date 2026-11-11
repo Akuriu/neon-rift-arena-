@@ -101,6 +101,7 @@ func run() -> void:
 	app.queue_free()
 	await process_frame
 	await RenderingServer.frame_post_draw
+	await create_timer(0.28, true, false, true).timeout
 	quit(1 if failed else 0)
 
 func has_title(frame: Image) -> bool:

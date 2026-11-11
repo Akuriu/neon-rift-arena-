@@ -54,7 +54,9 @@ func run() -> void:
 
 func peak_rss() -> int:
 	if OS.get_name() == "Linux":
-		for line in FileAccess.get_file_as_string("/proc/self/status").split("\n"):
+		var status := FileAccess.open("/proc/self/status", FileAccess.READ)
+		while status != null and not status.eof_reached():
+			var line := status.get_line()
 			if line.begins_with("VmHWM:"):
 				return line.trim_prefix("VmHWM:").strip_edges().get_slice(" ", 0).to_int()
 	return -1
