@@ -1,0 +1,117 @@
+name: Publish Rifle Arena v0.0.7a
+
+on:
+  push:
+    branches: [release/v0.0.7a]
+    paths: [.github/workflows/publish-v0.0.7a.yml]
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: rifle-v0.0.7a
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_SHA: '46b39c1064e02bad23ad406c311831cbd56a5a5e'
+      SOURCE_RUN: '42995624409'
+      SOURCE_ATTEMPT: '1'
+      ARTIFACT_ID: '13842604694'
+      ARCHIVE_SHA256: 'aa9a51ec4ca31694d1786b0dd3293ad5a5afeebd71cf117d623063ef3d90a8f4'
+      PREVIEW_TAG: v0.0.7a
+      PREVIEW_TITLE: Rifle Arena v0.0.7a Alpha Preview
+    steps:
+      - name: Verify the tested installers
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/rifle-hotfix"
+          mkdir -p "$work"
+          cd "$work"
+          repo="repos/$GITHUB_REPOSITORY"
+          gh api "$repo/actions/runs/$SOURCE_RUN" |
+            jq -e --arg sha "$SOURCE_SHA" --argjson attempt "$SOURCE_ATTEMPT" '
+              .head_sha == $sha and .path == ".github/workflows/test.yml" and
+              .run_attempt == $attempt and .status == "completed" and .conclusion == "success"'
+          artifact="$repo/actions/artifacts/$ARTIFACT_ID"
+          gh api "$artifact" |
+            jq -e --arg sha "$SOURCE_SHA" --arg digest "sha256:$ARCHIVE_SHA256" --argjson run "$SOURCE_RUN" '
+              .name == "rifle-alpha-installers" and .expired == false and .digest == $digest and
+              .workflow_run.id == $run and .workflow_run.head_sha == $sha'
+          gh api "$artifact/zip" > installers.zip
+          printf '%s  installers.zip\n' "$ARCHIVE_SHA256" | sha256sum --check -
+          unzip -p installers.zip RifleArena_Windows_x64.zip > RifleArena_Windows_x64.zip
+          unzip -p installers.zip RifleArena_Android_alpha.apk > RifleArena_Android_alpha.apk
+          unzip -p installers.zip SHA256SUMS > SHA256SUMS
+          sha256sum --check SHA256SUMS
+          mv RifleArena_Windows_x64.zip RifleArena_v0.0.7a_Windows_x64.zip
+          mv RifleArena_Android_alpha.apk RifleArena_v0.0.7a_Android_Preview.apk
+          sha256sum RifleArena_v0.0.7a_Windows_x64.zip RifleArena_v0.0.7a_Android_Preview.apk > RifleArena_v0.0.7a_SHA256SUMS.txt
+
+      - name: Publish and verify the prerelease
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" == "release/$PREVIEW_TAG" ]]
+          cd "$RUNNER_TEMP/rifle-hotfix"
+          repo="repos/$GITHUB_REPOSITORY"
+          ref="refs/tags/$PREVIEW_TAG"
+          existing_tag=$(gh api "$repo/git/matching-refs/tags/$PREVIEW_TAG" |
+            jq -r --arg ref "$ref" '.[] | select(.ref == $ref) | .object.sha')
+          if [[ -z "$existing_tag" ]]; then
+            gh api --method POST "$repo/git/refs" -f ref="$ref" -f sha="$SOURCE_SHA" >/dev/null
+          fi
+          gh api "$repo/git/ref/tags/$PREVIEW_TAG" |
+            jq -e --arg sha "$SOURCE_SHA" '.object.type == "commit" and .object.sha == $sha'
+
+          id=$(gh api --paginate "$repo/releases?per_page=100" --jq ".[] | select(.tag_name == \"$PREVIEW_TAG\") | .id")
+          if [[ -z "$id" ]]; then
+            cat > notes.md <<'NOTES'
+          Le **clic gauche** déclenche de nouveau le tir sur PC. Le **clic droit** ouvre la visée. Un test simule les deux clics dans une partie sous Windows et vérifie le tir, la consommation de munitions et le relâchement des boutons.
+
+          - **Windows x64** — extraire le ZIP et lancer `RifleArena.exe`.
+          - **Android** — l’APK Preview s’installe en parallèle avec son propre profil. Elle a démarré sur les émulateurs API 35 et 36.
+          NOTES
+            printf '\n[CI du commit testé](https://github.com/%s/actions/runs/%s)\n\n<!-- rifle-hotfix:%s -->\n' \
+              "$GITHUB_REPOSITORY" "$SOURCE_RUN" "$SOURCE_RUN" >> notes.md
+            jq -n --arg tag "$PREVIEW_TAG" --arg title "$PREVIEW_TITLE" --arg sha "$SOURCE_SHA" --rawfile notes notes.md '
+              {tag_name:$tag, target_commitish:$sha, name:$title, body:$notes, draft:true, prerelease:true, make_latest:"false"}' |
+              gh api --method POST "$repo/releases" --input - > release.json
+            id=$(jq -er '.id' release.json)
+          fi
+          [[ "$id" =~ ^[0-9]+$ ]]
+          gh api "$repo/releases/$id" > release.json
+          jq -e --arg tag "$PREVIEW_TAG" --arg title "$PREVIEW_TITLE" --arg run "$SOURCE_RUN" '
+            .tag_name == $tag and .name == $title and .prerelease and
+            (.body | contains("<!-- rifle-hotfix:" + $run + " -->"))' release.json
+          upload_url=$(jq -er '.upload_url | split("{")[0]' release.json)
+          [[ "$upload_url" == "https://uploads.github.com/$repo/releases/$id/assets" ]]
+          files=(RifleArena_v0.0.7a_Windows_x64.zip RifleArena_v0.0.7a_Android_Preview.apk RifleArena_v0.0.7a_SHA256SUMS.txt)
+          if jq -e '.draft' release.json >/dev/null; then
+            for file in "${files[@]}"; do
+              if ! jq -e --arg file "$file" 'any(.assets[]; .name == $file)' release.json >/dev/null; then
+                curl --fail-with-body --silent --show-error --max-time 180 \
+                  -H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: application/octet-stream" \
+                  -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" \
+                  --data-binary "@$file" "$upload_url?name=$file" > upload.json
+                jq -e --arg file "$file" '.name == $file and .state == "uploaded"' upload.json
+              fi
+            done
+          fi
+          gh api "$repo/releases/$id" > release.json
+          jq -e '.assets | length == 3' release.json
+          for file in "${files[@]}"; do
+            digest=$(sha256sum "$file" | cut -d ' ' -f 1)
+            bytes=$(stat -c %s "$file")
+            jq -e --arg file "$file" --arg digest "sha256:$digest" --argjson bytes "$bytes" '
+              any(.assets[]; .name == $file and .state == "uploaded" and .size == $bytes and .digest == $digest)' release.json
+          done
+          if jq -e '.draft' release.json >/dev/null; then
+            gh api --method PATCH "$repo/releases/$id" -F draft=false -F prerelease=true -f make_latest=false >/dev/null
+          fi
+          gh api "$repo/releases/$id" |
+            jq -e --arg tag "$PREVIEW_TAG" 'select(.tag_name == $tag and .prerelease and (.draft | not)) | .html_url'
