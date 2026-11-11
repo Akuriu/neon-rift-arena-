@@ -344,9 +344,11 @@ func _check_supply() -> void:
 	elif rounds() == 2:
 		pilot.session.sound("low", Vector3.INF if pilot.local_view else pilot.global_position)
 
-func pose(delta: float, motion: float, running: bool, wall_pull: float) -> void:
+func pose(delta: float, motion: float, running: bool, wall_pull: float, lateral := 0.0) -> void:
 	if pilot.session.mode == "parkour":
 		view.hide()
 		return
+	if delta > 0.25:
+		delta = 0.05
 	pose_clock = fmod(pose_clock + delta, TAU * 10.0)
-	animator.tick(self, delta, motion, running, wall_pull, Prefs.values)
+	animator.tick(self, delta, motion, running, wall_pull, Prefs.values, lateral)

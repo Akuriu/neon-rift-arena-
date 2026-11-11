@@ -10,6 +10,7 @@
 - Monte-charge du Dépôt de fret avec appels au sol et au quai, transport physique, arrêt d’urgence et descente protégée.
 - Protection d’apparition des bots, séparation locale et cache des combattants.
 - Animations de changement d’arme/recharge prioritaires, ressorts réinitialisés au respawn, attribution des tirs posthumes en Gun Game.
+- Réception de saut stable selon la cadence de rendu, mouvement d’arme amorti dans les virages et pas latéraux, et huit silhouettes de recharge distinctes.
 - Aperçus d’armes manipulables par glissement et pincement/molette.
 - Ouverture des menus : masquage du HUD et libération des commandes.
 - Descriptions des menus corrigées, avec une largeur minimale pour le retour à la ligne.

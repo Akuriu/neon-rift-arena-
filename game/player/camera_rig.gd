@@ -36,8 +36,11 @@ func present(delta: float) -> void:
 	sprint_weight = lerpf(sprint_weight, 1.0 if running else 0.0, 1.0 - exp(-12.0 * delta))
 	step_weight = lerpf(step_weight, motion if grounded else 0.0, 1.0 - exp(-11.0 * delta))
 	eye_height = lerpf(eye_height, pilot.height - 0.16, 1.0 - exp(-23.0 * delta))
-	spring = lerpf(spring, pilot.landing, 1.0 - exp(-27.0 * delta))
-	pilot.landing = lerpf(pilot.landing, 0.0, 1.0 - exp(-16.0 * delta))
+	var landing_decay := exp(-16.0 * delta)
+	var spring_decay := exp(-27.0 * delta)
+	# Integrate the fading landing impulse through the visual spring for the entire frame.
+	spring = spring * spring_decay + pilot.landing * (27.0 / 11.0) * (landing_decay - spring_decay)
+	pilot.landing *= landing_decay
 	var lateral: float = velocity.dot(pilot.global_basis.x) / pilot.RUN
 	var slide: float = 0.38 * float((flags & Track.SLIDE) != 0) if pilot.replica else pilot.slide
 	lean = lerpf(lean, clampf(-lateral * 0.023 - slide * 0.035, -0.044, 0.044) * strength,
@@ -53,7 +56,7 @@ func present(delta: float) -> void:
 	fov = lerpf(fov, pilot.arsenal.aim_fov(Prefs.values.fov + sprint_extra), 1.0 - exp(-15.0 * delta))
 	pilot.head.fov = fov
 	pilot.wall_pull = lerpf(pilot.wall_pull, pilot.wall_target, 1.0 - exp(-19.0 * delta))
-	pilot.arsenal.pose(delta, travel, running, pilot.wall_pull)
+	pilot.arsenal.pose(delta, travel if grounded else 0.0, running and grounded, pilot.wall_pull, lateral)
 
 func resync() -> void:
 	eye_height = pilot.head.position.y

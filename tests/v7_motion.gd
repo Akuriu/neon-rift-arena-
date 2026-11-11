@@ -49,6 +49,8 @@ func run() -> void:
 	pilot.presentation.lean = 0.04
 	pilot.respawn(stage.arena.start_at)
 	check(pilot.presentation.lean == 0.0 and not gun.animator.warmed, "Respawn réinitialise les ressorts visuels et la pose")
+	verify_camera(pilot)
+	await verify_reloads(gun)
 	var prefs = root.get_node("Prefs")
 	prefs.change_value("quality", 0)
 	for map_id in prefs.MAPS:
@@ -75,6 +77,49 @@ func run() -> void:
 	root.get_node("Sounds").stop_all()
 	await process_frame
 	quit(failures)
+
+func verify_camera(pilot: CharacterBody3D) -> void:
+	var camera = pilot.presentation
+	var gun = pilot.arsenal
+	var reference := -1.0
+	var equivalent := true
+	for fps in [30, 45, 60, 90]:
+		pilot.landing = 0.06
+		camera.spring = 0.0
+		for frame in range(fps / 5):
+			camera.present(1.0 / fps)
+		if reference < 0.0:
+			reference = camera.spring
+		equivalent = equivalent and absf(camera.spring - reference) < 0.000001
+	check(equivalent and reference > 0.0, "La réception a la même courbe à 30, 45, 60 et 90 images/s simulées")
+	gun.pose(1.0 / 60.0, 0.0, false, 0.0)
+	pilot.look_input(Vector2(34.0, 9.0))
+	var aim: Basis = pilot.head.global_basis
+	gun.pose(1.0 / 60.0, 0.0, false, 0.0, 1.0)
+	var peak: float = gun.animator.turn_sway.length()
+	var sway: float = gun.animator.strafe
+	for frame in 60:
+		gun.pose(1.0 / 60.0, 0.0, false, 0.0)
+	check(peak > 0.01 and sway > 0.01 and gun.animator.turn_sway.length() < 0.0001
+		and gun.animator.strafe < 0.0001 and pilot.head.global_basis.is_equal_approx(aim),
+		"Les transitions de rotation et de pas latéral amortissent l’arme sans déplacer le rayon de visée")
+
+func verify_reloads(gun: Node) -> void:
+	var poses: Array[Vector3] = []
+	for index in 8:
+		gun.select(index)
+		await ticks(22)
+		gun.magazines[index] -= 2
+		gun.cycle()
+		gun.reload_left = gun.cycle_length * 0.55
+		for frame in 15:
+			gun.pose(1.0 / 60.0, 0.0, false, 0.0)
+		var pose: Vector3 = gun.view.rotation
+		if gun.animator.state == View.Pose.RELOAD_CELL and pose.is_finite():
+			poses.append(pose.snapped(Vector3.ONE * 0.01))
+		gun.reload_left = 0.0
+	check(poses.size() == 8 and poses.all(func(pose): return poses.count(pose) == 1),
+		"Les huit équipements ont des silhouettes de recharge distinctes")
 
 func ticks(count: int) -> void:
 	for frame in count:
