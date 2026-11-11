@@ -1,13 +1,15 @@
 extends RefCounted
 
 const Arms := preload("res://game/weapons/catalog.gd")
+const Courses := preload("res://game/modes/parkour_routes.gd")
+const Replay := preload("res://game/modes/parkour_ghost.gd")
 const Presets := {
 	"poly": {"name": "Polyvalent", "slots": ["wp_pulse", "wp_volt", "wp_prism", "wp_nova"], "gadget": "gd_dash", "module": ""},
 	"range": {"name": "Précision", "slots": ["wp_eclipse", "wp_stellar", "wp_prism", "wp_pulse"], "gadget": "gd_dash", "module": "mod_cycle"},
 	"move": {"name": "Mobilité", "slots": ["wp_ion", "wp_volt", "wp_pulse", "wp_prism"], "gadget": "gd_dash", "module": "mod_cycle"},
 	"guard": {"name": "Défense", "slots": ["wp_mortar", "wp_nova", "wp_ion", "wp_pulse"], "gadget": "gd_aegis", "module": "mod_rack"},
 }
-const Modes := ["survival", "short", "endless", "trial", "coop", "boss_rush", "classic", "teams", "capture", "domination"]
+const Modes := ["survival", "short", "endless", "trial", "coop", "boss_rush", "classic", "teams", "capture", "domination", "gungame"]
 const Badges := {
 	"sortie": ["Première extraction", "Terminer une opération victorieuse."],
 	"twenty": ["Architecte du retour", "Sécuriser vingt vagues dans la même partie."],
@@ -79,7 +81,28 @@ static func sanitize(raw: Variant, owned: Array, parse_number: Callable) -> Dict
 		own = {"slots": Arms.normalize_slots(saved.get("slots"), owned),
 			"gadget": saved.get("gadget") if saved.get("gadget") in owned and String(saved.gadget).begins_with("gd_") else "gd_dash",
 			"module": saved.get("module") if saved.get("module") in owned and String(saved.module).begins_with("mod_") else ""}
-	return {"history": list, "ledger": receipts, "badges": badges, "maps": maps, "weekly": current, "saved": own}
+	var parkour := {}
+	var times: Variant = input.get("parkour")
+	if times is Dictionary:
+		for route in Courses.IDS:
+			var duration: int = parse_number.call(times.get(route), 7200000)
+			if duration >= 1000:
+				parkour[route] = duration
+	var parkour_progress := {}
+	var progress: Variant = input.get("parkour_progress")
+	for route: String in parkour:
+		var entry: Variant = progress.get(route) if progress is Dictionary else null
+		var fields: Dictionary = entry if entry is Dictionary else {}
+		var finishes := maxi(1, parse_number.call(fields.get("finishes"), 99999))
+		var stats := {"finishes": finishes, "clean_finishes": parse_number.call(fields.get("clean_finishes"), finishes)}
+		if fields.has("record_retries"):
+			stats.record_retries = parse_number.call(fields.record_retries, 99999)
+		var trace := Replay.sanitize(fields.get("ghost"), parkour[route])
+		if not trace.is_empty():
+			stats.ghost = trace
+		parkour_progress[route] = stats
+	return {"history": list, "ledger": receipts, "badges": badges, "maps": maps, "weekly": current, "saved": own,
+		"parkour": parkour, "parkour_progress": parkour_progress}
 
 static func refresh(career: Dictionary) -> void:
 	var now := week()

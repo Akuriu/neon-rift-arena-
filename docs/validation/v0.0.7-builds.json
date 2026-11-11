@@ -1,0 +1,42 @@
+{
+  "0.0.6": {
+    "version": "0.0.6-alpha",
+    "kind": "Preview",
+    "android_package": "com.riflearena.preview.r42920507256.a1",
+    "code_commit": "df8dba9d4e7dc7d65e5a7bdddb21bb2f0c8b00b2",
+    "workflow_run": 42920507256,
+    "artifact_id": 13812420193,
+    "archive_sha256": "3239e10dd38b302d43f0c15ca0286b78080a4a8bfa8296d7f66ab901598b8cf6",
+    "checks": {
+      "RifleArena_Windows_x64.zip": {
+        "sha256": "f19c93f73b34bd853d98a63e64ef60e1bc060cc8f28b9758844e5726cbf77b7c",
+        "bytes": 39189784
+      },
+      "RifleArena_Android_alpha.apk": {
+        "sha256": "a8e6970d0998184fb62d5561e62bfc474f978a5e889aa7b44a3e15f3270da52f",
+        "bytes": 58914924
+      }
+    },
+    "physical_device_tested": false
+  },
+  "0.0.7": {
+    "version": "0.0.7-alpha",
+    "kind": "Preview",
+    "android_package": "com.riflearena.preview.r42919522427.a1",
+    "code_commit": "e8e0ffdeecfcf3bdba55e791eff25bce73d6f97c",
+    "workflow_run": 42919522427,
+    "artifact_id": 13809539547,
+    "archive_sha256": "24b54da8d51d179a5f0401e7498a73acabe2b1cb88e8feab3c83a237f3874876",
+    "checks": {
+      "RifleArena_Windows_x64.zip": {
+        "sha256": "86ed41bcc6c3e34ffb2e83cd0d3e889b9f5df25545a46d82da9f52fc5e94d012",
+        "bytes": 39227255
+      },
+      "RifleArena_Android_alpha.apk": {
+        "sha256": "914c646f99a3ff3c9d2bbbf5348510a4a3e0404a4a610abf62e7a1c49c2b6c01",
+        "bytes": 58957315
+      }
+    },
+    "physical_device_tested": false
+  }
+}

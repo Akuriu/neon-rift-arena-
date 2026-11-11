@@ -36,6 +36,8 @@ var objective_timer := 1.0
 var supply_timer := 9.0
 var enemies_limit := 0
 var objective_time := 0.0
+var members_frame := -1
+var members_cache: Array = []
 
 func configure(session: Node3D, variant: String, raw: Dictionary) -> void:
 	stage = session
@@ -58,7 +60,13 @@ func configure(session: Node3D, variant: String, raw: Dictionary) -> void:
 		stage.add_child(zone)
 
 func side_for(slot: int) -> int:
-	return slot if mode == "classic" else slot % 2
+	return slot if mode in ["classic", "gungame"] else slot % 2
+
+func bot_kind(slot: int) -> String:
+	return BOTS[(slot - 1) % BOTS.size()]
+
+func equip_actor(_actor: CharacterBody3D) -> void:
+	pass
 
 func remaining() -> int:
 	return stage.units.size()
@@ -70,16 +78,25 @@ func enemies(a: CharacterBody3D, b: CharacterBody3D) -> bool:
 	return is_instance_valid(a) and is_instance_valid(b) and a.arena_side != b.arena_side
 
 func combatants() -> Array:
-	var members: Array = stage.units.duplicate()
-	if stage.player.alive:
-		members.append(stage.player)
-	return members
+	var frame := Engine.get_physics_frames()
+	if members_frame != frame:
+		members_cache = stage.units.duplicate()
+		if stage.player.alive:
+			members_cache.append(stage.player)
+		members_frame = frame
+	return members_cache
+
+func invalidate_combatants() -> void:
+	members_frame = -1
+
+func protected(actor: CharacterBody3D) -> bool:
+	return actor.damage_lock > 0.16 if actor == stage.player else actor.spawn_guard > 0.0
 
 func target_for(unit: CharacterBody3D) -> CharacterBody3D:
 	var target: CharacterBody3D
 	var best := INF
 	for actor in combatants():
-		if not enemies(unit, actor) or not actor.alive:
+		if not enemies(unit, actor) or not actor.alive or protected(actor):
 			continue
 		var distance: float = unit.position.distance_squared_to(actor.position)
 		if distance < best:
@@ -141,9 +158,11 @@ func _advance_respawns(delta: float) -> void:
 		respawns.erase(slot)
 		if slot == 0:
 			stage.player.respawn(at)
+			invalidate_combatants()
+			equip_actor(stage.player)
 			stage.show_radio("Pilote redéployé", 1.25)
 		else:
-			stage.spawn_unit(BOTS[(int(slot) - 1) % BOTS.size()], at, false, -1, int(slot))
+			stage.spawn_unit(bot_kind(int(slot)), at, false, -1, int(slot))
 
 func _control(delta: float) -> void:
 	var members := combatants()
@@ -162,7 +181,7 @@ func _control(delta: float) -> void:
 		score = scores[0]
 		_check_target()
 
-func eliminated(victim: CharacterBody3D, source: CharacterBody3D) -> void:
+func eliminated(victim: CharacterBody3D, source: CharacterBody3D, _credit := -1) -> void:
 	if phase != Wave.Phase.ACTIVE:
 		return
 	var slot: int = victim.arena_slot

@@ -1,6 +1,6 @@
 # Rifle Arena
 
-**v0.0.6 Alpha en préparation.** [Téléchargements publiés pour Windows et Android](https://github.com/Akuriu/neon-rift-arena-/releases)
+**v0.0.7a Alpha en développement.** Le correctif rétablit le tir et la visée à la souris sur PC. Gun Game et Parkour sont jouables sur la branche `feature/v0.0.7` ; les builds Preview se trouvent dans la [PR #2](https://github.com/Akuriu/neon-rift-arena-/pull/2). La publication officielle reste bloquée par les validations matérielles et la signature Android d’origine. [Téléchargements publiés pour Windows et Android](https://github.com/Akuriu/neon-rift-arena-/releases)
 
 FPS d’arène en solo contre des bots, avec un stand d’entraînement et un mode survie en coop. Les sept cartes reprennent des lieux comme un dépôt de fret, une chaufferie, une gare et un quartier en brique. L’arsenal comprend huit armes, dont la carabine AR-24, le pistolet P9 Rafale et le fusil à pompe M7.
 
@@ -43,3 +43,7 @@ Après les essais matériels du [suivi QA](docs/V0.0.6_QA.md), renseigner la var
 [Journal des changements](CHANGELOG.md) · [Suivi des essais v0.0.6](docs/V0.0.6_QA.md)
 
 Voir les [crédits et licences](CREDITS.md).
+
+Les derniers builds de contrôle Android portent le nom **Rifle Arena Preview** et un paquet unique par build/tentative. Ils s’installent à côté de l’Alpha et des anciennes Preview. Chaque installation conserve ses propres données ; aucun transfert automatique de progression n’est annoncé. Conservez l’Alpha et sa sauvegarde jusqu’à validation d’une mise à jour signée.
+
+[État des 240 étapes v0.0.7](docs/V0.0.7_STATUS_240.md) · [Validations et téléchargements des jalons](docs/V0.0.7_VALIDATION.md).

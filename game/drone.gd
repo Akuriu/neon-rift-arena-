@@ -7,6 +7,7 @@ signal eliminated(drone: CharacterBody3D, points: int)
 const Catalog := preload("res://game/catalog.gd")
 const Models := preload("res://game/robot_models.gd")
 const Operator := preload("res://art/operator.gd")
+const Arms := preload("res://game/weapons/catalog.gd")
 
 enum State { ARRIVAL, CHASE, TELL, RECOVER, DEAD }
 var state := State.ARRIVAL
@@ -55,8 +56,12 @@ var rotors: Array[Node3D] = []
 var arena_slot := -1
 var arena_side := 1
 var last_attacker: CharacterBody3D
+var last_credit_slot := -1
 var operator: Operator
 var visual_wait := 0.0
+var match_weapon := -1
+var match_rounds := 0
+var spawn_guard := 0.0
 
 func major() -> bool:
 	return kind in ["warden", "colossus", "architect"]
@@ -69,6 +74,7 @@ func _ready() -> void:
 		position.y = hover_home
 	last_check = position
 	health = maximum
+	spawn_guard = 0.85 if arena_slot >= 0 else 0.0
 	strafe = -1.0 if serial % 2 == 0 else 1.0
 	decision = float(serial % 8) * 0.034
 	collision_layer = 0 if replica else 4
@@ -102,7 +108,7 @@ func _ready() -> void:
 		operator.animate(0.016, Vector3.ZERO, 0.0, 0.0, 0, 0.0)
 	paint = lens.material_override.duplicate()
 	lens.material_override = paint
-	if arena_slot >= 0 and session.mode != "classic":
+	if arena_slot >= 0 and session.mode not in ["classic", "gungame"]:
 		var badge := Label3D.new()
 		badge.position.y = 1.8
 		badge.font_size = 21
@@ -116,6 +122,18 @@ func _ready() -> void:
 func center() -> Vector3:
 	return global_position + Vector3.UP * (1.53 if major() else 1.02)
 
+func equip_match_weapon(index: int) -> void:
+	match_weapon = index
+	var weapon: Dictionary = Arms.WEAPONS[index]
+	match_rounds = weapon.mag
+	spec = spec.duplicate()
+	spec.damage = weapon.damage
+	spec.range = minf(weapon.range, 32.0)
+	spec.tell = maxf(0.16, weapon.cadence * 0.45)
+	spec.rest = maxf(0.12, weapon.cadence)
+	if operator != null:
+		operator.set_weapon(index)
+
 func aim_point() -> Vector3:
 	return center()
 
@@ -124,6 +142,7 @@ func _physics_process(delta: float) -> void:
 		return
 	age += delta
 	hit_flash = maxf(0.0, hit_flash - delta * 6.0)
+	spawn_guard = maxf(0.0, spawn_guard - delta)
 	if replica:
 		var pose := replica_poses.pose(Time.get_ticks_msec() * 0.001)
 		if not pose.is_empty():
@@ -168,6 +187,17 @@ func _physics_process(delta: float) -> void:
 		step = dodge_direction * 8.4
 	if kind == "skimmer":
 		step.y = clampf((hover_home + sin(age * 1.7) * 0.28 - position.y) * 4.0, -2.0, 2.0)
+	if not training and not step.is_zero_approx():
+		var separation := Vector3.ZERO
+		for other in session.units:
+			if other == self or not other.alive:
+				continue
+			var gap: Vector3 = position - other.position
+			gap.y = 0.0
+			var square := gap.length_squared()
+			if square > 0.001 and square < 2.25:
+				separation += gap.normalized() * (1.5 - sqrt(square)) * 2.0
+		step += separation.limit_length(2.0)
 	velocity = velocity.move_toward(step, delta * 29.0)
 	move_and_slide()
 	if not training:
@@ -264,6 +294,8 @@ func _pursuit(delta: float, distance: float, toward: Vector3) -> Vector3:
 				return Vector3.ZERO
 		var target_at: Vector3 = target.aim_point()
 		var clear: bool = session.ray(center(), target_at, 1).is_empty()
+		if is_instance_valid(session.classic) and session.classic.protected(target):
+			clear = false
 		var elevation: float = absf(target_at.y - center().y)
 		var withdraw := kind in ["sentinel", "medic", "artillery"] and distance < 5.8
 		if not training and not withdraw and distance < spec.range and (kind != "scout" or elevation < 1.65) and clear:
@@ -309,7 +341,7 @@ func _begin_tell() -> void:
 	attack_number += 1
 	timer = spec.tell * tuning.tempo
 	aim_at = target.aim_point()
-	wave_attack = kind in ["disruptor", "artillery"] or (major() and (phase >= 2 or kind == "architect") and attack_number % 2 == 0)
+	wave_attack = match_weapon < 0 and (kind in ["disruptor", "artillery"] or (major() and (phase >= 2 or kind == "architect") and attack_number % 2 == 0))
 	if wave_attack:
 		var floor_at: Vector3 = target.global_position
 		var support: Dictionary = session.ray(floor_at + Vector3.UP * 0.15, floor_at - Vector3.UP * 4.0, 1)
@@ -326,6 +358,9 @@ func _begin_tell() -> void:
 
 func attack() -> void:
 	if training:
+		return
+	if match_weapon >= 0:
+		_match_attack()
 		return
 	fired += 1
 	flash_attack()
@@ -383,6 +418,31 @@ func attack() -> void:
 			spec.tint, false, 0.0, 0.0, self)
 	session.sound("heavy" if (major() or kind in ["elite", "bulwark"]) else "enemy", start)
 
+func _match_attack() -> void:
+	var weapon: Dictionary = Arms.WEAPONS[match_weapon]
+	if match_rounds <= 0:
+		match_rounds = weapon.mag
+		# The state machine applies this rest after attack returns.
+		spec.rest = weapon.reload
+		return
+	spec.rest = maxf(0.12, weapon.cadence)
+	match_rounds -= 1
+	fired += 1
+	flash_attack()
+	var start := center() + gaze * 0.45
+	var direction := (aim_at - start).normalized()
+	var angles := [-0.094, -0.047, 0.0, 0.047, 0.094, -0.07, 0.07] if weapon.mode == "spread" else [0.0]
+	if weapon.mode == "burst":
+		angles = [-0.015, 0.0, 0.015]
+		match_rounds = maxi(0, match_rounds - 2)
+	for angle in angles:
+		var splash := 2.65 if weapon.mode in ["nova", "mortar"] else 0.0
+		var curve := 12.0 if weapon.mode == "mortar" else 0.0
+		var flight := (direction + Vector3.UP * 0.24).normalized() if curve > 0.0 else direction
+		session.launch(start, flight.rotated(Vector3.UP, angle), 19.0 if curve > 0.0 else 34.0,
+			weapon.damage * tuning.power, weapon.tint, false, splash, curve, self, weapon.id)
+	session.sound(weapon.sound, start)
+
 func _dodge() -> void:
 	var tangent := global_basis.x * strafe
 	if not _can_route(global_position + tangent * 2.8):
@@ -391,8 +451,8 @@ func _dodge() -> void:
 		dodge_direction = tangent
 		dodge_left = 0.23
 
-func take_hit(amount: float, at: Vector3, direction: Vector3, attacker: CharacterBody3D = null) -> float:
-	if not alive or replica:
+func take_hit(amount: float, at: Vector3, direction: Vector3, attacker: CharacterBody3D = null, credit := -1) -> float:
+	if not alive or replica or spawn_guard > 0.0:
 		return 0.0
 	hit_flash = 1.0
 	if kind in ["bulwark", "elite", "warden", "colossus"]:
@@ -416,6 +476,7 @@ func take_hit(amount: float, at: Vector3, direction: Vector3, attacker: Characte
 			session.sound("phase", center())
 	if health == 0.0:
 		last_attacker = attacker
+		last_credit_slot = attacker.arena_slot if is_instance_valid(attacker) else credit
 		collapse()
 		eliminated.emit(self, spec.points)
 	return amount

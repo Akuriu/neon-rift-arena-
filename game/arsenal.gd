@@ -74,6 +74,21 @@ func _ready() -> void:
 func spec() -> Dictionary:
 	return Arms.WEAPONS[active]
 
+func assign_stage(index: int) -> void:
+	# Match-only equipment never writes the permanent profile/loadout.
+	capacity_bonus = 0
+	reserve_bonus = 0
+	reload_boost = 1.0
+	damage_boost = 1.0
+	rack.assign([index])
+	active = index
+	reset_supply()
+	aim_step = 0
+	swap_left = ViewMotion.SWAP
+	cooldown = ViewMotion.SWAP
+	if pilot.local_view and visual_index < 0:
+		show_model(index)
+
 func capacity(index := -1) -> int:
 	return int(Arms.WEAPONS[active if index < 0 else index].mag) + capacity_bonus
 
@@ -105,7 +120,7 @@ func select(index: int) -> void:
 	inspecting = 0.0
 	held = pilot.down("fire")
 	swap_left = ViewMotion.SWAP
-	cooldown = maxf(cooldown, 0.23)
+	cooldown = maxf(cooldown, ViewMotion.SWAP)
 	pilot.session.sound("switch", Vector3.INF if pilot.local_view else pilot.global_position)
 
 func _cache_model(index: int) -> void:
@@ -136,7 +151,7 @@ func sight_height() -> float:
 	return Models.SIGHT_HEIGHTS[visual_index]
 
 func aiming() -> bool:
-	return pilot.down("ads") and reload_left <= 0.0 and swap_left <= 0.0
+	return pilot.session.mode != "parkour" and pilot.down("ads") and reload_left <= 0.0 and swap_left <= 0.0
 
 func magnification() -> float:
 	if not aiming():
@@ -150,7 +165,7 @@ func aim_fov(normal: float) -> float:
 	return rad_to_deg(2.0 * atan(tan(deg_to_rad(normal) * 0.5) / magnification()))
 
 func cycle() -> void:
-	if reload_left > 0.0 or (reserve() == 0 and heat[active] < 0.12):
+	if swap_left > 0.0 or reload_left > 0.0 or (reserve() == 0 and heat[active] < 0.12):
 		return
 	if rounds() == capacity() and heat[active] < 0.12:
 		return
@@ -209,6 +224,8 @@ func tick(delta: float) -> void:
 	var pressed := trigger and not held
 	var released := not trigger and held
 	held = trigger
+	if swap_left > 0.0:
+		return
 	if pilot.just("inspect") and not trigger and not aiming() and not pilot.sprinting and reload_left <= 0.0:
 		inspecting = ViewMotion.inspection_time(active)
 	if trigger or aiming() or pilot.sprinting:
@@ -327,6 +344,11 @@ func _check_supply() -> void:
 	elif rounds() == 2:
 		pilot.session.sound("low", Vector3.INF if pilot.local_view else pilot.global_position)
 
-func pose(delta: float, motion: float, running: bool, wall_pull: float) -> void:
+func pose(delta: float, motion: float, running: bool, wall_pull: float, lateral := 0.0) -> void:
+	if pilot.session.mode == "parkour":
+		view.hide()
+		return
+	if delta > 0.25:
+		delta = 0.05
 	pose_clock = fmod(pose_clock + delta, TAU * 10.0)
-	animator.tick(self, delta, motion, running, wall_pull, Prefs.values)
+	animator.tick(self, delta, motion, running, wall_pull, Prefs.values, lateral)

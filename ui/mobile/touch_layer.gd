@@ -114,6 +114,10 @@ func _available(id: String) -> bool:
 		return true
 	if not is_instance_valid(pilot) or not pilot.alive:
 		return false
+	if is_instance_valid(stage) and stage.mode == "gungame" and id == "next":
+		return false
+	if is_instance_valid(stage) and stage.mode == "parkour":
+		return id in ["stick", "jump", "sprint", "interact"]
 	match id:
 		"crouch", "stats":
 			return not Prefs.compact_touch()
@@ -218,7 +222,7 @@ func _gesture(at: Vector2) -> void:
 	if travel.y > threshold and travel.y > absf(travel.x) * 1.12:
 		gesture_action = "crouch"
 	elif absf(travel.x) > threshold and absf(travel.x) > absf(travel.y) * 1.12:
-		gesture_action = "gadget" if pilot.gadget_left <= 0.0 else "cancel"
+		gesture_action = "gadget" if pilot.gadget_left <= 0.0 and stage.mode != "parkour" else "cancel"
 	elif travel.length() > threshold * 1.6:
 		gesture_action = "cancel"
 	if gesture_action == "gadget":
@@ -377,6 +381,8 @@ func _icon(id: String, at: Vector2, radius: float, ink: Color) -> void:
 			var label: String = Layout.CONTROLS[id][4]
 			if id == "zoom" and not preview:
 				label = "×%d" % roundi(pilot.arsenal.magnification())
+			if id == "interact" and not preview and stage.mode == "parkour":
+				label = "Retour"
 			_caption(at, label, maxi(9, roundi(radius * 0.40)), ink)
 
 func _ammo(at: Vector2, radius: float, ink: Color, opacity: float) -> void:

@@ -23,7 +23,7 @@ func run() -> void:
 	await sleep(0.38)
 	await click(Vector2(166, 348))
 	check(app.screen == "play", "Clic dans la fenêtre sur Jouer")
-	await click(Vector2(816, 302))
+	await click_named("Survie")
 	check(app.screen == "select", "Sélection de Survie dans le menu Jouer")
 	await click(Vector2(293, 578))
 	check(app.screen == "hud" and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED, "Démarrage et capture souris")
@@ -80,7 +80,7 @@ func run() -> void:
 func v2_views(directory: String) -> void:
 	app.menu()
 	await click(Vector2(175, 342))
-	await click(Vector2(811, 486))
+	await click_named("Coop")
 	check(app.screen == "lobby" and app.lobby.address.is_visible_in_tree(), "Le lobby coop est accessible à la souris")
 	await screenshot(directory, "lobby")
 	app.menu()
@@ -95,6 +95,11 @@ func v2_views(directory: String) -> void:
 	await sleep(0.40)
 	Input.action_press("ads")
 	await sleep(0.45)
+	# Software renderers can spend several frames compiling a fresh map's shaders.
+	var scope_deadline := Time.get_ticks_msec() + 2500
+	while app.session.player.arsenal.scope <= 0.95 and Time.get_ticks_msec() < scope_deadline:
+		await process_frame
+	print("SCOPE factor=", app.session.player.arsenal.scope, " software_fps=", Engine.get_frames_per_second())
 	check(app.session.map_id == "cryo" and app.session.player.arsenal.scope > 0.95, "Chaufferie et lunette rendues dans la fenêtre")
 	await screenshot(directory, "cryo_scope")
 	Input.action_release("ads")
@@ -128,6 +133,16 @@ func click(point: Vector2) -> void:
 		event.pressed = down
 		Input.parse_input_event(event)
 		await sleep(0.09)
+
+func click_named(title: String) -> void:
+	var nodes: Array[Node] = [app.view]
+	while not nodes.is_empty():
+		var node: Node = nodes.pop_back()
+		if node is Button and node.accessibility_name == title:
+			await click(node.get_global_rect().get_center())
+			return
+		nodes.append_array(node.get_children())
+	check(false, "Bouton accessible introuvable : " + title)
 
 func escape() -> void:
 	var key := InputEventKey.new()

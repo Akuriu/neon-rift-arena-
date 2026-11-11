@@ -80,6 +80,7 @@ func host_game() -> void:
 	var bosses := {}
 	var attacking := false
 	var before: Dictionary = {}
+	var purchases_verified := false
 	while Time.get_ticks_msec() < deadline and stage.director.wave < 7:
 		var wave: int = stage.director.wave
 		var phase: int = stage.director.phase
@@ -101,18 +102,24 @@ func host_game() -> void:
 			bot.play_step(stage, stage.player, int(Engine.get_physics_frames()))
 		elif phase == Director.Phase.UPGRADE and net.shop_left > 1.0:
 			bot.release()
-			net.ready_up()
 			if wave == 6:
 				var bought := true
 				for id in other_ids:
-					bought = bought and stage.wallets[id].levels.get("barrier", 0) == 1
+					bought = bought and stage.wallets.has(id) and stage.wallets[id].levels.get("barrier", 0) == 1
 				if bought:
 					check(stage.wallet.levels.get("barrier", 0) == 0, "Les achats distants restent personnels")
 					for id in other_ids:
 						check(stage.wallets[id].spent == 75 and stage.pilots[id].shield_max == 61.0, "Un débit et un seul effet par client")
+					purchases_verified = true
+					# Host readiness can open wave 7 immediately; the rejoin client then leaves.
+					# Verify every receipt before sending this final ready signal.
+					net.ready_up()
 					break
+			else:
+				net.ready_up()
 		await physics_frame
 	bot.release()
+	check(purchases_verified, "Tous les achats vérifiés avant la reprise du combat")
 	check(stage.director.cleared == 6 and attacking and bosses.has("elite"), "Vague 6 réellement combattue, mini-boss franchi")
 	for id in stage.pilots:
 		check(stage.pilots[id].stats.hits > before.get(id, 0), "Le pilote a réellement touché un robot côté serveur")
@@ -214,13 +221,13 @@ func client_game() -> void:
 				app._buy_field("barrier")
 				net.request_field.rpc_id(1, net.match_id, wave, net.action_id, "buy", "barrier", -1)
 				net.request_field.rpc_id(1, net.match_id, wave - 1, 500, "buy", "barrier", -1)
-				var accepted := func(): return stage.wallet.balance == initial_balance - 75 and pilot.shield_max == 61.0
+				var accepted := func(): return is_instance_valid(app.session) and app.session.wallet.balance == initial_balance - 75 and app.session.player.shield_max == 61.0
 				if not await until(accepted, "Reçu et portefeuille synchronisés"):
 					return
 			app.advance()
 		await physics_frame
 	bot.release()
-	if not await until(func(): return stage.director.wave == 7 and stage.director.phase == Director.Phase.ACTIVE, "Vague 7 synchronisée"):
+	if not await until(func(): return is_instance_valid(app.session) and app.session.director.wave == 7 and app.session.director.phase == Director.Phase.ACTIVE, "Vague 7 synchronisée"):
 		return
 	if role == "rejoin":
 		app.leave_coop()

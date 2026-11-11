@@ -1,5 +1,25 @@
 # Rifle Arena
 
+## v0.0.7-alpha
+
+- La v0.0.7a rétablit le tir au clic gauche et la visée au clic droit sur PC.
+- Gun Game local : huit équipements en prêt, progression des bots, victoire au dernier palier, bilan et classement séparé.
+- Gun Game propose un ordre mélangé reproductible et un bilan avec tous les participants et les rangs ex æquo.
+- Parkour local : trois parcours physiques, checkpoints ordonnés, pénalités, records et HUD mobile dédié.
+- Parkour : fantôme optionnel du record, médailles par parcours, nombre d’arrivées et de passages sans retour.
+- Atelier interactif solo au Dépôt de fret (Exploration/Entraînement), avec fermeture suspendue si le passage est occupé.
+- Monte-charge du Dépôt de fret avec appels au sol et au quai, transport physique, arrêt d’urgence et descente protégée.
+- Protection d’apparition des bots, séparation locale et cache des combattants.
+- Animations de changement d’arme/recharge prioritaires, ressorts réinitialisés au respawn, attribution des tirs posthumes en Gun Game.
+- Réception de saut stable selon la cadence de rendu, mouvement d’arme amorti dans les virages et pas latéraux, et huit silhouettes de recharge distinctes.
+- Aperçus d’armes manipulables par glissement et pincement/molette.
+- Ouverture des menus : masquage du HUD et libération des commandes.
+- Descriptions des menus corrigées, avec une largeur minimale pour le retour à la ligne.
+- Menu Jouer en cartes et palette Classic Sand.
+- Profil schéma 6 avec copie v5 avant migration.
+- APK Preview isolée par build et tentative : installation à côté des anciennes Preview sans conflit de certificat.
+- Build Preview uniquement : les validations matérielles et la signature stable restent requises avant publication.
+
 ## v0.0.6-alpha
 
 - HUD tactile compact avec six commandes de combat, compteur de munitions tactile, objectif et chronomètre regroupés.

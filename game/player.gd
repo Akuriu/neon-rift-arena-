@@ -62,6 +62,8 @@ var seat := 0
 var arena_slot := 0
 var arena_side := 0
 var last_attacker: CharacterBody3D
+var last_credit_slot := -1
+var life_generation := 0
 var gadget_left := 0.0
 var dash_left := 0.0
 var dash_dir := Vector3.ZERO
@@ -162,7 +164,7 @@ func _physics_process(delta: float) -> void:
 		return
 	gadget_left = maxf(0.0, gadget_left - delta)
 	slowed = maxf(0.0, slowed - delta)
-	if not round_lock and just("gadget"):
+	if session.mode != "parkour" and not round_lock and just("gadget"):
 		use_gadget()
 	move_pilot(delta)
 	damage_lock = maxf(damage_lock - delta, 0.0)
@@ -171,7 +173,7 @@ func _physics_process(delta: float) -> void:
 	hull_flash = move_toward(hull_flash, 0.0, delta * 2.8)
 	if shield_wait == 0.0:
 		shield = minf(shield_max, shield + 11.0 * delta)
-	if not round_lock:
+	if session.mode != "parkour" and not round_lock:
 		arsenal.tick(delta)
 	if just("interact"):
 		session.interact(self)
@@ -231,6 +233,7 @@ func aim_point() -> Vector3:
 	return head.global_position - Vector3.UP * 0.21
 
 func respawn(at: Vector3) -> void:
+	life_generation += 1
 	position = at
 	reset_physics_interpolation()
 	velocity = Vector3.ZERO
@@ -244,11 +247,15 @@ func respawn(at: Vector3) -> void:
 	dash_left = 0.0
 	slide = 0.0
 	last_attacker = null
+	last_credit_slot = -1
 	arsenal.reset_supply()
+	arsenal.animator = Arsenal.ViewMotion.new()
+	if is_instance_valid(presentation):
+		presentation.resync()
 	if is_instance_valid(avatar):
 		avatar.present_alive(true)
 
-func take_damage(amount: float, source := Vector3.INF, attacker: CharacterBody3D = null) -> void:
+func take_damage(amount: float, source := Vector3.INF, attacker: CharacterBody3D = null, credit := -1) -> void:
 	if not alive or replica or damage_lock > 0.0 or session.mode == "training":
 		return
 	damage_lock = 0.16
@@ -266,6 +273,7 @@ func take_damage(amount: float, source := Vector3.INF, attacker: CharacterBody3D
 	if health <= 0.0:
 		alive = false
 		last_attacker = attacker
+		last_credit_slot = attacker.arena_slot if is_instance_valid(attacker) else credit
 		collision_layer = 0
 		arsenal.cancel_trigger()
 		if is_instance_valid(avatar):

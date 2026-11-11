@@ -1,0 +1,209 @@
+{
+  "engine": "4.6.3.stable.official.7d41c59c4",
+  "environment": "Linux headless; isolated synthetic profiles",
+  "code_commit_github": "f0fbea9f0fa383c8c7572e5fcd2de2e1b4475913",
+  "physical_devices_tested": false,
+  "suites": {
+    "boss_rush": {
+      "pass": 2,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "coop-2-host": {
+      "pass": 18,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "coop-2-password": {
+      "pass": 2,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "coop-2-rejoin": {
+      "pass": 15,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "coop-2-version": {
+      "pass": 2,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "coop-4-client-2": {
+      "pass": 13,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "coop-4-client-3": {
+      "pass": 13,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "coop-4-host": {
+      "pass": 22,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "coop-4-password": {
+      "pass": 2,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "coop-4-rejoin": {
+      "pass": 15,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "coop-4-version": {
+      "pass": 2,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "dedicated-client-1": {
+      "pass": 4,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "dedicated-client-2": {
+      "pass": 4,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "dedicated-host": {
+      "pass": 0,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "export_smoke": {
+      "pass": 10,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "import": {
+      "pass": 0,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "regression": {
+      "pass": 52,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "short": {
+      "pass": 6,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "survival": {
+      "pass": 6,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "trial": {
+      "pass": 2,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "v2_systems": {
+      "pass": 34,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "v2_wave_generation": {
+      "pass": 11,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "v3_career": {
+      "pass": 19,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "v3_feeling": {
+      "pass": 11,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "v3_field": {
+      "pass": 13,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "v3_modes": {
+      "pass": 26,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "v3_touch": {
+      "pass": 42,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "v6_acceptance": {
+      "pass": 77,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "v6_camera_30": {
+      "pass": 3,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "v6_camera_45": {
+      "pass": 3,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "v6_camera_60": {
+      "pass": 3,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "v7_gungame": {
+      "pass": 45,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "v7_interactions": {
+      "pass": 18,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "v7_motion": {
+      "pass": 25,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "v7_parkour": {
+      "pass": 26,
+      "fail": 0,
+      "engine_errors": 0
+    },
+    "v7_touch": {
+      "pass": 9,
+      "fail": 0,
+      "engine_errors": 0
+    }
+  },
+  "totals": {
+    "pass": 555,
+    "fail": 0,
+    "engine_errors": 0
+  },
+  "orchestrator_pass_lines": 563,
+  "native_render": {
+    "environment": "Linux X11, Mesa llvmpipe software",
+    "pass": 16,
+    "fail": 0
+  },
+  "development_soak": {
+    "mode": "classic teams",
+    "real_seconds": 1200,
+    "segments": 15,
+    "physical_device": false,
+    "post_cache_engine_static_min_bytes": 59173940,
+    "post_cache_engine_static_max_bytes": 60160106,
+    "engine_errors": 0,
+    "scope": "Started during L3 development before final Gun Game attribution/test-scenario corrections; not an endurance test of new modes or network."
+  }
+}

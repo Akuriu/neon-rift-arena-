@@ -13,6 +13,12 @@ const TUNES := [
 	Vector4(0.077, 0.048, 1.29, 0.17), Vector4(0.083, 0.073, 1.45, 0.21),
 	Vector4(0.027, 0.031, 0.98, 0.52), Vector4(0.117, 0.138, 1.36, 0.38),
 ]
+const RELOAD_TURNS := [
+	Vector3(-0.60, 0.16, -0.25), Vector3(-0.47, 0.37, -0.14),
+	Vector3(-0.35, 0.42, 0.16), Vector3(-0.76, 0.13, -0.32),
+	Vector3(-0.49, -0.12, 0.27), Vector3(-0.70, -0.18, 0.22),
+	Vector3(-0.42, 0.52, -0.36), Vector3(-0.78, 0.30, -0.14),
+]
 
 var state := Pose.IDLE
 var stride := 0.0
@@ -22,11 +28,14 @@ var attitude := Vector3.ZERO
 var warmed := false
 var stow := 0.0
 var cell_weight := 0.0
+var last_view := Vector2.ZERO
+var turn_sway := Vector2.ZERO
+var strafe := 0.0
 
 static func inspection_time(index: int) -> float:
 	return TUNES[index].z
 
-func tick(gun: Node, delta: float, motion: float, running: bool, wall: float, settings: Dictionary) -> void:
+func tick(gun: Node, delta: float, motion: float, running: bool, wall: float, settings: Dictionary, lateral: float) -> void:
 	gun.scope = lerpf(gun.scope, 1.0 if gun.aiming() else 0.0, 1.0 - exp(-14.0 * delta))
 	gun.shot_kick = move_toward(gun.shot_kick, 0.0, delta * 8.9)
 	if not gun.pilot.alive:
@@ -37,18 +46,28 @@ func tick(gun: Node, delta: float, motion: float, running: bool, wall: float, se
 		cell_weight = 0.0
 	var tune: Vector4 = TUNES[gun.visual_index]
 	var comfort: float = 0.24 if settings.steady_cam else settings.motion_strength
+	var view := Vector2(gun.pilot.rotation.y, gun.pilot.head.rotation.x)
+	var turn_rate := Vector2.ZERO
+	if warmed and delta > 0.0:
+		turn_rate = (Vector2(angle_difference(last_view.x, view.x), view.y - last_view.y) / delta).limit_length(8.0)
+	last_view = view
+	turn_sway = turn_sway.lerp(turn_rate, 1.0 - exp(-12.0 * delta))
+	strafe = lerpf(strafe, clampf(lateral, -1.0, 1.0), 1.0 - exp(-11.0 * delta))
 	var heat: float = gun.heat[gun.active]
 	var kick: float = gun.shot_kick * (1.0 if settings.recoil else 0.22)
 	if settings.steady_cam:
 		kick *= 0.32
 	stride = lerpf(stride, motion, 1.0 - exp(-10.0 * delta))
-	sprint = lerpf(sprint, 1.0 if running else 0.0, 1.0 - exp(-12.0 * delta))
+	var sprint_pose: bool = running and not gun.aiming() and gun.reload_left <= 0.0 and gun.swap_left <= 0.0
+	sprint = lerpf(sprint, 1.0 if sprint_pose else 0.0, 1.0 - exp(-12.0 * delta))
 	var walk: float = gun.pilot.rendered_step_phase()
 	var base := REST + Vector3(0.0, -0.009, -0.10) if gun.visual_index == 2 else REST
 	var target := base + Vector3(sin(walk) * 0.016, (absf(cos(walk)) - 0.58) * 0.016, 0.0) * stride * comfort
 	target += Vector3(0, sin(gun.pose_clock * 2.2) * 0.003 * comfort, kick * tune.x)
 	target += Vector3(0.041, -0.087, 0.038) * sprint
 	var angle := Vector3(-kick * tune.y, -0.071, -0.22 * sprint)
+	target += Vector3(turn_sway.x * 0.002 - strafe * 0.012, -turn_sway.y * 0.002, 0.0) * comfort
+	angle += Vector3(turn_sway.y * 0.005, -turn_sway.x * 0.005, -strafe * 0.035) * comfort
 	var cell := 0.0
 	state = Pose.SPRINT if running else (Pose.WALK if motion > 0.07 else Pose.IDLE)
 	if gun.rounds() <= 0:
@@ -71,9 +90,9 @@ func tick(gun: Node, delta: float, motion: float, running: bool, wall: float, se
 		var opening := smoothstep(0.0, 0.20, phase) * (1.0 - smoothstep(0.70, 1.0, phase))
 		cell = smoothstep(0.18, 0.42, phase) * (1.0 - smoothstep(0.57, 0.79, phase))
 		target += Vector3(-0.036, -0.148, 0.036) * opening
-		angle += Vector3(-0.62, 0.23, -0.29) * opening
+		angle += RELOAD_TURNS[gun.visual_index] * opening
 		state = Pose.RELOAD_OPEN if phase < 0.21 else (Pose.RELOAD_CELL if phase < 0.72 else Pose.RELOAD_CLOSE)
-	if gun.scope > 0.01:
+	if gun.scope > 0.01 and gun.reload_left <= 0.0 and gun.swap_left <= 0.0:
 		var aim_weight: float = gun.scope
 		var sight: float = gun.sight_height()
 		var aim := Vector3(0.0, -sight * gun.view.scale.y - 0.007, base.z)

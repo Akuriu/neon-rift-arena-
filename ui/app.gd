@@ -18,6 +18,10 @@ const Coop := preload("res://network/coop.gd")
 const Lobby := preload("res://ui/lobby.gd")
 const Rules := preload("res://game/modes/rules.gd")
 const ClassicSetup := preload("res://ui/screens/classic_setup.gd")
+const GunGameResult := preload("res://ui/screens/gun_game_result.gd")
+const PlayMenu := preload("res://ui/screens/play.gd")
+const ParkourSetup := preload("res://ui/screens/parkour_setup.gd")
+const Courses := preload("res://game/modes/parkour_routes.gd")
 const TouchLayer := preload("res://ui/mobile/touch_layer.gd")
 const TouchEditor := preload("res://ui/mobile/editor.gd")
 const CareerView := preload("res://ui/screens/career.gd")
@@ -127,6 +131,8 @@ func _process(delta: float) -> void:
 	title_cam.look_at(Vector3(-3.5, 2.82, -5.6), Vector3.UP)
 
 func _new_screen(name: String, treatment := "page") -> void:
+	if is_instance_valid(session):
+		_freeze()
 	if Prefs.mobile():
 		Input.emulate_mouse_from_touch = true
 	_drop_menu_view()
@@ -305,15 +311,10 @@ func _home_link(rect: Rect2, title: String, icon: String, action: Callable, prim
 func play_menu() -> void:
 	_new_screen("play")
 	_header("RIFLE ARENA / JOUER", "Choisir un mode", "Choisissez une partie solo, un entraînement ou un salon coop.")
-	_play_card(Rect2(57, 217, 574, 168), "Match contre les bots",
-		"Chacun pour soi, équipes,\ncapture et domination.", "reactor", "01  /  MATCH", open_classic, true)
-	_play_card(Rect2(649, 217, 574, 168), "Survie",
-		"Vagues, défis, boss\net ravitaillement.", "cryo", "02  /  VAGUES", select_session)
-	_play_card(Rect2(57, 403, 574, 168), "Entraînement",
-		"Essayez les huit armes\nsur des cibles.", "district", "03  /  STAND DE TIR",
-		func(): begin("training", selected_difficulty, selected_map))
-	_play_card(Rect2(649, 403, 574, 168), "Coop",
-		"Hébergez ou rejoignez\nune partie de 2 à 4.", "skyline", "04  /  EN LIGNE", open_lobby)
+	PlayMenu.new().build(view, {"gungame": open_classic.bind("gungame"), "classic": open_classic,
+		"parkour": open_parkour,
+		"survival": select_session, "coop": open_lobby,
+		"training": func(): begin("training", selected_difficulty, selected_map)})
 	_home_link(Rect2(57, 593, 166, 53), "Retour", "back", menu)
 	_footer("Parties locales et salons privés")
 
@@ -405,24 +406,40 @@ func _dedicated(arguments: PackedStringArray) -> void:
 		printerr(coop.status)
 		get_tree().quit(2)
 
-func open_classic() -> void:
+func open_classic(variant := "classic") -> void:
 	var initial := {}
-	if Rules.LABELS.has(last_mode):
+	if Rules.LABELS.has(last_mode) and (last_mode == "gungame") == (variant == "gungame"):
 		initial = {"mode": last_mode, "rules": last_rules, "seed": last_seed}
+	elif variant == "gungame":
+		initial = {"mode": "gungame", "rules": {"duration": 180}}
 	_drop_session()
 	_make_backdrop()
 	_free_cursor()
 	_new_screen("classic")
-	_header("Jouer", "Match contre les bots", "Choisissez une carte, un format et le nombre de bots.")
+	_header("Jouer", "Gun Game" if variant == "gungame" else "Match contre les bots",
+		"Huit armes en prêt, huit éliminations pour gagner." if variant == "gungame" else "Choisissez une carte, un format et le nombre de bots.")
 	classic_setup = ClassicSetup.new()
 	classic_setup.build(view, last_map if not initial.is_empty() else selected_map,
-		last_difficulty if not initial.is_empty() else selected_difficulty, initial, _start_classic, play_menu)
+		last_difficulty if not initial.is_empty() else selected_difficulty, initial, _start_classic, play_menu, variant == "gungame")
 	_footer("SCORE LOCAL   /   LES RÈGLES DU MATCH DÉFINISSENT LE CLASSEMENT")
 
 func _start_classic(mode: String, difficulty: String, map_id: String, seed: int, rules: Dictionary) -> void:
 	begin(mode, difficulty, map_id, seed, "", false, rules)
 
+func open_parkour() -> void:
+	_drop_session()
+	_make_backdrop()
+	_free_cursor()
+	_new_screen("parkour")
+	_header("Mouvement", "Parkour", "Traversez les portiques dans l’ordre. Une chute ou un retour au checkpoint ajoute deux secondes.")
+	ParkourSetup.new().build(view, func(route: String, ghost: bool):
+		begin("parkour", "standard", "skyline", -1, "", false, {"route": route, "ghost": ghost}))
+	Palette.button(view, Rect2(57, 581, 166, 53), "Retour", play_menu)
+	_footer("CHRONOMÈTRES PERSONNELS / Départ au premier portique / Pause disponible")
+
 func _mode_name(mode: String) -> String:
+	if mode == "parkour":
+		return "Parkour"
 	if mode == "coop":
 		return "Coop"
 	return Rules.LABELS[mode] if Rules.LABELS.has(mode) else MODES[mode].name
@@ -545,7 +562,7 @@ func begin(mode: String, difficulty: String, map_id := "reactor", run_seed := -1
 	field_notice = ""
 	add_child(session)
 	last_seed = session.run_seed
-	last_rules = session.classic.options.duplicate() if is_instance_valid(session.classic) else {}
+	last_rules = session.director.options.duplicate() if mode == "parkour" else (session.classic.options.duplicate() if is_instance_valid(session.classic) else {})
 	session.director.changed.connect(_session_changed)
 	session.director.campaign_complete.connect(_milestone)
 	session.director.finished.connect(_result.bind(session), CONNECT_DEFERRED)
@@ -751,7 +768,7 @@ func pause() -> void:
 func _show_pause() -> void:
 	_new_screen("pause", "overlay")
 	_header("En partie", "Pause",
-		"L’opération continue pour votre équipe." if coop.in_match() else "%s    /    %s" % [_mode_name(last_mode), Catalog.MAPS[last_map].name])
+		"L’opération continue pour votre équipe." if coop.in_match() else (Courses.ROUTES[session.director.route].name if last_mode == "parkour" else "%s    /    %s" % [_mode_name(last_mode), Catalog.MAPS[last_map].name]))
 	var resume := Palette.button(view, Rect2(57, 229, 440, 58), "Reprendre", hud, true)
 	Palette.button(view, Rect2(57, 298, 440, 51), "Paramètres", func(): open_settings("pause"))
 	Palette.button(view, Rect2(57, 359, 440, 51), "Commandes", controls)
@@ -766,9 +783,9 @@ func _show_pause() -> void:
 	Palette.panel(view, Rect2(534, 229, 690, 303), Color("#272b24"))
 	Palette.label(view, Rect2(559, 242, 620, 56), "Partie en cours", 31, Palette.CYAN, Palette.HEAD)
 	Palette.rule(view, Rect2(560, 307, 634, 1))
-	Palette.label(view, Rect2(560, 321, 634, 61), "Santé %d    ·    Protection %d" % [
+	Palette.label(view, Rect2(560, 321, 634, 61), "Checkpoint %d / %d" % [session.director.next, session.director.checkpoints.size()] if last_mode == "parkour" else "Santé %d    ·    Protection %d" % [
 		ceili(session.player.health), ceili(session.player.shield)], 17, Palette.TEXT, Palette.MONO)
-	Palette.label(view, Rect2(560, 384, 634, 67), "Arme   %s" % session.player.arsenal.spec().name, 17, Palette.TEXT, Palette.MONO)
+	Palette.label(view, Rect2(560, 384, 634, 67), "Pénalités   +%.1f s" % session.director.penalty if last_mode == "parkour" else "Arme   %s" % session.player.arsenal.spec().name, 17, Palette.TEXT, Palette.MONO)
 	Palette.label(view, Rect2(560, 451, 634, 54), "Durée   %s" % Palette.clock(session.director.elapsed), 17, Palette.MUTED, Palette.MONO)
 	if Prefs.mobile():
 		var accuracy := roundi(100.0 * session.hits / maxi(1, session.shots))
@@ -818,6 +835,10 @@ func confirm(title: String, copy: String, accept: Callable, cancel: Callable) ->
 	_footer("ÉCHAP  /  ANNULER")
 
 func _restart() -> void:
+	if last_mode == "parkour" and is_instance_valid(session):
+		session.director.restart()
+		hud()
+		return
 	begin(last_mode, last_difficulty, last_map, last_seed if Rules.LABELS.has(last_mode) else -1, "", false, last_rules)
 
 func open_settings(origin: String) -> void:
@@ -875,13 +896,13 @@ func controls() -> void:
 func _result(victory: bool, owner: Node3D) -> void:
 	if not is_instance_valid(owner) or owner != session or coop.dedicated:
 		return
+	if last_mode == "parkour":
+		_parkour_result()
+		return
 	_freeze()
 	var online := coop.in_match()
 	var record_mode := "coop" if online else last_mode
 	var report: Dictionary = session.result_override if not session.result_override.is_empty() else session.result_data(victory)
-	var wave: int = session.director.cleared
-	var score: int = session.director.score
-	var kills: int = session.director.kills
 	var elapsed: float = session.director.elapsed
 	var accuracy := roundi(100.0 * report.hits / maxi(1, report.shots))
 	var reward: Dictionary = session.credited_result
@@ -898,6 +919,33 @@ func _result(victory: bool, owner: Node3D) -> void:
 		name = String(report.outcome).capitalize()
 	_header("VICTOIRE" if victory else "OPÉRATION TERMINÉE", name, subtitle)
 	Sounds.play("win" if victory else "loss")
+	if last_mode == "gungame":
+		GunGameResult.new().build(view, session.director, top, best, accuracy)
+	else:
+		_operation_result_stats(report, top, best, victory, accuracy)
+	var reward_label := "+%d PIÈCES   +%d XP   ·   NIVEAU %d" % [
+		reward.get("coins", 0), reward.get("xp", 0), Profile.level(Prefs.profile.data.xp)] if reward.ok else String(reward.get("message", "Profil indisponible"))
+	if reward.ok and reward.has("message"):
+		reward_label = reward.message
+	elif not reward.get("badges", []).is_empty():
+		reward_label += "   ·   SUCCÈS  " + String(reward.badges[0]).to_upper()
+	Palette.label(view, Rect2(59, 500, 1163, 43), reward_label, 16, Palette.AMBER, Palette.MONO)
+	if not reward.ok:
+		Palette.button(view, Rect2(642, 552, 280, 57), "Réessayer la sauvegarde", _result.bind(victory, owner))
+	if online:
+		Palette.button(view, Rect2(57, 552, 305, 57), "Retour à la coop", leave_coop, true).grab_focus()
+	else:
+		Palette.button(view, Rect2(57, 552, 305, 57), "REJOUER     ›", _restart, true).grab_focus()
+		if Rules.LABELS.has(last_mode) and reward.ok:
+			Palette.button(view, Rect2(642, 552, 280, 57), "Modifier les règles", open_classic.bind(last_mode))
+	Palette.button(view, Rect2(377, 552, 246, 57), "Retour au menu", menu)
+	_footer("RAPPORT D’OPÉRATION   /   CLASSEMENT PAR MODE, DIFFICULTÉ ET ARÈNE")
+
+func _operation_result_stats(report: Dictionary, top: int, best: bool, victory: bool, accuracy: int) -> void:
+	var wave: int = session.director.cleared
+	var score: int = session.director.score
+	var kills: int = session.director.kills
+	var elapsed: float = session.director.elapsed
 	Palette.panel(view, Rect2(57, 215, 1166, 161), Color("#112a32"), Palette.CYAN if victory else Palette.LINE)
 	Palette.label(view, Rect2(79, 227, 513, 30), "SCORE FINAL", 14, Palette.MUTED, Palette.MONO)
 	Palette.label(view, Rect2(75, 256, 668, 101), "%06d" % score, 68, Palette.TEXT, Palette.MONO)
@@ -923,23 +971,39 @@ func _result(victory: bool, owner: Node3D) -> void:
 		Palette.panel(view, Rect2(x, 394, width - 9.0, 99), Color("#10242b"))
 		Palette.label(view, Rect2(x + 13.0, 402, width - 29, 33), rows[i][0], 12, Palette.MUTED, Palette.MONO)
 		Palette.label(view, Rect2(x + 13.0, 435, width - 29, 46), rows[i][1], 26, Palette.TEXT, Palette.MONO)
-	var reward_label := "+%d PIÈCES   +%d XP   ·   NIVEAU %d" % [
-		reward.get("coins", 0), reward.get("xp", 0), Profile.level(Prefs.profile.data.xp)] if reward.ok else String(reward.get("message", "Profil indisponible"))
-	if reward.ok and reward.has("message"):
-		reward_label = reward.message
-	elif not reward.get("badges", []).is_empty():
-		reward_label += "   ·   SUCCÈS  " + String(reward.badges[0]).to_upper()
-	Palette.label(view, Rect2(59, 500, 1163, 43), reward_label, 16, Palette.AMBER, Palette.MONO)
+
+func _parkour_result() -> void:
+	_freeze()
+	var report: Dictionary = session.director.report()
+	var reward: Dictionary = session.credited_result
+	if reward.is_empty() or not reward.ok:
+		reward = Prefs.complete_parkour(session.run_id, report)
+		session.credited_result = reward
+	var course: Dictionary = Courses.ROUTES[report.route]
+	var best: int = Prefs.profile.data.career.parkour.get(report.route, 0)
+	var medal := Courses.medal(report.route, report.milliseconds) if report.valid else ""
+	var subtitle: String = course.name if medal.is_empty() else "%s  ·  Médaille %s" % [course.name, medal.to_lower()]
+	_new_screen("result", "overlay")
+	_header("PARKOUR", "Nouveau record" if reward.get("best", false) else "Parcours terminé", subtitle)
+	Palette.panel(view, Rect2(57, 215, 1166, 159), Palette.PANEL)
+	Palette.label(view, Rect2(80, 232, 700, 30), "TEMPS TOTAL", 14, Palette.MUTED, Palette.MONO)
+	Palette.label(view, Rect2(74, 273, 709, 86), Courses.clock(report.milliseconds), 63, Palette.TEXT, Palette.MONO)
+	Palette.label(view, Rect2(803, 238, 389, 31), "RECORD PERSONNEL", 14, Palette.MUTED, Palette.MONO, HORIZONTAL_ALIGNMENT_RIGHT)
+	Palette.label(view, Rect2(803, 281, 389, 55), Courses.clock(best) if best > 0 else "—", 33, Palette.AMBER, Palette.MONO, HORIZONTAL_ALIGNMENT_RIGHT)
+	var rows := [["COURSE", Courses.clock(report.elapsed_ms)], ["RETOURS", str(report.retries)],
+		["PÉNALITÉS", "+%.1f s" % (report.penalty_ms / 1000.0)], ["CHECKPOINTS", "%d / %d" % [report.checkpoints, course.points.size()]]]
+	for i in rows.size():
+		var x := 57 + i * 296
+		Palette.panel(view, Rect2(x, 392, 278, 94), Palette.PANEL)
+		Palette.label(view, Rect2(x + 17, 400, 245, 31), rows[i][0], 13, Palette.MUTED, Palette.MONO)
+		Palette.label(view, Rect2(x + 17, 437, 245, 39), rows[i][1], 26, Palette.TEXT, Palette.MONO)
+	Palette.label(view, Rect2(59, 503, 1157, 37), reward.get("message", ""), 17, Palette.AMBER)
+	Palette.button(view, Rect2(57, 564, 305, 57), "Rejouer le parcours", _restart, true).grab_focus()
+	Palette.button(view, Rect2(377, 564, 305, 57), "Changer de parcours", open_parkour)
+	Palette.button(view, Rect2(697, 564, 246, 57), "Retour au menu", menu)
 	if not reward.ok:
-		Palette.button(view, Rect2(642, 552, 280, 57), "Réessayer la sauvegarde", _result.bind(victory, owner))
-	if online:
-		Palette.button(view, Rect2(57, 552, 305, 57), "Retour à la coop", leave_coop, true).grab_focus()
-	else:
-		Palette.button(view, Rect2(57, 552, 305, 57), "REJOUER     ›", _restart, true).grab_focus()
-		if Rules.LABELS.has(last_mode) and reward.ok:
-			Palette.button(view, Rect2(642, 552, 280, 57), "Modifier les règles", open_classic)
-	Palette.button(view, Rect2(377, 552, 246, 57), "Retour au menu", menu)
-	_footer("RAPPORT D’OPÉRATION   /   CLASSEMENT PAR MODE, DIFFICULTÉ ET ARÈNE")
+		Palette.button(view, Rect2(958, 564, 265, 57), "Réessayer la sauvegarde", _parkour_result)
+	_footer("Les pénalités sont comprises dans le record. Aucun gain de pièces en Parkour.")
 
 func credits() -> void:
 	_new_screen("credits")
@@ -1015,7 +1079,7 @@ func _back() -> void:
 		"hud": pause()
 		"pause": hud()
 		"upgrade": _leave_intermission()
-		"select", "classic", "lobby": play_menu()
+		"select", "classic", "parkour", "lobby": play_menu()
 		"play", "result", "credits", "hub", "profile", "career": menu()
 		"touch_editor": open_settings(options_origin)
 		"controls", "training_setup": _show_pause()

@@ -33,3 +33,6 @@ __pycache__/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Import sidecars of documentation captures are not game assets.
+docs/**/*.import

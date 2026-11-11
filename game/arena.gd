@@ -33,6 +33,7 @@ var dome: ShaderMaterial
 var air: CPUParticles3D
 var deck_surface: ShaderMaterial
 var is_backdrop := false
+var build_landscape := true
 var emergency := false
 var map_id := "reactor"
 var start_at := START
@@ -56,7 +57,7 @@ func _ready() -> void:
 	_light()
 	_build_layout()
 	batches.commit(structure)
-	if map_id != "station":
+	if map_id != "station" and build_landscape:
 		Scenery.build(self)
 	if not is_backdrop:
 		routes.setup(footprints, half_size)

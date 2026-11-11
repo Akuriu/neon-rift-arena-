@@ -1,13 +1,13 @@
 extends RefCounted
 
-const TEXT := Color("#eeeae1")
-const MUTED := Color("#b8b7aa")
+const TEXT := Color("#f2efe6")
+const MUTED := Color("#aab5a8")
 const QUIET := Color("#84877a")
 const CYAN := Color("#d1c4a9")
-const AMBER := Color("#d9b27c")
+const AMBER := Color("#c8ad83")
 const PINK := Color("#d8846e")
-const PANEL := Color("#272b24")
-const BASE := Color("#191c18")
+const PANEL := Color("#202723")
+const BASE := Color("#151c19")
 const LINE := Color("#44473d")
 const BODY := preload("res://assets/fonts/OpenSans-Regular.ttf")
 const BOLD := preload("res://assets/fonts/OpenSans-Bold.ttf")
@@ -85,6 +85,7 @@ static func label(parent: Node, rect: Rect2, value: String, pixels := 16,
 	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if wrap:
 		node.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		node.custom_minimum_size.x = rect.size.x
 	node.add_theme_font_override("font", font)
 	node.add_theme_font_size_override("font_size", pixels)
 	node.add_theme_color_override("font_color", color)

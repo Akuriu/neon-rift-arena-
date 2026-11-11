@@ -6,9 +6,11 @@ signal saved(success: bool)
 const SAVE := "user://pilot_profile.json"
 const BACKUP := "user://pilot_profile.json.bak"
 const TEMP := "user://pilot_profile.json.tmp"
-const VERSION := 5
+const VERSION := 6
 const Profile := preload("res://services/profile.gd")
 const Rules := preload("res://game/modes/rules.gd")
+const Courses := preload("res://game/modes/parkour_routes.gd")
+const ParkourReplay := preload("res://game/modes/parkour_ghost.gd")
 const TouchLayout := preload("res://ui/mobile/layout.gd")
 const LEGACY_BACKUP := "user://pilot_profile.v1.json"
 const V2_BACKUP := "user://pilot_profile.v2.json"
@@ -55,7 +57,7 @@ const RANGES := {
 	"particles": [0.0, 1.0],
 }
 const BUSES := {"master": "Master", "music": "Musique", "sfx": "SFX", "ambience": "Ambiance"}
-const MODES := ["survival", "short", "endless", "trial", "coop", "boss_rush", "classic", "teams", "capture", "domination"]
+const MODES := ["survival", "short", "endless", "trial", "coop", "boss_rush", "classic", "teams", "capture", "domination", "gungame"]
 const DIFFICULTIES := ["discovery", "standard", "expert"]
 const MAPS := ["reactor", "skyline", "cryo", "bastion", "district", "grove", "station"]
 
@@ -181,9 +183,9 @@ func apply_keys() -> void:
 		InputMap.action_erase_events(action)
 		if mobile():
 			continue
-			var click := InputEventMouseButton.new()
-			click.button_index = MOUSE_BUTTON_LEFT if action == "fire" else MOUSE_BUTTON_RIGHT
-			InputMap.action_add_event(action, click)
+		var click := InputEventMouseButton.new()
+		click.button_index = MOUSE_BUTTON_LEFT if action == "fire" else MOUSE_BUTTON_RIGHT
+		InputMap.action_add_event(action, click)
 
 func apply_video() -> void:
 	Engine.max_fps = values.fps_limit
@@ -289,7 +291,7 @@ func load_disk() -> void:
 		for key in stored_records:
 			var parts := String(key).split("|")
 			if parts.size() == 4 and Rules.LABELS.has(parts[0]) and parts[1] in DIFFICULTIES \
-				and parts[2] in MAPS and Rules.valid_key(parts[3]) and records.size() < 430:
+				and parts[2] in MAPS and Rules.valid_key(parts[3], parts[0]) and records.size() < 430:
 				var rows := _record_rows(stored_records[key])
 				if not rows.is_empty():
 					records[key] = rows
@@ -360,7 +362,7 @@ func _better(a: Dictionary, b: Dictionary) -> bool:
 
 func category(mode: String, difficulty: String, map_id: String, rules := "") -> String:
 	var base := "%s|%s|%s" % [mode, difficulty, map_id]
-	return base + "|" + rules if Rules.LABELS.has(mode) and Rules.valid_key(rules) else base
+	return base + "|" + rules if Rules.LABELS.has(mode) and Rules.valid_key(rules, mode) else base
 
 func leaderboard(mode: String, difficulty: String, map_id: String, rules := "") -> Array:
 	return records.get(category(mode, difficulty, map_id, rules), [])
@@ -420,11 +422,43 @@ func complete_run(id: String, mode: String, difficulty: String, map_id: String, 
 	changed.emit("profile")
 	return result
 
+func complete_parkour(id: String, report: Dictionary) -> Dictionary:
+	if report.get("valid") != true or report.get("route") not in Courses.IDS:
+		return {"ok": true, "best": false, "message": "Parcours hors record · recommencez sans raccourci."}
+	var route: String = report.route
+	var duration := Profile.number(report.get("milliseconds"), 7200000)
+	if id.is_empty() or id.length() > 64 or duration < 1000 \
+		or report.get("checkpoints") != Courses.ROUTES[route].points.size():
+		return {"ok": false, "best": false, "message": "Parcours incomplet."}
+	if id in profile.data.settled:
+		return {"ok": true, "best": false, "message": "Parcours déjà enregistré."}
+	return profile_action(func() -> Dictionary:
+		var times: Dictionary = profile.data.career.parkour
+		var best := not times.has(route) or duration < int(times[route])
+		var progress: Dictionary = profile.data.career.parkour_progress
+		var stats: Dictionary = progress.get(route, {"finishes": 0, "clean_finishes": 0})
+		var retries := Profile.number(report.get("retries"), 99999)
+		stats.finishes = mini(99999, int(stats.finishes) + 1)
+		stats.clean_finishes = mini(99999, int(stats.clean_finishes) + int(retries == 0))
+		if best:
+			times[route] = duration
+			stats.record_retries = retries
+			stats.erase("ghost")
+			var trace := ParkourReplay.sanitize(report.get("trace"), duration)
+			if not trace.is_empty():
+				stats.ghost = trace
+		progress[route] = stats
+		profile.data.settled.append(id)
+		if profile.data.settled.size() > 128:
+			profile.data.settled.pop_front()
+		return {"ok": true, "best": best, "message": "Nouveau record personnel." if best else "Parcours enregistré."})
+
 func reset_progression() -> Dictionary:
 	if _recognizable(_read(SAVE)) and DirAccess.copy_absolute(profile_file(SAVE), profile_file(RESET_BACKUP)) != OK:
 		return {"ok": false, "message": "Impossible de créer la copie de sécurité."}
 	return profile_action(func() -> Dictionary:
-		profile.restore({"id": profile.data.id, "name": profile.data.name})
+		profile.restore({"id": profile.data.id, "name": profile.data.name, "career": {
+			"parkour": profile.data.career.parkour, "parkour_progress": profile.data.career.parkour_progress}})
 		return {"ok": true, "message": "Progression réinitialisée. Réglages et records conservés."})
 
 func _recognizable(document: Dictionary) -> bool:
@@ -462,7 +496,7 @@ func _write_locked() -> String:
 	if version > VERSION:
 		return "Ce profil appartient à une version plus récente du jeu."
 	var path := profile_file(SAVE)
-	var legacy := profile_file(V2_BACKUP if version == 3 else LEGACY_BACKUP)
+	var legacy := profile_file("user://pilot_profile.v5.json" if version == 5 else (V2_BACKUP if version == 3 else LEGACY_BACKUP))
 	if _recognizable(previous) and version < VERSION and not FileAccess.file_exists(legacy):
 		if DirAccess.copy_absolute(path, legacy) != OK:
 			return "Impossible de copier l’ancien profil avant migration."

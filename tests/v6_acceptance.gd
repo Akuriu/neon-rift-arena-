@@ -16,7 +16,7 @@ func run() -> void:
 	var prefs = root.get_node("Prefs")
 	app = load("res://scenes/App.tscn").instantiate()
 	root.add_child(app)
-	check(app.screen == "menu" and app.version_label == "v0.0.6 Alpha" and prefs.profile.data.xp == 0,
+	check(app.screen == "menu" and app.version_label == "v0.0.7a Alpha" and prefs.profile.data.xp == 0,
 		"Premier lancement vierge sur le nouvel accueil")
 	app.show_profile()
 	check(app.screen == "profile", "Progression accessible sur un profil neuf")
@@ -32,6 +32,8 @@ func run() -> void:
 		"XP, achat, HUD, sensibilité et record du profil v0.0.5 chargés")
 	prefs.change_value("touch_response", 0.45)
 	check(prefs.save_disk(), "Réécriture sûre du profil antérieur")
+	check(FileAccess.get_file_as_string(prefs.profile_file("user://pilot_profile.v5.json")) == FileAccess.get_file_as_string(FIXTURE),
+		"Copie de sécurité exacte du profil v5 avant migration du schéma")
 	prefs.load_disk()
 	check(prefs.profile.data.xp == 725 and prefs.touch_layout.fire == expected_fire
 		and is_equal_approx(prefs.values.touch_response, 0.45), "Relecture des anciens et nouveaux réglages")
@@ -74,7 +76,7 @@ func run() -> void:
 func screens() -> void:
 	var screens_to_open := [
 		["Accueil", app.menu], ["Jouer", app.play_menu], ["Survie", app.select_session],
-		["Classique", app.open_classic], ["Coop", app.open_lobby],
+		["Gun Game", app.open_classic.bind("gungame")], ["Parkour", app.open_parkour], ["Classique", app.open_classic], ["Coop", app.open_lobby],
 		["Arsenal", app.open_hub.bind("arsenal")], ["Boutique", app.open_hub.bind("shop")],
 		["Progression", app.show_profile], ["Historique", app.show_career],
 		["Options", app.open_settings.bind("menu")], ["Disposition", app.open_touch_editor],
