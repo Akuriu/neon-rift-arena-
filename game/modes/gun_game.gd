@@ -1,20 +1,29 @@
 extends "res://game/modes/classic.gd"
 
 const Arms := preload("res://game/weapons/catalog.gd")
-# One immutable sequence: the final R700 elimination wins the match.
 const ORDER := [0, 6, 1, 2, 3, 7, 4, 5]
+var order := []
 var deaths_seen := {}
 var winner := -1
 
 func configure(session: Node3D, variant: String, raw: Dictionary) -> void:
 	super.configure(session, variant, raw)
+	order = ORDER.duplicate()
+	if options.shuffled:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = stage.run_seed
+		for last in range(order.size() - 1, 0, -1):
+			var pick := rng.randi_range(0, last)
+			var weapon: int = order[last]
+			order[last] = order[pick]
+			order[pick] = weapon
 	equip_actor(stage.player)
 
 func bot_kind(_slot: int) -> String:
 	return "sentinel"
 
 func equip_actor(actor: CharacterBody3D) -> void:
-	var index: int = ORDER[mini(ORDER.size() - 1, int(scores.get(actor.arena_slot, 0)))]
+	var index: int = order[mini(order.size() - 1, int(scores.get(actor.arena_slot, 0)))]
 	if actor == stage.player:
 		actor.arsenal.assign_stage(index)
 	else:
@@ -35,11 +44,11 @@ func eliminated(victim: CharacterBody3D, source: CharacterBody3D, credit := -1) 
 	var attacker: int = source.arena_slot if is_instance_valid(source) else credit
 	if attacker == slot or not scores.has(attacker):
 		return
-	scores[attacker] = mini(ORDER.size(), int(scores[attacker]) + 1)
+	scores[attacker] = mini(order.size(), int(scores[attacker]) + 1)
 	if attacker == 0:
 		kills += 1
 	score = scores[0]
-	if int(scores[attacker]) == ORDER.size():
+	if int(scores[attacker]) == order.size():
 		winner = attacker
 		finish(attacker == 0)
 		return
@@ -52,7 +61,7 @@ func eliminated(victim: CharacterBody3D, source: CharacterBody3D, credit := -1) 
 				break
 	if attacker == 0:
 		stage.sound("upgrade")
-		stage.show_radio("Palier %d / 8 · %s" % [score + 1, Arms.WEAPONS[ORDER[score]].name], 2.1)
+		stage.show_radio("Palier %d / 8 · %s" % [score + 1, Arms.WEAPONS[order[score]].name], 2.1)
 	changed.emit()
 
 func rank_of(slot := 0) -> int:
@@ -63,4 +72,12 @@ func rank_of(slot := 0) -> int:
 	return rank
 
 func next_weapon() -> String:
-	return Arms.WEAPONS[ORDER[score + 1]].name if score + 1 < ORDER.size() else "Dernière élimination"
+	return Arms.WEAPONS[order[score + 1]].name if score + 1 < order.size() else "Dernière élimination"
+
+func standings() -> Array[Dictionary]:
+	var rows: Array[Dictionary] = []
+	for slot: int in scores:
+		rows.append({"slot": slot, "score": scores[slot], "rank": rank_of(slot)})
+	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return a.slot < b.slot if a.score == b.score else a.score > b.score)
+	return rows

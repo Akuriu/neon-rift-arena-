@@ -16,6 +16,7 @@ var root: Control
 var summary: Label
 var modes: OptionButton
 var targets: OptionButton
+var order: OptionButton
 var maps: OptionButton
 var detail: Label
 var preview: TextureRect
@@ -48,11 +49,10 @@ func build(parent: Control, selected_map: String, selected_level: String, initia
 		names.append("Exploration libre" if count == 0 else "%d bots" % count)
 	var bots := _choice("EFFECTIF", 82, 316, names, mini(max_bots, rules.bots))
 	var duration := _choice("DURÉE", 457, 316, ["3 minutes", "5 minutes", "10 minutes", "15 minutes"], Rules.DURATIONS.find(rules.duration))
-	targets = _choice("LIMITE DE SCORE", 832, 316, ["10 points", "20 points", "35 points", "60 points", "100 points"], Rules.TARGETS.find(rules.target))
 	if gun_game:
-		targets.clear()
-		targets.add_item("8 éliminations · victoire")
-		targets.disabled = true
+		order = _choice("ORDRE DES ARMES", 832, 316, ["Ordre classique", "Mélangé par graine"], int(rules.shuffled))
+	else:
+		targets = _choice("LIMITE DE SCORE", 832, 316, ["10 points", "20 points", "35 points", "60 points", "100 points"], Rules.TARGETS.find(rules.target))
 	summary = Palette.label(root, Rect2(82, 414, 833, 43), "", 19, Palette.TEXT, Palette.BOLD,
 		HORIZONTAL_ALIGNMENT_LEFT, true)
 	detail = Palette.label(root, Rect2(82, 465, 833, 48), "", 16, Palette.MUTED, Palette.BODY,
@@ -62,14 +62,15 @@ func build(parent: Control, selected_map: String, selected_level: String, initia
 	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	Palette.at(root, preview, Rect2(944, 397, 233, 131))
-	modes.item_selected.connect(func(i: int):
-		targets.select(3 if allowed[i] in ["capture", "domination"] else (0 if gun_game else 1))
-		_refresh()
-	)
+	if not gun_game:
+		modes.item_selected.connect(func(i: int):
+			targets.select(3 if allowed[i] in ["capture", "domination"] else 1)
+			_refresh()
+		)
 	maps.item_selected.connect(func(_i: int): _refresh())
 	_refresh()
 	var seed := LineEdit.new()
-	seed.placeholder_text = "Graine facultative"
+	seed.placeholder_text = "Graine de match facultative"
 	seed.max_length = 10
 	if initial.has("seed"):
 		seed.text = str(initial.seed)
@@ -77,10 +78,13 @@ func build(parent: Control, selected_map: String, selected_level: String, initia
 	Palette.button(root, Rect2(57, 572, 137, 51), "Retour", back)
 	Palette.button(root, Rect2(209, 572, 279, 51), "LANCER LE MATCH    ›", func():
 		var code := seed.text.strip_edges()
+		var options := {"bots": bots.selected, "duration": Rules.DURATIONS[duration.selected]}
+		if gun_game:
+			options.shuffled = order.selected == 1
+		else:
+			options.target = Rules.TARGETS[targets.selected]
 		start.call(allowed[modes.selected], Prefs.DIFFICULTIES[levels.selected],
-			Prefs.MAPS[maps.selected], int(code) if code.is_valid_int() else -1,
-			{"bots": bots.selected, "duration": Rules.DURATIONS[duration.selected],
-				"target": 8 if gun_game else Rules.TARGETS[targets.selected]})
+			Prefs.MAPS[maps.selected], int(code) if code.is_valid_int() else -1, options)
 	, true)
 	modes.grab_focus()
 

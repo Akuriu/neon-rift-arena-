@@ -18,6 +18,7 @@ const Coop := preload("res://network/coop.gd")
 const Lobby := preload("res://ui/lobby.gd")
 const Rules := preload("res://game/modes/rules.gd")
 const ClassicSetup := preload("res://ui/screens/classic_setup.gd")
+const GunGameResult := preload("res://ui/screens/gun_game_result.gd")
 const PlayMenu := preload("res://ui/screens/play.gd")
 const ParkourSetup := preload("res://ui/screens/parkour_setup.gd")
 const Courses := preload("res://game/modes/parkour_routes.gd")
@@ -901,9 +902,6 @@ func _result(victory: bool, owner: Node3D) -> void:
 	var online := coop.in_match()
 	var record_mode := "coop" if online else last_mode
 	var report: Dictionary = session.result_override if not session.result_override.is_empty() else session.result_data(victory)
-	var wave: int = session.director.cleared
-	var score: int = session.director.score
-	var kills: int = session.director.kills
 	var elapsed: float = session.director.elapsed
 	var accuracy := roundi(100.0 * report.hits / maxi(1, report.shots))
 	var reward: Dictionary = session.credited_result
@@ -920,6 +918,33 @@ func _result(victory: bool, owner: Node3D) -> void:
 		name = String(report.outcome).capitalize()
 	_header("VICTOIRE" if victory else "OPÉRATION TERMINÉE", name, subtitle)
 	Sounds.play("win" if victory else "loss")
+	if last_mode == "gungame":
+		GunGameResult.new().build(view, session.director, top, best, accuracy)
+	else:
+		_operation_result_stats(report, top, best, victory, accuracy)
+	var reward_label := "+%d PIÈCES   +%d XP   ·   NIVEAU %d" % [
+		reward.get("coins", 0), reward.get("xp", 0), Profile.level(Prefs.profile.data.xp)] if reward.ok else String(reward.get("message", "Profil indisponible"))
+	if reward.ok and reward.has("message"):
+		reward_label = reward.message
+	elif not reward.get("badges", []).is_empty():
+		reward_label += "   ·   SUCCÈS  " + String(reward.badges[0]).to_upper()
+	Palette.label(view, Rect2(59, 500, 1163, 43), reward_label, 16, Palette.AMBER, Palette.MONO)
+	if not reward.ok:
+		Palette.button(view, Rect2(642, 552, 280, 57), "Réessayer la sauvegarde", _result.bind(victory, owner))
+	if online:
+		Palette.button(view, Rect2(57, 552, 305, 57), "Retour à la coop", leave_coop, true).grab_focus()
+	else:
+		Palette.button(view, Rect2(57, 552, 305, 57), "REJOUER     ›", _restart, true).grab_focus()
+		if Rules.LABELS.has(last_mode) and reward.ok:
+			Palette.button(view, Rect2(642, 552, 280, 57), "Modifier les règles", open_classic.bind(last_mode))
+	Palette.button(view, Rect2(377, 552, 246, 57), "Retour au menu", menu)
+	_footer("RAPPORT D’OPÉRATION   /   CLASSEMENT PAR MODE, DIFFICULTÉ ET ARÈNE")
+
+func _operation_result_stats(report: Dictionary, top: int, best: bool, victory: bool, accuracy: int) -> void:
+	var wave: int = session.director.cleared
+	var score: int = session.director.score
+	var kills: int = session.director.kills
+	var elapsed: float = session.director.elapsed
 	Palette.panel(view, Rect2(57, 215, 1166, 161), Color("#112a32"), Palette.CYAN if victory else Palette.LINE)
 	Palette.label(view, Rect2(79, 227, 513, 30), "SCORE FINAL", 14, Palette.MUTED, Palette.MONO)
 	Palette.label(view, Rect2(75, 256, 668, 101), "%06d" % score, 68, Palette.TEXT, Palette.MONO)
@@ -945,23 +970,6 @@ func _result(victory: bool, owner: Node3D) -> void:
 		Palette.panel(view, Rect2(x, 394, width - 9.0, 99), Color("#10242b"))
 		Palette.label(view, Rect2(x + 13.0, 402, width - 29, 33), rows[i][0], 12, Palette.MUTED, Palette.MONO)
 		Palette.label(view, Rect2(x + 13.0, 435, width - 29, 46), rows[i][1], 26, Palette.TEXT, Palette.MONO)
-	var reward_label := "+%d PIÈCES   +%d XP   ·   NIVEAU %d" % [
-		reward.get("coins", 0), reward.get("xp", 0), Profile.level(Prefs.profile.data.xp)] if reward.ok else String(reward.get("message", "Profil indisponible"))
-	if reward.ok and reward.has("message"):
-		reward_label = reward.message
-	elif not reward.get("badges", []).is_empty():
-		reward_label += "   ·   SUCCÈS  " + String(reward.badges[0]).to_upper()
-	Palette.label(view, Rect2(59, 500, 1163, 43), reward_label, 16, Palette.AMBER, Palette.MONO)
-	if not reward.ok:
-		Palette.button(view, Rect2(642, 552, 280, 57), "Réessayer la sauvegarde", _result.bind(victory, owner))
-	if online:
-		Palette.button(view, Rect2(57, 552, 305, 57), "Retour à la coop", leave_coop, true).grab_focus()
-	else:
-		Palette.button(view, Rect2(57, 552, 305, 57), "REJOUER     ›", _restart, true).grab_focus()
-		if Rules.LABELS.has(last_mode) and reward.ok:
-			Palette.button(view, Rect2(642, 552, 280, 57), "Modifier les règles", open_classic.bind(last_mode))
-	Palette.button(view, Rect2(377, 552, 246, 57), "Retour au menu", menu)
-	_footer("RAPPORT D’OPÉRATION   /   CLASSEMENT PAR MODE, DIFFICULTÉ ET ARÈNE")
 
 func _parkour_result() -> void:
 	_freeze()

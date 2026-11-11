@@ -3,6 +3,7 @@
 ## v0.0.7-alpha
 
 - Gun Game local : huit équipements en prêt, progression des bots, victoire au dernier palier, bilan et classement séparé.
+- Gun Game propose un ordre mélangé reproductible et un bilan avec tous les participants et les rangs ex æquo.
 - Parkour local : trois parcours physiques, checkpoints ordonnés, pénalités, records et HUD mobile dédié.
 - Atelier interactif solo au Dépôt de fret (Exploration/Entraînement), avec fermeture suspendue si le passage est occupé.
 - Protection d’apparition des bots, séparation locale et cache des combattants.

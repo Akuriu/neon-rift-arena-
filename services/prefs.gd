@@ -290,7 +290,7 @@ func load_disk() -> void:
 		for key in stored_records:
 			var parts := String(key).split("|")
 			if parts.size() == 4 and Rules.LABELS.has(parts[0]) and parts[1] in DIFFICULTIES \
-				and parts[2] in MAPS and Rules.valid_key(parts[3]) and records.size() < 430:
+				and parts[2] in MAPS and Rules.valid_key(parts[3], parts[0]) and records.size() < 430:
 				var rows := _record_rows(stored_records[key])
 				if not rows.is_empty():
 					records[key] = rows
@@ -361,7 +361,7 @@ func _better(a: Dictionary, b: Dictionary) -> bool:
 
 func category(mode: String, difficulty: String, map_id: String, rules := "") -> String:
 	var base := "%s|%s|%s" % [mode, difficulty, map_id]
-	return base + "|" + rules if Rules.LABELS.has(mode) and Rules.valid_key(rules) else base
+	return base + "|" + rules if Rules.LABELS.has(mode) and Rules.valid_key(rules, mode) else base
 
 func leaderboard(mode: String, difficulty: String, map_id: String, rules := "") -> Array:
 	return records.get(category(mode, difficulty, map_id, rules), [])

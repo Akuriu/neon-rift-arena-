@@ -3,6 +3,7 @@ extends SceneTree
 var app
 var prefs
 var failures := 0
+const Rules := preload("res://game/modes/rules.gd")
 
 func _initialize() -> void:
 	call_deferred("run")
@@ -15,7 +16,7 @@ func run() -> void:
 	root.add_child(app)
 	prefs = root.get_node("Prefs")
 	app.open_classic("gungame")
-	check(app.classic_setup.allowed == ["gungame"] and app.classic_setup.targets.disabled
+	check(app.classic_setup.allowed == ["gungame"] and app.classic_setup.order.item_count == 2
 		and app.classic_setup.maps.item_count == 7, "Gun Game accessible avec huit paliers et les sept cartes")
 	var gear: Dictionary = prefs.profile.data.duplicate(true)
 	app.begin("gungame", "standard", "district", 777, "", false, {"bots": 1, "duration": 180})
@@ -126,10 +127,53 @@ func run() -> void:
 	check(app.screen == "result" and match_state.outcome == "égalité"
 		and prefs.leaderboard("gungame", "standard", "bastion", "0-180-8").is_empty(),
 		"Zéro bot termine à égalité sans récompense ni faux record")
+	await exercise_shuffled()
 	app.menu()
 	root.get_node("Sounds").stop_all()
 	await process_frame
 	quit(failures)
+
+func exercise_shuffled() -> void:
+	var options := {"bots": 1, "duration": 180, "shuffled": true}
+	var expected_order: Array
+	for map_id: String in prefs.MAPS:
+		app.begin("gungame", "standard", map_id, 881, "", false, options)
+		var stage = app.session
+		var state = stage.classic
+		if expected_order.is_empty():
+			expected_order = state.order.duplicate()
+		state.open_wave()
+		state._advance_respawns(0.1)
+		check(stage.units.size() == 1 and state.order == expected_order
+			and stage.player.arsenal.active == expected_order[0] and stage.units[0].match_weapon == expected_order[0],
+			"Ordre seedé partagé par le pilote et le bot sur " + map_id)
+		await ticks(1)
+	var sorted := expected_order.duplicate()
+	sorted.sort()
+	check(sorted == range(8) and expected_order != app.session.classic.ORDER, "Le mélange utilise exactement les huit armes")
+	check(Rules.valid_key("1-180-8-mix", "gungame") and not Rules.valid_key("1-180-8-mix", "classic")
+		and not Rules.valid_key("1-180-10-mix", "gungame"), "Catégorie mélangée réservée au Gun Game")
+	app.begin("gungame", "expert", "district", 882, "", false, options)
+	var stage = app.session
+	var state = stage.classic
+	check(state.order != expected_order, "Changer de graine change l’ordre du match")
+	state.open_wave()
+	state._advance_respawns(0.1)
+	check(state.standings() == [{"slot": 0, "score": 0, "rank": 1}, {"slot": 1, "score": 0, "rank": 1}],
+		"Deux joueurs à égalité partagent le rang")
+	var target = stage.units[0]
+	target.spawn_guard = 0.0
+	target.take_hit(2000, target.center(), Vector3.FORWARD, stage.player)
+	check(state.standings() == [{"slot": 0, "score": 1, "rank": 1}, {"slot": 1, "score": 0, "rank": 2}]
+		and stage.player.arsenal.active == state.order[1], "Classement et palier suivent l’élimination réelle")
+	state.elapsed = 179.99
+	await ticks(5)
+	prefs.load_disk()
+	check(app.screen == "result" and prefs.leaderboard("gungame", "expert", "district", "1-180-8-mix").size() == 1
+		and prefs.leaderboard("gungame", "expert", "district", "1-180-8").is_empty(), "Le record mélangé survit à la relecture dans sa catégorie")
+	var order: Array = state.order.duplicate()
+	app._restart()
+	check(app.session.classic.order == order and app.session.run_seed == 882, "Rejouer restaure le mélange et sa graine")
 
 func ticks(count: int) -> void:
 	for frame in count:
