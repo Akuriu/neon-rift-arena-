@@ -164,7 +164,11 @@ jobs:
   android-smoke:
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [35, 36]
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -177,11 +181,12 @@ jobs:
       - name: Install and launch the APK on Android
         env:
           RIFLE_SIGNED: ${{ inputs.signed }}
+          RIFLE_ANDROID_API: ${{ matrix.api-level }}
         run: |
           set -euo pipefail
           export JAVA_HOME="$JAVA_HOME_21_X64"
           sdk_tools="$ANDROID_HOME/cmdline-tools/latest/bin"
-          image='system-images;android-35;default;x86_64'
+          image="system-images;android-$RIFLE_ANDROID_API;default;x86_64"
           export ANDROID_AVD_HOME="$RUNNER_TEMP/rifle-avd"
           mkdir -p "$ANDROID_AVD_HOME"
           df -m "$RUNNER_TEMP"
@@ -218,6 +223,9 @@ jobs:
             sleep 2
           done
           if [[ $booted != true ]]; then cat "$RUNNER_TEMP/emulator.log"; exit 1; fi
+          sdk=$("$adb" shell getprop ro.build.version.sdk | tr -d '\r')
+          [[ "$sdk" == "$RIFLE_ANDROID_API" ]]
+          printf 'Android API %s\n' "$sdk"
           package=$("$ANDROID_HOME/build-tools/36.0.0/aapt2" dump badging RifleArena_Android_alpha.apk |
             sed -n "s/^package: name='\([^']*\)'.*/\1/p")
           sha256sum --check SHA256SUMS
