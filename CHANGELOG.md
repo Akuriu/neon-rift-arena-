@@ -7,6 +7,7 @@
 - Parkour local : trois parcours physiques, checkpoints ordonnés, pénalités, records et HUD mobile dédié.
 - Parkour : fantôme optionnel du record, médailles par parcours, nombre d’arrivées et de passages sans retour.
 - Atelier interactif solo au Dépôt de fret (Exploration/Entraînement), avec fermeture suspendue si le passage est occupé.
+- Monte-charge du Dépôt de fret avec appels au sol et au quai, transport physique, arrêt d’urgence et descente protégée.
 - Protection d’apparition des bots, séparation locale et cache des combattants.
 - Animations de changement d’arme/recharge prioritaires, ressorts réinitialisés au respawn, attribution des tirs posthumes en Gun Game.
 - Aperçus d’armes manipulables par glissement et pincement/molette.

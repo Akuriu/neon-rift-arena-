@@ -48,21 +48,95 @@ func run() -> void:
 		"La route fermée est rétablie et le délai empêche le spam")
 	await ticks(94)
 	check(workshop.state == 0 and workshop.activate(pilot), "Un cycle complet permet une nouvelle activation")
+	await exercise_lift(stage)
 	var dummy := Node.new()
 	stage.net = dummy
 	check(not workshop.activate(pilot), "L’atelier refuse l’activation dans un contexte réseau non pris en charge")
+	check(not stage.cargo_lift.activate(pilot), "Le monte-charge refuse une activation en réseau")
 	stage.net = null
 	dummy.free()
 	for mode in ["classic", "teams", "gungame", "survival"]:
 		app.begin(mode, "standard", "skyline", 911, "", false, {"bots": 0})
-		check(not is_instance_valid(app.session.workshop), "L’atelier n’altère pas la carte du mode " + mode)
+		check(not is_instance_valid(app.session.workshop) and not is_instance_valid(app.session.cargo_lift),
+			"Les mécanismes n’altèrent pas la carte du mode " + mode)
 	app.begin("training", "standard", "skyline", 912)
-	check(is_instance_valid(app.session.workshop) and app.session.player.arsenal.rack.size() == 8,
-		"Le stand garde les huit armes et son atelier interactif")
+	check(is_instance_valid(app.session.workshop) and is_instance_valid(app.session.cargo_lift)
+		and app.session.player.arsenal.rack.size() == 8, "Le stand garde les huit armes et les mécanismes interactifs")
 	app.menu()
 	root.get_node("Sounds").stop_all()
 	await process_frame
 	quit(failures)
+
+func exercise_lift(stage: Node3D) -> void:
+	var lift = stage.cargo_lift
+	var pilot = stage.player
+	var base: Vector3 = lift.BASE
+	check(is_instance_valid(lift) and lift.FOOTPRINT in stage.arena.footprints
+		and not lift.activate(pilot), "Monte-charge présent et zone de mouvement évitée par les routes IA")
+	pilot.respawn(base + Vector3(0, -0.10, 3.25))
+	pilot.remote_input = true
+	pilot.net_move = Vector2(0, -1)
+	for frame in range(100):
+		await physics_frame
+		if pilot.position.z < base.z + 0.8:
+			break
+	pilot.net_move = Vector2.ZERO
+	await ticks(12)
+	check(lift.can_reach(pilot) and pilot.is_on_floor() and absf(pilot.position.y - base.y) < 0.10
+		and stage.pickup_hint == "Monter au quai", "La rampe permet d’embarquer à pied et affiche la commande")
+	stage.interact()
+	await ticks(43)
+	check(lift.moving and lift.progress > 0.1 and absf(pilot.position.y - lift.deck.position.y) < 0.13,
+		"Le plancher mobile transporte réellement le pilote")
+	app.pause()
+	var progress: float = lift.progress
+	await ticks(15)
+	check(lift.progress == progress, "La pause suspend le monte-charge")
+	app.hud()
+	stage.interact()
+	await ticks(18)
+	check(lift.stopped and lift.progress == progress, "L’arrêt d’urgence immobilise le monte-charge")
+	stage.interact()
+	await ticks(170)
+	check(lift.progress == 1.0 and not lift.moving and pilot.is_on_floor()
+		and absf(pilot.position.y - lift.deck.position.y) < 0.12, "Reprise et arrivée stable au quai supérieur")
+	pilot.net_move = Vector2(0, -1)
+	for frame in range(90):
+		await physics_frame
+		if pilot.position.z < 8.62:
+			break
+	pilot.net_move = Vector2.ZERO
+	await ticks(12)
+	check(pilot.position.z < 8.9 and absf(pilot.position.y - lift.deck.position.y) < 0.13
+		and pilot.is_on_floor(), "Le quai supérieur est accessible à pied depuis le plateau")
+	pilot.respawn(lift.deck.position + Vector3.UP * 0.06)
+	await ticks(10)
+	var blocker = stage.spawn_unit("sentinel", base - Vector3.UP * 0.10, true)
+	blocker.set_physics_process(false)
+	stage.interact()
+	await ticks(25)
+	check(lift.obstructed and lift.progress == 1.0 and blocker.alive, "La descente attend un autre personnage sous le plateau")
+	blocker.position += Vector3(4, 0, 0)
+	await ticks(173)
+	check(lift.progress == 0.0 and not lift.moving and not lift.obstructed and pilot.is_on_floor(),
+		"Le retour au sol reprend après dégagement sans chute")
+	var valid := true
+	for cycle in range(10):
+		stage.interact()
+		await ticks(172)
+		valid = valid and not lift.moving and lift.progress == float(1 - cycle % 2) and pilot.is_on_floor() \
+			and absf(pilot.position.y - lift.deck.position.y) < 0.13
+	check(valid, "Dix trajets aller-retour alternés gardent la collision et le pilote sur le plateau")
+	pilot.respawn(lift.UPPER_CALL + Vector3(-1.05, -0.96, 0.55))
+	await ticks(8)
+	stage.interact()
+	await ticks(172)
+	check(lift.progress == 1.0 and not lift.moving, "Le terminal du quai appelle le plateau depuis le sol")
+	pilot.respawn(lift.GROUND_CALL + Vector3(-0.5, -0.95, 0.75))
+	await ticks(8)
+	stage.interact()
+	await ticks(172)
+	check(lift.progress == 0.0 and not lift.moving, "Le terminal au sol rappelle le plateau depuis le quai")
 
 func ticks(count: int) -> void:
 	for frame in count:

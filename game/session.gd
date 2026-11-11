@@ -19,6 +19,7 @@ const Parkour := preload("res://game/modes/parkour.gd")
 const ParkourYard := preload("res://game/maps/parkour_yard.gd")
 const Courses := preload("res://game/modes/parkour_routes.gd")
 const Workshop := preload("res://game/world/workshop.gd")
+const CargoLift := preload("res://game/world/cargo_lift.gd")
 const Rules := preload("res://game/modes/rules.gd")
 const Generator := preload("res://game/waves/generator.gd")
 signal intermission_updated
@@ -74,6 +75,8 @@ var relay_state := 0
 var training_options := {"targets": "moving", "distance": 0, "time": 0}
 var training_ended := false
 var workshop: Workshop
+var cargo_lift: CargoLift
+var map_interactables: Array[Node3D] = []
 
 func _ready() -> void:
 	if run_seed < 0:
@@ -129,9 +132,14 @@ func _ready() -> void:
 	if mode == "training":
 		_reset_training()
 	if mode in ["training", "explore"] and map_id == "skyline" and not is_instance_valid(net):
+		arena.footprints.append(CargoLift.FOOTPRINT)
 		workshop = Workshop.new()
 		workshop.stage = self
 		add_child(workshop)
+		cargo_lift = CargoLift.new()
+		cargo_lift.stage = self
+		add_child(cargo_lift)
+		map_interactables.assign([workshop, cargo_lift])
 
 func _group(label: String) -> Node3D:
 	var holder := Node3D.new()
@@ -735,8 +743,10 @@ func _scan_pickups(authority := true) -> void:
 			pickup_hint = "Réarmer et réinitialiser les cibles"
 		elif director.phase == Director.Phase.PREP:
 			pickup_hint = "Lancer le match" if is_instance_valid(classic) else ("Lancer le chrono" if mode == "trial" else "Lancer la vague maintenant")
-	elif is_instance_valid(workshop) and workshop.can_reach(player):
-		pickup_hint = workshop.hint()
+	else:
+		var interactable := _map_interactable(player)
+		if is_instance_valid(interactable):
+			pickup_hint = interactable.hint()
 	if authority and is_instance_valid(net):
 		for pilot in living_pilots():
 			if pilot == player:
@@ -745,14 +755,21 @@ func _scan_pickups(authority := true) -> void:
 				if not item.is_queued_for_deletion() and item.position.distance_squared_to(pilot.position) < 0.86:
 					_collect(item, pilot)
 
+func _map_interactable(actor: CharacterBody3D) -> Node3D:
+	for item in map_interactables:
+		if is_instance_valid(item) and item.can_reach(actor):
+			return item
+	return null
+
 func interact(actor: CharacterBody3D = null) -> void:
 	if mode == "parkour":
 		director.retry_checkpoint()
 		return
 	if not is_instance_valid(actor):
 		actor = player
-	if is_instance_valid(workshop) and workshop.can_reach(actor):
-		workshop.activate(actor)
+	var interactable := _map_interactable(actor)
+	if is_instance_valid(interactable):
+		interactable.activate(actor)
 		return
 	if actor != player:
 		for item in pickups.get_children():
