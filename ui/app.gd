@@ -4,6 +4,8 @@ const SESSION_PATH := "res://scenes/Session.tscn"
 const SceneLoader := preload("res://services/threaded_scene.gd")
 const MapLoading := preload("res://ui/loading/map_loading.gd")
 const Tokens := preload("res://ui/design/tokens.gd")
+const SafeLayout := preload("res://ui/design/safe_layout.gd")
+const ScreenRouter := preload("res://ui/navigation/screen_router.gd")
 const Arena := preload("res://game/arena.gd")
 const Depot := preload("res://game/skyline.gd")
 const FRAME := Vector2(1280, 720)
@@ -53,6 +55,9 @@ const ICON := preload("res://assets/art/rift.svg")
 
 var layer: CanvasLayer
 var canvas: Control
+var screen_frame: Control
+var screen_surface: Control
+var router := ScreenRouter.new()
 var view: Control
 var matte: Livery
 var screen := "menu"
@@ -110,6 +115,12 @@ func _ready() -> void:
 	canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	canvas.theme = Palette.theme()
+	screen_frame = Control.new()
+	screen_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	canvas.add_child(screen_frame)
+	screen_surface = Control.new()
+	screen_surface.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	screen_frame.add_child(screen_surface)
 	get_window().size_changed.connect(_safe_canvas)
 	canvas.resized.connect(_fit_menu)
 	_safe_canvas.call_deferred()
@@ -146,7 +157,7 @@ func _new_screen(name: String, treatment := "page") -> void:
 		Input.emulate_mouse_from_touch = true
 	if name != "menu":
 		_drop_backdrop()
-	_drop_menu_view()
+	_drop_menu_view(false)
 	settings = null
 	lobby = null
 	shop_clock = null
@@ -158,23 +169,23 @@ func _new_screen(name: String, treatment := "page") -> void:
 	matte.mode = treatment
 	layer.add_child(matte)
 	layer.move_child(matte, 0)
-	canvas.add_child(view)
+	screen_surface.add_child(view)
 	view.size = FRAME
 	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fit_menu()
-	if Prefs.values.ui_motion and not Prefs.mobile():
-		view.modulate.a = 0.84
-		view.create_tween().tween_property(view, "modulate:a", 1.0, 0.15)
+	router.enter(screen_surface, name, treatment)
 
-func _drop_menu_view() -> void:
+func _drop_menu_view(settle := true) -> void:
 	if is_instance_valid(view):
-		canvas.remove_child(view)
+		screen_surface.remove_child(view)
 		view.queue_free()
 		view = null
 	if is_instance_valid(matte):
 		layer.remove_child(matte)
 		matte.queue_free()
 		matte = null
+	if settle:
+		router.reset(screen_surface, screen)
 
 func _footer(copy: String) -> void:
 	var line := Palette.rule(view, Rect2(57, 660, 1166, 1), Color(Palette.MUTED, 0.25))
@@ -188,29 +199,24 @@ func _safe_canvas() -> void:
 	canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	if OS.has_feature("android"):
 		var extent := get_window().get_visible_rect().size
-		var safe := DisplayServer.get_display_safe_area()
-		if safe.has_area():
-			var inverse := get_window().get_final_transform().affine_inverse()
-			var allowed := Rect2(Vector2.ZERO, extent).intersection(inverse * Rect2(safe))
-			if allowed.has_area():
-				_apply_safe_insets(allowed, extent)
+		_apply_safe_insets(SafeLayout.area(get_window(), extent), extent)
 	_fit_menu()
 
 func _apply_safe_insets(allowed: Rect2, extent: Vector2) -> void:
-	var x := minf(maxf(allowed.position.x, extent.x - allowed.end.x) + 4.0, extent.x * 0.24)
-	var y := minf(maxf(allowed.position.y, extent.y - allowed.end.y) + 4.0, extent.y * 0.24)
-	canvas.offset_left = x
-	canvas.offset_right = -x
-	canvas.offset_top = y
-	canvas.offset_bottom = -y
+	canvas.offset_left = allowed.position.x + 4.0
+	canvas.offset_right = allowed.end.x - extent.x - 4.0
+	canvas.offset_top = allowed.position.y + 4.0
+	canvas.offset_bottom = allowed.end.y - extent.y - 4.0
 
 func _fit_menu() -> void:
 	if not is_instance_valid(view):
 		return
 	var factor := minf(canvas.size.x / FRAME.x, canvas.size.y / FRAME.y)
-	view.scale = Vector2.ONE * factor
 	view.size = Vector2(canvas.size.x / maxf(factor, 0.001), FRAME.y) if screen in ["menu", "touch_editor"] else FRAME
-	view.position = (canvas.size - view.size * factor) * 0.5
+	screen_frame.size = view.size
+	screen_surface.size = view.size
+	screen_frame.scale = Vector2.ONE * factor
+	screen_frame.position = (canvas.size - view.size * factor) * 0.5
 
 func _right_block(width: float, height: float, y: float) -> Control:
 	var block := Control.new()
@@ -954,7 +960,7 @@ func confirm(title: String, copy: String, accept: Callable, cancel: Callable) ->
 	Palette.label(view, Rect2(343, 279, 595, 56), title, 38, Palette.TEXT, Palette.HEAD)
 	Palette.label(view, Rect2(346, 343, 565, 52), copy, 16, Palette.MUTED, Palette.BODY, HORIZONTAL_ALIGNMENT_LEFT, true)
 	var stay := Palette.button(view, Rect2(346, 431, 269, 48), "Annuler", cancel)
-	Palette.button(view, Rect2(632, 431, 301, 48), "Confirmer", accept, true)
+	Palette.button(view, Rect2(632, 431, 301, 48), "Confirmer", accept, false, HORIZONTAL_ALIGNMENT_LEFT, true)
 	stay.grab_focus()
 	_footer("ÉCHAP  /  ANNULER")
 
@@ -1158,6 +1164,12 @@ func _key(action: String) -> String:
 	return OS.get_keycode_string(Prefs.keys[action])
 
 func _prefs_changed(key: String) -> void:
+	if key in ["ui_motion", "all"] and not Prefs.values.ui_motion:
+		router.finish(screen_surface)
+		if is_instance_valid(view):
+			for button in view.find_children("*", "Button", true, false):
+				if button.has_method("finish_motion"):
+					button.finish_motion()
 	if key in ["quality", "all"]:
 		if is_instance_valid(session):
 			session.arena.apply_quality()

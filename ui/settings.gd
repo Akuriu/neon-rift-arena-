@@ -1,6 +1,11 @@
 extends Control
 
 const Palette := preload("res://ui/skin.gd")
+const Motion := preload("res://ui/design/motion.gd")
+const Tokens := preload("res://ui/design/tokens.gd")
+const MotionButton := preload("res://ui/design/components/motion_button.gd")
+const TAB_TOP := 180.0
+const TAB_STEP := 53.0
 const KeyLabels := {
 	"forward": "Avancer", "back": "Reculer", "left": "Aller à gauche", "right": "Aller à droite",
 	"jump": "Sauter", "sprint": "Sprinter", "crouch": "S’accroupir et glisser", "reload": "Recharger",
@@ -15,7 +20,10 @@ var active := 0
 var scroll: ScrollContainer
 var entries: VBoxContainer
 var tabs: Array[Button] = []
+var tab_marker: ColorRect
+var tab_motion: Tween
 var capture_action := ""
+var capture_overlay: ColorRect
 var capture_box: Panel
 var capture_hint: Label
 var button_by_action := {}
@@ -27,14 +35,12 @@ func _ready() -> void:
 	Palette.label(self, Rect2(54, 78, 600, 74), "Paramètres", 59, Palette.TEXT, Palette.HEAD)
 	Palette.panel(self, Rect2(55, 167, 248, 410), Palette.PANEL)
 	Palette.panel(self, Rect2(326, 167, 899, 410), Palette.PANEL)
-	var labels := ["Vidéo", "Audio", "Jeu et confort", "Clavier"]
-	labels.append("Tactile")
+	var labels := ["Vidéo", "Audio", "Jeu", "Clavier", "Tactile", "Accessibilité"]
 	for index in labels.size():
-		var tab := Palette.button(self, Rect2(67, 180 + index * 53, 222, 44),
+		var tab := Palette.button(self, Rect2(67, TAB_TOP + index * TAB_STEP, 222, 44),
 			labels[index], show_tab.bind(index))
 		tabs.append(tab)
-	Palette.label(self, Rect2(73, 452, 204, 89), "Les réglages s’appliquent pendant que vous jouez.", 15, Palette.MUTED,
-		Palette.BODY, HORIZONTAL_ALIGNMENT_LEFT, true)
+	tab_marker = Palette.rule(self, Rect2(67, TAB_TOP + 10.0, 2, 24), Tokens.ACCENT)
 	scroll = ScrollContainer.new()
 	scroll.follow_focus = true
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -43,14 +49,26 @@ func _ready() -> void:
 	Palette.button(self, Rect2(831, 600, 225, 43), "Réinitialiser", _reset)
 	Palette.button(self, Rect2(1069, 600, 155, 43), "Retour", _back, true)
 	Prefs.saved.connect(_saved)
+	Prefs.changed.connect(_preferences)
 	var initial := 4 if Prefs.mobile() else 0
 	show_tab(initial)
 	tabs[initial].grab_focus()
 
-func show_tab(index: int) -> void:
+func show_tab(index: int, refresh := false) -> void:
+	if index < 0 or index >= tabs.size() or not capture_action.is_empty():
+		return
+	var first := not is_instance_valid(entries)
+	if not first and index == active and not refresh:
+		return
 	active = index
 	for i in tabs.size():
-		tabs[i].add_theme_color_override("font_color", Palette.CYAN if i == active else Palette.TEXT)
+		tabs[i].theme_type_variation = &"SelectedTab" if i == active else &""
+	var destination := TAB_TOP + active * TAB_STEP + 10.0
+	tab_motion = Motion.retarget(tab_marker, tab_motion) if not first else null
+	if tab_motion != null:
+		tab_motion.tween_property(tab_marker, "position:y", destination, Tokens.TAB_SECONDS)
+	else:
+		tab_marker.position.y = destination
 	if is_instance_valid(entries):
 		scroll.remove_child(entries)
 		entries.queue_free()
@@ -86,13 +104,12 @@ func show_tab(index: int) -> void:
 			_toggle("Alarmes sonores", "audio_alerts")
 			_toggle("Confirmation des impacts", "audio_hits")
 			_toggle("Variation de musique en combat", "audio_dynamic")
-			var sample := Button.new()
+			var sample := MotionButton.new()
 			sample.text = "Écouter un tir"
-			sample.pressed.connect(Sounds.play.bind("pulse"))
+			sample.bind_action(Sounds.play.bind("pulse"), false)
 			entries.add_child(sample)
 		2:
 			_choice("Teinte du HUD", "hud_tone", ["Ivoire", "Ardoise", "Sable", "Olive"], [0, 1, 2, 3])
-			_toggle("Contraste renforcé du HUD", "high_contrast")
 			_slider("Sensibilité souris", "sensitivity", 0.035, 0.7, 0.005)
 			_slider("Sensibilité en visée", "ads_sensitivity", 0.25, 1.0, 0.05)
 			_toggle("Masque de lunette", "scope_overlay")
@@ -102,15 +119,9 @@ func show_tab(index: int) -> void:
 			_slider("Champ de vision vertical", "fov", 66, 108, 1)
 			_toggle("Inverser l’axe vertical", "invert_y")
 			_toggle("Oscillation légère en marche", "head_bob")
-			_toggle("Caméra stable", "steady_cam")
-			_slider("Mouvements de la caméra", "motion_strength", 0, 1, 0.05, true)
-			_slider("Réaction à l’atterrissage", "shake", 0, 1, 0.05, true)
 			_toggle("Champ de vision dynamique en sprint", "sprint_fov")
 			_toggle("Recul visuel de l’équipement", "recoil")
-			_slider("Intensité des flashes", "flashes", 0, 1, 0.05, true)
-			_slider("Densité des particules", "particles", 0, 1, 0.05, true)
 			_toggle("Chiffres de dégâts", "damage_numbers")
-			_toggle("Animations des menus", "ui_motion")
 		3:
 			_choice("Disposition du clavier", "layout", ["AZERTY · ZQSD", "QWERTY · WASD"], [0, 1])
 			_toggle("Sprint en bascule", "sprint_toggle")
@@ -121,10 +132,10 @@ func show_tab(index: int) -> void:
 				_binding(action)
 			_note("Clic gauche pour tirer, clic droit pour viser. En visant avec le DMR-762, la molette change le grossissement.")
 		4:
-			var edit := Button.new()
+			var edit := MotionButton.new()
 			edit.text = "Modifier la disposition des commandes"
 			edit.custom_minimum_size.y = 45
-			edit.pressed.connect(edit_touch)
+			edit.bind_action(edit_touch)
 			entries.add_child(edit)
 			_toggle("Aide légère à la visée", "touch_aim_assist")
 			_choice("Disposition", "touch_preset", ["Personnalisé", "Simple", "Complet", "Gaucher"], [0, 1, 2, 3])
@@ -145,6 +156,14 @@ func show_tab(index: int) -> void:
 			_toggle("Vibrations facultatives", "touch_haptic")
 			_note("Touchez Sprint pour l’activer, puis touchez-le à nouveau pour marcher. Le bouton prend la main sur le sprint automatique du joystick jusqu’à la fin de la partie.")
 			_note("Glissez sur la flèche vers le bas pour vous accroupir, ou sur le côté pour utiliser le gadget. L’aide à la visée ralentit légèrement le glissement près d’un adversaire visible.")
+		5:
+			_toggle("Réduire les animations des menus", "ui_motion", true)
+			_toggle("Contraste renforcé du HUD", "high_contrast")
+			_toggle("Caméra stable", "steady_cam")
+			_slider("Mouvements de la caméra", "motion_strength", 0, 1, 0.05, true)
+			_slider("Réaction à l’atterrissage", "shake", 0, 1, 0.05, true)
+			_slider("Intensité des flashes", "flashes", 0, 1, 0.05, true)
+			_slider("Densité des particules", "particles", 0, 1, 0.05, true)
 
 func _row(caption: String) -> HBoxContainer:
 	var line := HBoxContainer.new()
@@ -171,19 +190,19 @@ func _choice(caption: String, key: String, names: Array, values: Array) -> void:
 		if key == "layout":
 			_refresh_keys()
 		elif key == "touch_preset":
-			show_tab.call_deferred(active)
+			show_tab.call_deferred(active, true)
 	)
 	row.add_child(option)
 
-func _toggle(caption: String, key: String) -> void:
+func _toggle(caption: String, key: String, inverted := false) -> void:
 	var row := _row(caption)
 	var toggle := CheckButton.new()
-	toggle.text = "Activé" if Prefs.values[key] else "Désactivé"
-	toggle.button_pressed = Prefs.values[key]
+	toggle.button_pressed = bool(Prefs.values[key]) != inverted
+	toggle.text = "Activé" if toggle.button_pressed else "Désactivé"
 	toggle.custom_minimum_size.x = 158
 	toggle.toggled.connect(func(enabled: bool):
 		toggle.text = "Activé" if enabled else "Désactivé"
-		Prefs.change_value(key, enabled)
+		Prefs.change_value(key, enabled != inverted)
 	)
 	row.add_child(toggle)
 
@@ -223,10 +242,10 @@ func _note(text: String) -> void:
 
 func _binding(action: String) -> void:
 	var row := _row(KeyLabels[action])
-	var key := Button.new()
+	var key := MotionButton.new()
 	key.custom_minimum_size.x = 154
 	key.text = OS.get_keycode_string(Prefs.keys[action])
-	key.pressed.connect(_start_binding.bind(action))
+	key.bind_action(_start_binding.bind(action))
 	row.add_child(key)
 	button_by_action[action] = key
 
@@ -238,19 +257,31 @@ func _start_binding(action: String) -> void:
 	if capture_action != "":
 		return
 	capture_action = action
-	capture_box = Palette.panel(self, Rect2(339, 248, 602, 205), Color("#10232c"), Palette.AMBER)
+	capture_overlay = ColorRect.new()
+	capture_overlay.color = Color(Tokens.BACKGROUND, 0.72)
+	capture_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(capture_overlay)
+	capture_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	capture_box = Palette.panel(capture_overlay, Rect2(339, 248, 602, 205), Tokens.SURFACE, Palette.AMBER)
 	capture_box.mouse_filter = Control.MOUSE_FILTER_STOP
 	Palette.label(capture_box, Rect2(26, 15, 534, 65), "Affecter une touche", 35, Palette.TEXT, Palette.HEAD)
 	capture_hint = Palette.label(capture_box, Rect2(27, 81, 540, 59),
 		"Appuyez sur la nouvelle touche pour « %s »." % KeyLabels[action], 17, Palette.MUTED)
-	Palette.button(capture_box, Rect2(30, 148, 158, 42), "Annuler · Échap", _cancel_binding)
+	var cancel := Palette.button(capture_box, Rect2(30, 148, 184, 42), "Annuler · Échap", _cancel_binding)
+	cancel.focus_neighbor_left = NodePath(".")
+	cancel.focus_neighbor_right = NodePath(".")
+	cancel.focus_neighbor_top = NodePath(".")
+	cancel.focus_neighbor_bottom = NodePath(".")
+	cancel.grab_focus()
 
 func _cancel_binding() -> void:
 	if capture_action == "":
 		return
 	var former := capture_action
 	capture_action = ""
-	capture_box.queue_free()
+	remove_child(capture_overlay)
+	capture_overlay.queue_free()
+	capture_overlay = null
 	capture_box = null
 	if button_by_action.has(former):
 		button_by_action[former].grab_focus()
@@ -270,11 +301,17 @@ func _input(event: InputEvent) -> void:
 func _reset() -> void:
 	_cancel_binding()
 	Prefs.reset_settings()
-	show_tab(active)
+	show_tab(active, true)
 	status.text = "Réglages d’origine restaurés"
 
 func _saved(success: bool) -> void:
 	status.text = "Profil enregistré" if success else "Écriture du profil impossible"
+
+func _preferences(key: String) -> void:
+	if key in ["ui_motion", "all"] and not Prefs.values.ui_motion:
+		Motion.stop(tab_motion)
+		tab_motion = null
+		tab_marker.position.y = TAB_TOP + active * TAB_STEP + 10.0
 
 func _back() -> void:
 	_cancel_binding()

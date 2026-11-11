@@ -4,7 +4,7 @@
 | --- | --- | --- |
 | A · Audit et données | En place | Baseline Linux, reproduction du bug de profil et 11 contrôles de récupération. Les appareils cibles restent à mesurer. |
 | B · Démarrage et cartes | En place pour l’ouverture client et les demandes solo | `boot_flow.gd`, `map_loading.gd`, `polish_render.gd`. La simulation du serveur passe par une scène dédiée. La construction des cartes est synchrone sous le masque. La coop conserve son démarrage réseau existant. |
-| C · Motion et navigation | En cours | Vérifier interruption, réduction, focus et tailles. |
+| C · Motion et navigation | En place sur les composants partagés | Boutons réactifs, surface de navigation retargetable, focus et onglet Accessibilité. `ui_motion.gd` couvre quatre cadences simulées et le retour de focus. |
 | D · Écrans | À poursuivre | Accueil, Jouer, réglages, HUD, arsenal, lobby et résultats. |
 | E · 3D et cinématique | À poursuivre | Captures par carte et animations de présentation. |
 | F · Audio et VFX | Partiel | Démarrage audio à la demande. Travail de mixage et effets de jeu à poursuivre. |

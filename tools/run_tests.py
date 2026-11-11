@@ -151,6 +151,9 @@ def main():
             for fps in (30, 45, 60):
                 outcomes.append(scenario(engine, directory, f"v6_camera_{fps}", "--fixed-fps", str(fps),
                                          "--script", "res://tests/v6_camera.gd"))
+            for fps in (30, 45, 60, 90):
+                outcomes.append(scenario(engine, directory, f"ui_motion_{fps}", "--fixed-fps", str(fps),
+                                         "--script", "res://tests/ui_motion.gd"))
             for mode, arena in [("survival", "cryo"), ("short", "skyline"), ("trial", "reactor"), ("boss_rush", "reactor")]:
                 outcomes.append(scenario(engine, directory, mode, "--fixed-fps", "120",
                                          "--script", "res://tests/survival.gd", "--", mode, arena, "discovery"))
