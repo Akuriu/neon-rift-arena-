@@ -1,0 +1,125 @@
+name: Publish Rifle Arena v0.0.7 Alpha Preview
+
+on:
+  push:
+    branches: [release/v0.0.7-alpha-preview]
+    paths: [.github/workflows/publish-v0.0.7-alpha-preview.yml]
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: rifle-v0.0.7-alpha-preview
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_SHA: c8f5ac44b7f7d44826db89aaced987c45b202767
+      SOURCE_RUN: '42989201891'
+      ARTIFACT_ID: '13840768727'
+      ARCHIVE_SHA256: 5ee55fd55f195ef14407bc1b898c81946d9db91a2267a49eaa8b3b528aeaf583
+      PREVIEW_TAG: v0.0.7-alpha-preview
+      PREVIEW_TITLE: Rifle Arena v0.0.7 Alpha Preview
+    steps:
+      - name: Verify the exact candidate and recover the installers
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/rifle-preview"
+          mkdir -p "$work"
+          cd "$work"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" |
+            jq -e --arg sha "$SOURCE_SHA" '
+              .head_sha == $sha and .path == ".github/workflows/test.yml" and
+              .run_attempt == 1 and .status == "completed" and .conclusion == "success"'
+          artifact="repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID"
+          gh api "$artifact" |
+            jq -e --arg sha "$SOURCE_SHA" --arg digest "sha256:$ARCHIVE_SHA256" --argjson run "$SOURCE_RUN" '
+              .name == "rifle-alpha-installers" and .expired == false and .digest == $digest and
+              .workflow_run.id == $run and .workflow_run.head_sha == $sha'
+          gh api "$artifact/zip" > installers.zip
+          printf '%s  installers.zip\n' "$ARCHIVE_SHA256" | sha256sum --check -
+          unzip -p installers.zip RifleArena_Windows_x64.zip > RifleArena_v0.0.7_Windows_x64.zip
+          unzip -p installers.zip RifleArena_Android_alpha.apk > RifleArena_v0.0.7_Android_Preview.apk
+          cat > RifleArena_v0.0.7_SHA256SUMS.txt <<'SUMS'
+          00e7479e74f7f179b9aba639aac222b0f3d9f70d699ce3e83de33ac3ba59b8c6  RifleArena_v0.0.7_Windows_x64.zip
+          d20c41ddcb5f064868d6bfb153b684675befec437f7ab4556788188fecf0edce  RifleArena_v0.0.7_Android_Preview.apk
+          SUMS
+          sha256sum --check RifleArena_v0.0.7_SHA256SUMS.txt
+
+      - name: Publish and read back the alpha preview
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" == "release/$PREVIEW_TAG" ]]
+          cd "$RUNNER_TEMP/rifle-preview"
+          repo="repos/$GITHUB_REPOSITORY"
+          ref="refs/tags/$PREVIEW_TAG"
+          tag_sha=$(gh api "$repo/git/matching-refs/tags/$PREVIEW_TAG" |
+            jq -r --arg ref "$ref" '.[] | select(.ref == $ref) | .object.sha')
+          if [[ -z "$tag_sha" ]]; then
+            gh api --method POST "$repo/git/refs" -f ref="$ref" -f sha="$SOURCE_SHA" >/dev/null
+          fi
+          gh api "$repo/git/ref/tags/$PREVIEW_TAG" |
+            jq -e --arg sha "$SOURCE_SHA" '.object.type == "commit" and .object.sha == $sha'
+
+          release_id() {
+            gh api --paginate "$repo/releases?per_page=100" \
+              --jq ".[] | select(.tag_name == \"$PREVIEW_TAG\") | .id"
+          }
+          id=$(release_id)
+          if [[ -z "$id" ]]; then
+            cat > notes.md <<'NOTES'
+          ### Installation
+
+          - **Windows x64** — extraire le ZIP et lancer `RifleArena.exe`.
+          - **Android** — installer l’APK **Rifle Arena Preview**. Elle s’installe en parallèle sous `com.riflearena.preview.r42989201891.a1`, avec son propre profil.
+
+          ### Dans cette Alpha Preview
+
+          - Gun Game avec mélange par graine et classement complet.
+          - Trois parcours Parkour avec médailles et fantôme du meilleur temps.
+          - Monte-charge au Dépôt de fret et animations de mouvement retravaillées.
+
+          ### Vérifications
+
+          Les installateurs proviennent du commit `c8f5ac44b7f7d44826db89aaced987c45b202767`. La CI a validé le lancement Windows et l’installation sur Android API 35 et 36. Les essais physiques et la mise à jour Android signée restent à valider.
+
+          [Build vérifié](https://github.com/Akuriu/neon-rift-arena-/actions/runs/42989201891) · [Notes de version](https://github.com/Akuriu/neon-rift-arena-/blob/c8f5ac44b7f7d44826db89aaced987c45b202767/CHANGELOG.md#v007-alpha)
+
+          <!-- rifle-preview-run:42989201891 -->
+          NOTES
+            gh release create "$PREVIEW_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+              --title "$PREVIEW_TITLE" --notes-file notes.md --draft --prerelease --latest=false
+            id=$(release_id)
+          fi
+          [[ "$id" =~ ^[0-9]+$ ]]
+          gh api "$repo/releases/$id" > release.json
+          jq -e --arg tag "$PREVIEW_TAG" --arg title "$PREVIEW_TITLE" '
+            .tag_name == $tag and .name == $title and .prerelease and
+            (.body | contains("<!-- rifle-preview-run:42989201891 -->"))' release.json
+
+          files=(RifleArena_v0.0.7_Windows_x64.zip RifleArena_v0.0.7_Android_Preview.apk RifleArena_v0.0.7_SHA256SUMS.txt)
+          if jq -e '.draft' release.json >/dev/null; then
+            for file in "${files[@]}"; do
+              if ! jq -e --arg file "$file" 'any(.assets[]; .name == $file)' release.json >/dev/null; then
+                gh release upload "$PREVIEW_TAG" "$file" --repo "$GITHUB_REPOSITORY"
+              fi
+            done
+          fi
+          gh api "$repo/releases/$id" > release.json
+          jq -e '.assets | length == 3' release.json
+          for file in "${files[@]}"; do
+            digest=$(sha256sum "$file" | cut -d ' ' -f 1)
+            bytes=$(stat -c %s "$file")
+            jq -e --arg file "$file" --arg digest "sha256:$digest" --argjson bytes "$bytes" '
+              any(.assets[]; .name == $file and .state == "uploaded" and .size == $bytes and .digest == $digest)' release.json
+          done
+          if jq -e '.draft' release.json >/dev/null; then
+            gh release edit "$PREVIEW_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false
+          fi
+          gh api "$repo/releases/$id" |
+            jq -e --arg tag "$PREVIEW_TAG" 'select(.tag_name == $tag and .prerelease and (.draft | not)) | .html_url'
