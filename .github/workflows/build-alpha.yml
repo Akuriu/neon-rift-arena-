@@ -287,3 +287,31 @@ jobs:
               throw "Windows launch failed for $profile"
             }
           }
+      - name: Test desktop mouse input on Windows
+        shell: pwsh
+        run: |
+          $engineName = "Godot_v${env:GODOT_VERSION}_win64"
+          $engineDir = Join-Path $env:RUNNER_TEMP 'rifle-windows-engine'
+          $archive = Join-Path $env:RUNNER_TEMP 'rifle-windows-engine.zip'
+          $download = "https://github.com/godotengine/godot-builds/releases/download/$env:GODOT_VERSION/$engineName.exe.zip"
+          curl.exe -fLsS --retry 3 $download -o $archive
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download the Windows Godot runner' }
+          Expand-Archive $archive -DestinationPath $engineDir
+          $godot = Join-Path $engineDir "${engineName}_console.exe"
+          $env:NEON_QA_ISOLATED = '1'
+          $env:NEON_QA_PROFILE_PATH = Join-Path $env:RUNNER_TEMP 'rifle-windows-mouse-profile'
+          New-Item -ItemType Directory -Force -Path $env:NEON_QA_PROFILE_PATH | Out-Null
+          Copy-Item tests/fixtures/profile-v0.0.5.json (Join-Path $env:NEON_QA_PROFILE_PATH pilot_profile.json)
+          $importLog = Join-Path $env:RUNNER_TEMP 'rifle-windows-import.log'
+          & $godot --headless --editor --import --log-file $importLog
+          if ($LASTEXITCODE -ne 0 -or (Select-String -Path $importLog -Pattern 'ERROR:|Parse Error' -Quiet)) {
+            throw 'Godot import failed on Windows'
+          }
+          $log = Join-Path $env:RUNNER_TEMP 'rifle-windows-mouse.log'
+          & $godot --headless --fixed-fps 60 --script res://tests/export_smoke.gd --log-file $log
+          if ($LASTEXITCODE -ne 0 -or (Select-String -Path $log -Pattern '^FAIL |ERROR:|Parse Error' -Quiet)) {
+            throw 'Desktop input regression on Windows'
+          }
+          if (-not (Select-String -Path $log -SimpleMatch 'PASS Le clic gauche' -Quiet)) {
+            throw 'Missing left-click test result'
+          }

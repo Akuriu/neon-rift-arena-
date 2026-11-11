@@ -1,6 +1,6 @@
 # Rifle Arena
 
-**v0.0.7 Alpha en développement.** Gun Game et Parkour sont jouables sur la branche `feature/v0.0.7` ; les builds Preview se trouvent dans la [PR #2](https://github.com/Akuriu/neon-rift-arena-/pull/2). La publication officielle reste bloquée par les validations matérielles et la signature Android d’origine. [Téléchargements publiés pour Windows et Android](https://github.com/Akuriu/neon-rift-arena-/releases)
+**v0.0.7a Alpha en développement.** Le correctif rétablit le tir et la visée à la souris sur PC. Gun Game et Parkour sont jouables sur la branche `feature/v0.0.7` ; les builds Preview se trouvent dans la [PR #2](https://github.com/Akuriu/neon-rift-arena-/pull/2). La publication officielle reste bloquée par les validations matérielles et la signature Android d’origine. [Téléchargements publiés pour Windows et Android](https://github.com/Akuriu/neon-rift-arena-/releases)
 
 FPS d’arène en solo contre des bots, avec un stand d’entraînement et un mode survie en coop. Les sept cartes reprennent des lieux comme un dépôt de fret, une chaufferie, une gare et un quartier en brique. L’arsenal comprend huit armes, dont la carabine AR-24, le pistolet P9 Rafale et le fusil à pompe M7.
 

@@ -183,9 +183,9 @@ func apply_keys() -> void:
 		InputMap.action_erase_events(action)
 		if mobile():
 			continue
-			var click := InputEventMouseButton.new()
-			click.button_index = MOUSE_BUTTON_LEFT if action == "fire" else MOUSE_BUTTON_RIGHT
-			InputMap.action_add_event(action, click)
+		var click := InputEventMouseButton.new()
+		click.button_index = MOUSE_BUTTON_LEFT if action == "fire" else MOUSE_BUTTON_RIGHT
+		InputMap.action_add_event(action, click)
 
 func apply_video() -> void:
 	Engine.max_fps = values.fps_limit

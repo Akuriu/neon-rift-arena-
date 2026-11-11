@@ -19,16 +19,20 @@ def setting(text, name):
 
 def versions():
     version = setting((ROOT / "project.godot").read_text(encoding="utf-8"), "config/version")
-    match = re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-alpha", version)
+    match = re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)([a-z]?)-alpha", version)
     if not match:
         raise ValueError(f"Version Alpha invalide : {version}")
-    major, minor, patch = map(int, match.groups())
-    label = f"v{major}.{minor}.{patch} Alpha"
-    tag = f"v{version}"
+    major, minor, patch = map(int, match.groups()[:3])
+    suffix = match[4]
+    revision = ord(suffix) - ord("a") + 1 if suffix else 0
+    base_version = f"{major}.{minor}.{patch}"
+    label = f"v{base_version}{suffix} Alpha"
+    # The signed alpha tag and Android code use the numeric version.
+    tag = f"v{base_version}-alpha"
     presets = (ROOT / "export_presets.cfg").read_text(encoding="utf-8")
     expected = {
-        "application/file_version": f"{major}.{minor}.{patch}.0",
-        "application/product_version": f"{major}.{minor}.{patch}.0",
+        "application/file_version": f"{base_version}.{revision}",
+        "application/product_version": f"{base_version}.{revision}",
         "version/name": version,
         "version/code": str(major * 1000000 + minor * 1000 + patch),
         "package/unique_name": ANDROID_PACKAGE,

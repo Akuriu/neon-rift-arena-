@@ -23,13 +23,18 @@ func run() -> void:
 	var stage = app.session
 	check(stage.map_id == "cryo" and stage.units.size() == 4, "Cryo Foundry et cibles chargées")
 	check(stage.player.arsenal.spec().id == "wp_eclipse", "DMR-762 équipé")
-	Input.action_press("ads")
-	Input.action_press("fire")
+	var rounds_before: int = stage.player.arsenal.rounds()
+	mouse_button(MOUSE_BUTTON_RIGHT, true)
+	mouse_button(MOUSE_BUTTON_LEFT, true)
 	for frame in 60:
 		await physics_frame
-	check(stage.shots > 0 and stage.player.arsenal.scope > 0.95, "Le paquet tire et ouvre sa lunette")
-	Input.action_release("ads")
-	Input.action_release("fire")
+	check(stage.shots > 0 and stage.player.arsenal.rounds() < rounds_before,
+		"Le clic gauche déclenche un tir et consomme une munition")
+	check(stage.player.arsenal.scope > 0.95, "Le clic droit ouvre la lunette")
+	mouse_button(MOUSE_BUTTON_LEFT, false)
+	mouse_button(MOUSE_BUTTON_RIGHT, false)
+	check(not Input.is_action_pressed("fire") and not Input.is_action_pressed("ads"),
+		"Relâcher les boutons libère le tir et la visée")
 	check(root.get_node("Sounds").bank.size() == 45, "45 échantillons audio chargés depuis le paquet")
 	app.begin("domination", "discovery", "station", 882, "", false, {"bots": 4})
 	for frame in 185:
@@ -43,6 +48,14 @@ func run() -> void:
 		app.queue_free()
 		await process_frame
 		quit(failures)
+
+func mouse_button(button: MouseButton, pressed: bool) -> void:
+	var event := InputEventMouseButton.new()
+	event.button_index = button
+	event.pressed = pressed
+	event.position = root.get_visible_rect().get_center()
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
 
 func check(value: bool, caption: String) -> void:
 	print("PASS " if value else "FAIL ", caption)
