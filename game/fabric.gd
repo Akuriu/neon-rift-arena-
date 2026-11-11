@@ -94,8 +94,11 @@ static func place(parent: Node3D, mesh: Mesh, material: Material, at: Vector3,
 class Batch:
 	var groups := {}
 	var world_materials := false
+	var enabled := true
 
 	func put(mesh: Mesh, material: Material, at: Vector3, rotation := Vector3.ZERO, sector := true) -> void:
+		if not enabled:
+			return
 		var cell := Vector2i(floori(at.x / 13.0), floori(at.z / 13.0)) if sector else Vector2i.ZERO
 		var key := [cell, material]
 		if not groups.has(key):

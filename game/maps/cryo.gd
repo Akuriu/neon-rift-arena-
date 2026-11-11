@@ -29,14 +29,7 @@ func _build_layout() -> void:
 	_terminal()
 
 func _floor() -> void:
-	var surface := PlaneMesh.new()
-	surface.size = half_size * 2.0
-	var frost := ShaderMaterial.new()
-	frost.shader = preload("res://assets/art/deck.gdshader")
-	deck_surface = frost
-	frost.set_shader_parameter("base_color", Color("#526b74"))
-	frost.set_shader_parameter("groove_color", Color("#273c47"))
-	Fabric.place(structure, surface, frost, Vector3.ZERO, Vector3.ZERO, false)
+	_paint_deck()
 	_block(Vector3(0, -0.45, 0), Vector3(56, 0.9, 52), Vector3.ZERO, false)
 	for side in [-1.0, 1.0]:
 		for row in 13:

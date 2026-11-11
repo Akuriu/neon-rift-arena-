@@ -25,7 +25,7 @@ func measure() -> void:
 	seed(7114)
 	var app = load("res://scenes/App.tscn").instantiate()
 	root.add_child(app)
-	app.begin("survival", "expert")
+	app.begin("survival", "expert", "reactor", 7114)
 	var stage = app.session
 	var pilot = stage.player
 	pilot.damage_lock = 60.0

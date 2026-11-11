@@ -93,8 +93,10 @@ func _ready() -> void:
 			"cryo": arena = Cryo.new()
 			"bastion", "district", "grove", "station": arena = Frontiers.new(map_id)
 			_: arena = Arena.new()
+	arena.simulation_only = is_instance_valid(net) and net.dedicated
 	add_child(arena)
 	effects = Effects.new()
+	effects.enabled = not arena.simulation_only
 	add_child(effects)
 	projectiles = _group("Projectiles")
 	projectile_bin = _group("ProjectilePool")

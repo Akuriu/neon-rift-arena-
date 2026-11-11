@@ -11,8 +11,12 @@ var cube: BoxMesh
 var ring: TorusMesh
 var dust_mesh: SphereMesh
 var limit := 64
+var enabled := true
 
 func _ready() -> void:
+	set_process(false)
+	if not enabled:
+		return
 	cube = BoxMesh.new()
 	cube.size = Vector3.ONE
 	ring = TorusMesh.new()
@@ -27,7 +31,6 @@ func _ready() -> void:
 	dust_mesh.rings = 3
 	_apply_limit()
 	Prefs.changed.connect(_preferences)
-	set_process(false)
 
 func _apply_limit() -> void:
 	limit = LIMITS[Prefs.values.quality]
@@ -54,6 +57,8 @@ func _preferences(key: String) -> void:
 		_apply_limit()
 
 func beam(origin: Vector3, end: Vector3, tint: Color, width := 0.045, lifetime := 0.08) -> void:
+	if not enabled:
+		return
 	var length := origin.distance_to(end)
 	if length < 0.03:
 		return
@@ -66,6 +71,8 @@ func beam(origin: Vector3, end: Vector3, tint: Color, width := 0.045, lifetime :
 	node.scale = slot.size
 
 func sparks(at: Vector3, tint: Color, count: int, power := 3.0, normal := Vector3.UP) -> void:
+	if not enabled:
+		return
 	var density: float = [0.46, 0.74, 1.0, 0.24][Prefs.values.quality] * Prefs.values.particles
 	for _particle in roundi(count * density):
 		var slot := _acquire(tint, randf_range(0.13, 0.38))
@@ -79,6 +86,8 @@ func sparks(at: Vector3, tint: Color, count: int, power := 3.0, normal := Vector
 		node.scale = slot.size
 
 func impact(at: Vector3, normal: Vector3, tint: Color, terrain: String, armor: bool) -> void:
+	if not enabled:
+		return
 	var shade := tint if armor else Color("#e7c2a0")
 	var dust := not armor and terrain in ["grove", "bastion", "district"] and normal.y > 0.6
 	if dust:
@@ -97,6 +106,8 @@ func impact(at: Vector3, normal: Vector3, tint: Color, terrain: String, armor: b
 			slot.size = Vector3(0.18, 0.13, 0.18) * randf_range(0.7, 1.15)
 
 func wave(at: Vector3, tint: Color, radius: float) -> void:
+	if not enabled:
+		return
 	var slot := _acquire(tint, 0.23)
 	var node: MeshInstance3D = slot.node
 	node.mesh = ring

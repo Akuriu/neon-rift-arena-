@@ -89,6 +89,14 @@ func run() -> void:
 	await capture("18-accessibilite-20-9")
 	check(root.size == Vector2i(1600, 720) and app.canvas.get_global_rect().position.x > 57.0,
 		"Fenêtre 20:9 et encoche asymétrique simulée")
+	for extent_target in [Vector2i(960, 540), Vector2i(1600, 900), Vector2i(1920, 1080)]:
+		root.size = extent_target
+		await process_frame
+		app._safe_canvas()
+		await RenderingServer.frame_post_draw
+		var frame := root.get_texture().get_image()
+		check(frame.get_size() == extent_target, "Surface réellement rendue en " + str(extent_target))
+		save(frame, "19-options-%dx%d" % [extent_target.x, extent_target.y])
 	root.get_node("Sounds").stop_all()
 	app.queue_free()
 	await process_frame

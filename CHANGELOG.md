@@ -4,6 +4,8 @@
 
 - La v0.0.7b Preview ajoute un démarrage animé avec chargement réel, une transition de carte solo et des commandes de menu réactives.
 - L’accueil, Jouer, la pause et l’armurerie utilisent des composants partagés. Le réglage de mouvement réduit se trouve sous Accessibilité.
+- Éclairage et matériaux revus sur les sept arènes, aperçus des trois parcours rendus dans Godot et poses de déplacement plus souples.
+- Sons de menu réglables, fondu entre ambiances de carte et effets d’impact bornés par préréglage.
 - Un profil illisible est conservé avant sa réécriture. Une copie de secours lisible restaure la progression.
 - La v0.0.7a rétablit le tir au clic gauche et la visée au clic droit sur PC.
 - Gun Game local : huit équipements en prêt, progression des bots, victoire au dernier palier, bilan et classement séparé.
