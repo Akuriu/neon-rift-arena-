@@ -284,4 +284,4 @@ static func _limb(parent: Node3D, upper: float, lower: float) -> Limb:
 
 static func _box(w: Fabric.Batch, at: Vector3, size: Vector3, color: Color, cut: float,
 		rotation := Vector3.ZERO) -> void:
-	w.put(Fabric.bevel(size, cut), Materials.finish(color, "canvas", 7.5), at, rotation, false)
+	w.put(Fabric.bevel(size, cut, color), Materials.vertex_finish("canvas", 7.5), at, rotation, false)

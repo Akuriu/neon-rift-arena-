@@ -44,7 +44,7 @@ static func ring(radius: float, width: float, segments := 32) -> TorusMesh:
 	mesh.ring_segments = 8
 	return mesh
 
-static func bevel(size: Vector3, cut: float) -> ArrayMesh:
+static func bevel(size: Vector3, cut: float, tint := Color.TRANSPARENT) -> ArrayMesh:
 	var x := size.x * 0.5
 	var z := size.z * 0.5
 	var y := size.y * 0.5
@@ -54,6 +54,8 @@ static func bevel(size: Vector3, cut: float) -> ArrayMesh:
 		Vector2(-x, z - c), Vector2(-x, -z + c)])
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	if tint.a > 0.0:
+		st.set_color(tint)
 	for i in rim.size():
 		var a := rim[i]
 		var b := rim[(i + 1) % rim.size()]
@@ -68,6 +70,16 @@ static func bevel(size: Vector3, cut: float) -> ArrayMesh:
 		_tri(st, Vector3.DOWN * y, r, s, Vector3.DOWN)
 	st.index()
 	return st.commit()
+
+static func tint_surface(source: Mesh, tint: Color) -> ArrayMesh:
+	var arrays := source.surface_get_arrays(0)
+	var colors := PackedColorArray()
+	colors.resize(arrays[Mesh.ARRAY_VERTEX].size())
+	colors.fill(tint)
+	arrays[Mesh.ARRAY_COLOR] = colors
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
 
 static func _tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, outward: Vector3) -> void:
 	if (b - a).cross(c - a).dot(outward) > 0.0:
