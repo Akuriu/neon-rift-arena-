@@ -5,6 +5,8 @@ var equipment := 0
 var skin := ""
 var model: Node3D
 var camera: Camera3D
+var viewport: SubViewport
+var models := {}
 var heading := 1.14
 var elevation := 0.0
 var zoom := 1.0
@@ -23,28 +25,49 @@ func _ready() -> void:
 	surface.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(surface)
 	surface.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var viewport := SubViewport.new()
+	viewport = SubViewport.new()
 	viewport.own_world_3d = true
 	viewport.transparent_bg = true
 	viewport.gui_disable_input = true
-	viewport.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
+	viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	surface.add_child(viewport)
-	model = Node3D.new()
-	viewport.add_child(model)
-	Models.build(model, equipment, skin)
 	camera = Camera3D.new()
 	camera.fov = 39
-	var distance: float = [1.0, 1.12, 0.49, 0.87, 1.15, 1.21, 0.86, 1.05][equipment]
-	base_camera = Vector3(0.74, 0.28, 1.03) * distance
-	focus_at = Vector3(0, -0.022, -0.075 if equipment != 2 else -0.032)
 	viewport.add_child(camera)
 	for fill in [false, true]:
 		var light := DirectionalLight3D.new()
 		light.rotation_degrees = Vector3(-20, 150, 0) if fill else Vector3(-44, 27, 0)
-		light.light_energy = 0.8 if fill else 1.5
-		light.light_color = Color("#cac4ab") if fill else Color.WHITE
+		light.light_energy = 0.72 if fill else 1.63
+		light.light_color = Color("#acc0c2") if fill else Color("#fff0d7")
 		viewport.add_child(light)
-	_present()
+	resized.connect(_present)
+	show_equipment(equipment, skin)
+
+func show_equipment(index: int, finish: String) -> void:
+	if index < 0 or index >= 8:
+		return
+	if is_instance_valid(model) and index == equipment and finish == skin:
+		return
+	if finish != skin:
+		for cached in models.values():
+			viewport.remove_child(cached)
+			cached.queue_free()
+		models.clear()
+	elif is_instance_valid(model):
+		model.hide()
+	equipment = index
+	skin = finish
+	if not models.has(index):
+		var item := Node3D.new()
+		viewport.add_child(item)
+		Models.build(item, index, skin)
+		models[index] = item
+	model = models[index]
+	model.show()
+	var distance: float = [1.0, 1.12, 0.49, 0.87, 1.15, 1.21, 0.86, 1.05][equipment]
+	base_camera = Vector3(0.74, 0.28, 1.03) * distance
+	focus_at = Vector3(0, -0.022, -0.075 if equipment != 2 else -0.032)
+	reset_view()
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
@@ -96,9 +119,12 @@ func _orbit(offset: Vector2) -> void:
 	_present()
 
 func _present() -> void:
+	if not is_visible_in_tree() or not is_instance_valid(model):
+		return
 	model.rotation = Vector3(elevation, heading, 0)
 	camera.position = base_camera / zoom
 	camera.look_at(focus_at)
+	viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 func reset_view() -> void:
 	heading = 1.14
@@ -116,3 +142,6 @@ func _notification(what: int) -> void:
 	if what in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_VISIBILITY_CHANGED]:
 		dragging = false
 		fingers.clear()
+	if what == NOTIFICATION_VISIBILITY_CHANGED and is_instance_valid(viewport):
+		set_process(is_visible_in_tree())
+		_present()

@@ -2,6 +2,9 @@
 
 ## v0.0.7-alpha
 
+- La v0.0.7b Preview ajoute un démarrage animé avec chargement réel, une transition de carte solo et des commandes de menu réactives.
+- L’accueil, Jouer, la pause et l’armurerie utilisent des composants partagés. Le réglage de mouvement réduit se trouve sous Accessibilité.
+- Un profil illisible est conservé avant sa réécriture. Une copie de secours lisible restaure la progression.
 - La v0.0.7a rétablit le tir au clic gauche et la visée au clic droit sur PC.
 - Gun Game local : huit équipements en prêt, progression des bots, victoire au dernier palier, bilan et classement séparé.
 - Gun Game propose un ordre mélangé reproductible et un bilan avec tous les participants et les rangs ex æquo.
