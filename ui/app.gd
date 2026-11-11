@@ -311,6 +311,7 @@ func open_lobby() -> void:
 	_footer("2 à 4 joueurs")
 
 func leave_coop() -> void:
+	_clear_loading()
 	coop.stop()
 	_drop_session()
 	open_lobby()
@@ -320,7 +321,10 @@ func _close_lobby() -> void:
 	play_menu()
 
 func launch_coop() -> void:
-	begin(coop.room.mode, coop.room.difficulty, coop.room.map, coop.room.seed, "", true)
+	if not staged_loading:
+		begin(coop.room.mode, coop.room.difficulty, coop.room.map, coop.room.seed, "", true)
+		return
+	_show_match_loading(coop.room.mode, coop.room.difficulty, coop.room.map, coop.room.seed, "", {}, true)
 
 func _coop_changed() -> void:
 	if is_instance_valid(lobby):
@@ -334,6 +338,7 @@ func _coop_notice(message: String) -> void:
 		_upgrade()
 
 func _coop_ended(_message: String) -> void:
+	_clear_loading()
 	_drop_session()
 	if screen != "lobby":
 		open_lobby()
@@ -477,14 +482,18 @@ func _start_selected() -> void:
 func request_match(mode: String, difficulty: String, map_id := "reactor", run_seed := -1, test_weapon := "", rules: Dictionary = {}) -> void:
 	if exiting or (is_instance_valid(map_loading) and screen == "loading"):
 		return
-	_clear_loading()
 	if not staged_loading:
 		begin(mode, difficulty, map_id, run_seed, test_weapon, false, rules)
 		return
+	_show_match_loading(mode, difficulty, map_id, run_seed, test_weapon, rules, false)
+
+func _show_match_loading(mode: String, difficulty: String, map_id: String, run_seed: int,
+		test_weapon: String, rules: Dictionary, online: bool) -> void:
+	_clear_loading()
 	loading_origin = screen
 	loading_focus = get_viewport().gui_get_focus_owner()
 	match_request = {"mode": mode, "difficulty": difficulty, "map": map_id, "seed": run_seed,
-		"weapon": test_weapon, "rules": rules.duplicate(true)}
+		"weapon": test_weapon, "rules": rules.duplicate(true), "online": online}
 	if is_instance_valid(session):
 		_freeze()
 	else:
@@ -498,7 +507,7 @@ func request_match(mode: String, difficulty: String, map_id := "reactor", run_se
 	map_layer.layer = 12
 	add_child(map_layer)
 	map_loading = MapLoading.new()
-	map_loading.mode = _mode_name(mode)
+	map_loading.mode = "Coop · " + _mode_name(mode) if online else _mode_name(mode)
 	if mode == "parkour":
 		var route := Courses.normalize(rules.get("route"))
 		map_loading.title = Courses.ROUTES[route].name
@@ -507,8 +516,10 @@ func request_match(mode: String, difficulty: String, map_id := "reactor", run_se
 	else:
 		map_loading.title = Catalog.MAPS.get(map_id, Catalog.MAPS.reactor).name
 		map_loading.image = load("res://assets/maps/%s.jpg" % (map_id if Catalog.MAPS.has(map_id) else "reactor"))
-		map_loading.tip = _loading_tip(mode)
+		map_loading.tip = "Le chef de salon et les pilotes partagent la même arène." if online else _loading_tip(mode)
 	map_layer.add_child(map_loading)
+	if online:
+		map_loading.cancel_button.text = "Quitter la coop"
 	map_loading.cancelled.connect(_cancel_loading)
 	map_loading.retry.connect(_resolve_match)
 	_resolve_match()
@@ -545,14 +556,23 @@ func _resolve_match() -> void:
 	if not is_instance_valid(overlay) or overlay != map_loading:
 		return
 	var request := match_request
+	if request.online and (not coop.active() or (coop.hosting and coop.roster.size() < 2)):
+		_leave_coop_loading("Le chargement a été interrompu. Le salon n’a plus assez de pilotes.")
+		return
 	_launch_session(map_loader.scene, request.mode, request.difficulty, request.map, request.seed,
-		request.weapon, false, request.rules, false)
+		request.weapon, request.online, request.rules, false)
 	await _visible_frame()
 	if not is_instance_valid(overlay) or overlay != map_loading:
 		return
 	overlay.show_status("Prêt", 1.0, false)
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hud()
+	if screen == "loading":
+		if session.director.phase == Director.Phase.UPGRADE:
+			_upgrade()
+		elif session.director.phase == Director.Phase.MILESTONE:
+			_milestone()
+		else:
+			hud()
 	if Prefs.values.ui_motion and DisplayServer.get_name() != "headless":
 		var reveal := overlay.create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 		reveal.tween_property(overlay, "modulate:a", 0.0, Tokens.REVEAL_SECONDS)
@@ -562,6 +582,9 @@ func _resolve_match() -> void:
 
 func _cancel_loading() -> void:
 	if not is_instance_valid(map_loading) or not map_loading.cancel_button.visible:
+		return
+	if match_request.online:
+		_leave_coop_loading("Vous avez quitté la partie pendant le chargement.")
 		return
 	var origin := loading_origin
 	var focus := loading_focus
@@ -573,6 +596,10 @@ func _cancel_loading() -> void:
 		focus.grab_focus()
 	if screen == "hud":
 		hud()
+
+func _leave_coop_loading(message: String) -> void:
+	coop.status = message
+	leave_coop()
 
 func _clear_loading() -> void:
 	if is_instance_valid(map_layer):
@@ -634,6 +661,8 @@ func _launch_session(packed: PackedScene, mode: String, difficulty: String, map_
 		hud()
 	else:
 		_freeze()
+	if online:
+		coop.complete_launch()
 
 func _drop_session() -> void:
 	if is_instance_valid(touch_panel):
@@ -697,7 +726,7 @@ func _free_cursor() -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _session_changed() -> void:
-	if coop.dedicated:
+	if coop.dedicated or screen == "loading":
 		return
 	if session.director.phase == Director.Phase.UPGRADE and (screen == "hud" or (coop.in_match() and screen != "upgrade")):
 		field_notice = ""
@@ -802,6 +831,8 @@ func _leave_intermission() -> void:
 func _milestone() -> void:
 	if coop.dedicated:
 		session.director.continue_endless.call_deferred()
+		return
+	if screen == "loading":
 		return
 	_freeze()
 	_new_screen("milestone", "overlay")
