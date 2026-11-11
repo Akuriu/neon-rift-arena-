@@ -1,6 +1,6 @@
 extends Control
 
-const DEPOT := preload("res://assets/maps/skyline.jpg")
+const DEPOT := preload("res://assets/maps/skyline-hero.jpg")
 
 static var gradients := {}
 

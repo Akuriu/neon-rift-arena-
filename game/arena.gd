@@ -28,6 +28,7 @@ var batches := Fabric.Batch.new()
 var structure: Node3D
 var collision: StaticBody3D
 var sun: DirectionalLight3D
+var utility_light: OmniLight3D
 var atmosphere: Environment
 var dome: ShaderMaterial
 var air: CPUParticles3D
@@ -80,6 +81,7 @@ func apply_quality() -> void:
 		deck_surface.set_shader_parameter("low_detail", Prefs.values.quality in [0, 3])
 	dome.set_shader_parameter("low_detail", Prefs.values.quality in [0, 3])
 	atmosphere.fog_enabled = Prefs.values.fog and Prefs.values.quality in [1, 2]
+	_update_utility_light(Art.world(map_id).utility)
 	_apply_weather()
 
 func _light() -> void:
@@ -104,14 +106,14 @@ func apply_art() -> void:
 	var colors: Dictionary = Art.world(map_id)
 	atmosphere.background_color = colors.horizon
 	atmosphere.ambient_light_color = colors.ambient
-	atmosphere.ambient_light_energy = 0.64 if map_id != "station" else 0.83
+	atmosphere.ambient_light_energy = colors.fill
 	atmosphere.fog_enabled = Prefs.values.fog and Prefs.values.quality in [1, 2]
 	atmosphere.fog_density = colors.mist
 	atmosphere.fog_light_color = colors.horizon
 	dome.set_shader_parameter("zenith", colors.sky)
 	dome.set_shader_parameter("haze", colors.horizon)
 	dome.set_shader_parameter("sun_tint", colors.sun)
-	dome.set_shader_parameter("cloud_amount", 0.22)
+	dome.set_shader_parameter("cloud_amount", colors.clouds)
 	sun.rotation_degrees = colors.angle
 	sun.light_color = colors.sun
 	sun.light_energy = colors.power * (0.82 if emergency else 1.0)
@@ -121,14 +123,34 @@ func apply_art() -> void:
 	if is_instance_valid(deck_surface):
 		deck_surface.set_shader_parameter("base_color", colors.floor)
 		deck_surface.set_shader_parameter("groove_color", colors.seam)
+		deck_surface.set_shader_parameter("wear_color", colors.wear)
 		deck_surface.set_shader_parameter("ground_path", map_id == "grove")
 		deck_surface.set_shader_parameter("aggregate", Materials.texture(colors.ground))
-		deck_surface.set_shader_parameter("joint_scale", 0.62 if map_id == "station" else (0.16 if map_id in ["reactor", "cryo"] else 0.0))
+		deck_surface.set_shader_parameter("joint_scale", 0.55 if map_id == "station" else (0.18 if map_id in ["reactor", "cryo", "district"] else 0.0))
+	_update_utility_light(colors.utility)
 	for child in structure.get_children():
 		if child is Label3D and child.has_meta("original_ink"):
 			var original: Color = child.get_meta("original_ink")
 			child.modulate = original.lerp(Color("#c4bba6"), 0.31)
 	_apply_weather()
+
+func _update_utility_light(tint: Color) -> void:
+	var enabled: bool = not is_backdrop and Prefs.values.quality in [1, 2] and DisplayServer.get_name() != "headless"
+	if not enabled:
+		if is_instance_valid(utility_light):
+			utility_light.hide()
+		return
+	if not is_instance_valid(utility_light):
+		utility_light = OmniLight3D.new()
+		utility_light.name = "TerminalFill"
+		utility_light.omni_range = 8.5
+		utility_light.omni_attenuation = 1.45
+		utility_light.light_specular = 0.35
+		utility_light.position = terminal_at + Vector3(0.0, 2.35, -1.0)
+		add_child(utility_light)
+	utility_light.light_color = tint
+	utility_light.light_energy = 0.38 if Prefs.values.quality == 1 else 0.58
+	utility_light.show()
 
 func alert_lighting(enabled: bool) -> void:
 	if enabled != emergency:

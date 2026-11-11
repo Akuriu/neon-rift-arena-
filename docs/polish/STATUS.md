@@ -6,7 +6,7 @@
 | B · Démarrage et cartes | En place pour l’ouverture client et les demandes solo | `boot_flow.gd`, `map_loading.gd`, `polish_render.gd`. La simulation du serveur passe par une scène dédiée. La construction des cartes est synchrone sous le masque. La coop conserve son démarrage réseau existant. |
 | C · Motion et navigation | En place sur les composants partagés | Boutons réactifs, surface de navigation retargetable, focus et onglet Accessibilité. `ui_motion.gd` couvre quatre cadences simulées et le retour de focus. |
 | D · Écrans | Accueil, Jouer, réglages, pause, HUD, arsenal et lobby retravaillés | `ui_navigation.gd` vérifie le cache 3D et la fermeture du salon. Résultats et progression utilisent le thème et les transitions partagés, avec leurs dispositions existantes. |
-| E · 3D et cinématique | À poursuivre | Captures par carte et animations de présentation. |
+| E · 3D et présentation | Premier passage sur les sept cartes | Éclairage et matériaux par arène, aperçu rendu des trois parcours, trajectoire de pas et reprise de pose. Voir `ART_PASS.md`. |
 | F · Audio et VFX | Partiel | Démarrage audio à la demande. Travail de mixage et effets de jeu à poursuivre. |
 | G · Profilage | Partiel | Banc logiciel initial. Endurance et mesures sur appareils à compléter. |
 | H · Preview | Version de travail v0.0.7b Alpha | La Preview du lot B est disponible. Les exports et lancements de la nouvelle révision sont à relever dans la PR #3. |

@@ -11,11 +11,13 @@ varying vec3 direction;
 varying vec3 vertex_sky;
 
 vec3 gradient(vec3 ray) {
-	float height = pow(clamp(max(ray.y, 0.0) * 1.65, 0.0, 1.0), 0.57);
+	float height = pow(clamp(max(ray.y, 0.0) * 1.59, 0.0, 1.0), 0.62);
 	float light = max(dot(ray, normalize(sun_direction)), 0.0);
-	float sun = pow(light, 24.0);
-	return mix(mix(haze.rgb, zenith.rgb, height), sun_tint.rgb,
-		sun * 0.39 + smoothstep(0.998, 0.9997, light) * 0.46);
+	float sun = pow(light, 18.0);
+	vec3 sky = mix(haze.rgb, zenith.rgb, height);
+	float near_horizon = 1.0 - smoothstep(0.01, 0.29, abs(ray.y));
+	sky = mix(sky, mix(haze.rgb, sun_tint.rgb, 0.33), near_horizon * light * 0.19);
+	return mix(sky, sun_tint.rgb, sun * 0.32 + smoothstep(0.9985, 0.9998, light) * 0.46);
 }
 
 void vertex() {
@@ -30,6 +32,7 @@ void fragment() {
 		sky = gradient(ray);
 		vec2 flow = ray.xz / max(0.13, ray.y + 0.21);
 		float veil = sin(flow.x * 3.6 + sin(flow.y * 1.8)) * 0.46 + sin(flow.y * 4.8 + flow.x * 1.9) * 0.32;
+		veil += sin(flow.x * 7.9 - flow.y * 2.6) * 0.13;
 		float clouds = smoothstep(0.26, 0.67, veil) * smoothstep(0.025, 0.22, ray.y);
 		sky = mix(sky, mix(haze.rgb, vec3(0.96), 0.41), clouds * cloud_amount);
 	}

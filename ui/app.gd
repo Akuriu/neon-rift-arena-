@@ -502,6 +502,7 @@ func request_match(mode: String, difficulty: String, map_id := "reactor", run_se
 	if mode == "parkour":
 		var route := Courses.normalize(rules.get("route"))
 		map_loading.title = Courses.ROUTES[route].name
+		map_loading.image = load("res://assets/maps/parkour-%s.jpg" % route)
 		map_loading.tip = "Franchissez les checkpoints dans l’ordre pour valider votre chrono."
 	else:
 		map_loading.title = Catalog.MAPS.get(map_id, Catalog.MAPS.reactor).name
