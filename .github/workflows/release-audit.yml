@@ -29,15 +29,30 @@ jobs:
           trap 'rm -f -- "$key" "$prior"' EXIT
           gh release download v0.0.5-alpha --repo "$GITHUB_REPOSITORY" \
             --pattern RifleArena_Android_alpha.apk --output "$prior"
+          # Identify the exact installer whose certificate is being compared.
+          export RIFLE_PUBLISHED_APK_SHA256
+          RIFLE_PUBLISHED_APK_SHA256=$(sha256sum "$prior" | cut -d ' ' -f 1)
+          expected=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.0.5-alpha" \
+            --jq '.assets[] | select(.name == "RifleArena_Android_alpha.apk") | .digest // empty')
+          if [[ -n "$expected" && "$expected" != "sha256:$RIFLE_PUBLISHED_APK_SHA256" ]]; then
+            echo 'The downloaded APK does not match the published SHA-256.' >&2
+            exit 1
+          fi
           signer="$ANDROID_HOME/build-tools/36.0.0/apksigner"
           test -x "$signer"
           export RIFLE_PUBLISHED_CERT=$("$signer" verify --print-certs "$prior" |
             awk -F ': ' '/^Signer #1 certificate SHA-256 digest:/ {print tolower($2)}')
           test -n "$RIFLE_PUBLISHED_CERT"
-          export RIFLE_SIGNING_PRESENT=false RIFLE_SIGNING_MATCH=unknown
+          export RIFLE_SIGNING_PRESENT=false RIFLE_SIGNING_MATCH=unknown RIFLE_PRIVATE_KEY_ENTRY=unknown
           if [[ -n "$RIFLE_ANDROID_KEYSTORE" && -n "$RIFLE_ANDROID_ALIAS" && -n "$RIFLE_ANDROID_PASSWORD" ]]; then
             export RIFLE_SIGNING_PRESENT=true
             (umask 077; printf '%s' "$RIFLE_ANDROID_KEYSTORE" | base64 -d > "$key")
+            if LC_ALL=C keytool -list -v -keystore "$key" -alias "$RIFLE_ANDROID_ALIAS" \
+              -storepass:env RIFLE_ANDROID_PASSWORD 2>/dev/null | grep -Fx 'Entry type: PrivateKeyEntry' >/dev/null; then
+              export RIFLE_PRIVATE_KEY_ENTRY=true
+            else
+              export RIFLE_PRIVATE_KEY_ENTRY=false
+            fi
             if configured=$(keytool -exportcert -keystore "$key" -alias "$RIFLE_ANDROID_ALIAS" \
               -storepass:env RIFLE_ANDROID_PASSWORD 2>/dev/null |
               openssl x509 -inform DER -noout -fingerprint -sha256 2>/dev/null); then
@@ -53,8 +68,11 @@ jobs:
           from pathlib import Path
           report = {
               "candidate": "v0.0.6-alpha",
+              "commit": os.environ["GITHUB_SHA"],
+              "published_apk_sha256": os.environ["RIFLE_PUBLISHED_APK_SHA256"],
               "published_certificate_sha256": os.environ["RIFLE_PUBLISHED_CERT"],
               "signing_secrets_present": os.environ["RIFLE_SIGNING_PRESENT"] == "true",
+              "private_key_entry": {"true": True, "false": False, "unknown": None}[os.environ["RIFLE_PRIVATE_KEY_ENTRY"]],
               "signing_key_matches": {"true": True, "false": False, "unknown": None}[os.environ["RIFLE_SIGNING_MATCH"]],
               "hardware_gate_matches": os.environ.get("RIFLE_HARDWARE_QA_TAG") == "v0.0.6-alpha",
               "physical_tests_attested_by_this_job": False,
