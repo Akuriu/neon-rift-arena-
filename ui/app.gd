@@ -432,7 +432,8 @@ func open_parkour() -> void:
 	_free_cursor()
 	_new_screen("parkour")
 	_header("Mouvement", "Parkour", "Traversez les portiques dans l’ordre. Une chute ou un retour au checkpoint ajoute deux secondes.")
-	ParkourSetup.new().build(view, func(route: String): begin("parkour", "standard", "skyline", -1, "", false, {"route": route}))
+	ParkourSetup.new().build(view, func(route: String, ghost: bool):
+		begin("parkour", "standard", "skyline", -1, "", false, {"route": route, "ghost": ghost}))
 	Palette.button(view, Rect2(57, 581, 166, 53), "Retour", play_menu)
 	_footer("CHRONOMÈTRES PERSONNELS / Départ au premier portique / Pause disponible")
 
@@ -980,8 +981,10 @@ func _parkour_result() -> void:
 		session.credited_result = reward
 	var course: Dictionary = Courses.ROUTES[report.route]
 	var best: int = Prefs.profile.data.career.parkour.get(report.route, 0)
+	var medal := Courses.medal(report.route, report.milliseconds) if report.valid else ""
+	var subtitle: String = course.name if medal.is_empty() else "%s  ·  Médaille %s" % [course.name, medal.to_lower()]
 	_new_screen("result", "overlay")
-	_header("PARKOUR", "Nouveau record" if reward.get("best", false) else "Parcours terminé", course.name)
+	_header("PARKOUR", "Nouveau record" if reward.get("best", false) else "Parcours terminé", subtitle)
 	Palette.panel(view, Rect2(57, 215, 1166, 159), Palette.PANEL)
 	Palette.label(view, Rect2(80, 232, 700, 30), "TEMPS TOTAL", 14, Palette.MUTED, Palette.MONO)
 	Palette.label(view, Rect2(74, 273, 709, 86), Courses.clock(report.milliseconds), 63, Palette.TEXT, Palette.MONO)

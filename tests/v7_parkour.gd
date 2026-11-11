@@ -1,6 +1,7 @@
 extends SceneTree
 
 const Courses := preload("res://game/modes/parkour_routes.gd")
+const Replay := preload("res://game/modes/parkour_ghost.gd")
 var app
 var prefs
 var failures := 0
@@ -51,10 +52,18 @@ func run() -> void:
 		await ticks(5)
 		check(app.screen == "result" and prefs.profile.data.career.parkour.has(route), "Bilan et record personnel du parcours " + route)
 		var old: Dictionary = prefs.profile.data.career.parkour.duplicate()
+		var progress: Dictionary = prefs.profile.data.career.parkour_progress[route].duplicate(true)
+		check(progress.finishes == 1 and progress.clean_finishes == int(run_state.retries == 0)
+			and progress.record_retries == run_state.retries and progress.ghost[-Replay.STRIDE] == old[route],
+			"Fantôme du record et statistiques correspondent à la tentative " + route)
+		check(not Courses.medal(route, old[route]).is_empty() and Courses.medal(route, 90000).is_empty(),
+			"Barème de médailles du parcours " + route)
 		app._parkour_result()
-		check(prefs.profile.data.career.parkour == old, "Résultat idempotent pour " + route)
+		check(prefs.profile.data.career.parkour == old and prefs.profile.data.career.parkour_progress[route] == progress,
+			"Résultat idempotent pour " + route)
 		prefs.load_disk()
-		check(prefs.profile.data.career.parkour == old, "Temps relus sur disque pour " + route)
+		check(prefs.profile.data.career.parkour == old and prefs.profile.data.career.parkour_progress[route] == progress,
+			"Temps, statistiques et trace relus sur disque pour " + route)
 	check(prefs.profile.data.career.parkour.size() == 3, "Les trois records sont indépendants")
 	check(prefs.profile.data.coins == initial.coins and prefs.profile.data.xp == initial.xp
 		and prefs.profile.data.owned == initial.owned and prefs.profile.data.slots == initial.slots,
@@ -62,10 +71,55 @@ func run() -> void:
 	var before: Dictionary = prefs.profile.data.career.parkour.duplicate()
 	var bad: Dictionary = prefs.complete_parkour("incomplete", {"route": "yard", "valid": false, "milliseconds": 1100, "checkpoints": 1})
 	check(bad.ok and not bad.best and prefs.profile.data.career.parkour == before, "Un parcours invalide ne remplace aucun record")
+	await verify_replay()
+	var parkour_progress: Dictionary = prefs.profile.data.career.parkour_progress.duplicate(true)
+	var reset: Dictionary = prefs.reset_progression()
+	prefs.load_disk()
+	check(reset.ok and prefs.profile.data.career.parkour == before
+		and prefs.profile.data.career.parkour_progress == parkour_progress,
+		"La réinitialisation de progression conserve les records Parkour et les fantômes")
 	app.menu()
 	root.get_node("Sounds").stop_all()
 	await process_frame
 	quit(failures)
+
+func verify_replay() -> void:
+	var route := "yard"
+	var progress: Dictionary = prefs.profile.data.career.parkour_progress[route].duplicate(true)
+	var record: int = prefs.profile.data.career.parkour[route]
+	var slow := {"route": route, "valid": true, "milliseconds": record + 500, "checkpoints": Courses.ROUTES[route].points.size(), "retries": 0}
+	var saved: Dictionary = prefs.complete_parkour("yard-valid-slower", slow)
+	var stored: Dictionary = prefs.profile.data.career.parkour_progress[route]
+	check(saved.ok and not saved.best and stored.finishes == 2 and stored.clean_finishes == 1
+		and stored.ghost == progress.ghost, "Une arrivée plus lente est comptée et conserve le fantôme du record")
+	check(Replay.sanitize([0, 0, 0, 0, 1500, 10001, 0, 0], 1500).is_empty()
+		and Replay.sanitize([0, 0, 0, 0, 0, 0, 0, 0], 1500).is_empty(), "Les traces invalides sont écartées")
+	app.begin("parkour", "standard", "skyline", 802, "", false, {"route": route})
+	var stage = app.session
+	var state = stage.director
+	var ghost: Node3D = state.ghost
+	check(not ghost.visible and ghost.get_child_count() == 1 and ghost.get_child(0) is MeshInstance3D,
+		"Le fantôme est un repère visuel sans collision, masqué avant le départ")
+	stage.player.remote_input = true
+	stage.player.net_move = Vector2(0.0, -1.0)
+	for frame in range(60):
+		await physics_frame
+		if state.started:
+			break
+	await ticks(8)
+	check(state.started and ghost.visible, "Le départ réel lance le fantôme")
+	app.pause()
+	var position := ghost.position
+	await ticks(12)
+	check(ghost.position == position, "La pause fige le fantôme et le chrono")
+	var children: int = stage.get_child_count()
+	for attempt in range(30):
+		app._restart()
+	check(app.session == stage and stage.get_child_count() == children and state.samples.is_empty() and not ghost.visible,
+		"Trente relances réutilisent le terrain et réinitialisent la trace")
+	app.begin("parkour", "standard", "skyline", 803, "", false, {"route": route, "ghost": false})
+	check(not is_instance_valid(app.session.director.ghost) and not app.session.director.options.ghost,
+		"La désactivation retire le fantôme de la scène")
 
 func drive(stage: Node3D, route: String, exercise_retry: bool) -> bool:
 	var run_state = stage.director

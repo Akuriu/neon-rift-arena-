@@ -1,6 +1,8 @@
 extends RefCounted
 
 const IDS := ["yard", "gantry", "roofs"]
+const MEDAL_TIMES := {"yard": [5500, 8000, 14000], "gantry": [6500, 10000, 17000], "roofs": [10000, 15000, 23000]}
+const MEDALS := ["Or", "Argent", "Bronze"]
 const ROUTES := {
 	"yard": {"name": "Cour d’initiation", "level": "DÉBUTANT", "width": 5.8,
 		"copy": "Une ligne lisible, trois haies basses. Apprenez à enchaîner sprint et saut.",
@@ -22,3 +24,12 @@ static func normalize(id: Variant) -> String:
 
 static func clock(milliseconds: int) -> String:
 	return "%02d:%05.2f" % [milliseconds / 60000, fmod(milliseconds / 1000.0, 60.0)]
+
+static func medal(id: String, milliseconds: int) -> String:
+	if milliseconds <= 0:
+		return ""
+	var thresholds: Array = MEDAL_TIMES[id]
+	for index in thresholds.size():
+		if milliseconds <= thresholds[index]:
+			return MEDALS[index]
+	return ""

@@ -2,6 +2,7 @@ extends RefCounted
 
 const Arms := preload("res://game/weapons/catalog.gd")
 const Courses := preload("res://game/modes/parkour_routes.gd")
+const Replay := preload("res://game/modes/parkour_ghost.gd")
 const Presets := {
 	"poly": {"name": "Polyvalent", "slots": ["wp_pulse", "wp_volt", "wp_prism", "wp_nova"], "gadget": "gd_dash", "module": ""},
 	"range": {"name": "Précision", "slots": ["wp_eclipse", "wp_stellar", "wp_prism", "wp_pulse"], "gadget": "gd_dash", "module": "mod_cycle"},
@@ -87,8 +88,21 @@ static func sanitize(raw: Variant, owned: Array, parse_number: Callable) -> Dict
 			var duration: int = parse_number.call(times.get(route), 7200000)
 			if duration >= 1000:
 				parkour[route] = duration
+	var parkour_progress := {}
+	var progress: Variant = input.get("parkour_progress")
+	for route: String in parkour:
+		var entry: Variant = progress.get(route) if progress is Dictionary else null
+		var fields: Dictionary = entry if entry is Dictionary else {}
+		var finishes := maxi(1, parse_number.call(fields.get("finishes"), 99999))
+		var stats := {"finishes": finishes, "clean_finishes": parse_number.call(fields.get("clean_finishes"), finishes)}
+		if fields.has("record_retries"):
+			stats.record_retries = parse_number.call(fields.record_retries, 99999)
+		var trace := Replay.sanitize(fields.get("ghost"), parkour[route])
+		if not trace.is_empty():
+			stats.ghost = trace
+		parkour_progress[route] = stats
 	return {"history": list, "ledger": receipts, "badges": badges, "maps": maps, "weekly": current, "saved": own,
-		"parkour": parkour}
+		"parkour": parkour, "parkour_progress": parkour_progress}
 
 static func refresh(career: Dictionary) -> void:
 	var now := week()

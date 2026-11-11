@@ -10,6 +10,7 @@ const VERSION := 6
 const Profile := preload("res://services/profile.gd")
 const Rules := preload("res://game/modes/rules.gd")
 const Courses := preload("res://game/modes/parkour_routes.gd")
+const ParkourReplay := preload("res://game/modes/parkour_ghost.gd")
 const TouchLayout := preload("res://ui/mobile/layout.gd")
 const LEGACY_BACKUP := "user://pilot_profile.v1.json"
 const V2_BACKUP := "user://pilot_profile.v2.json"
@@ -434,8 +435,19 @@ func complete_parkour(id: String, report: Dictionary) -> Dictionary:
 	return profile_action(func() -> Dictionary:
 		var times: Dictionary = profile.data.career.parkour
 		var best := not times.has(route) or duration < int(times[route])
+		var progress: Dictionary = profile.data.career.parkour_progress
+		var stats: Dictionary = progress.get(route, {"finishes": 0, "clean_finishes": 0})
+		var retries := Profile.number(report.get("retries"), 99999)
+		stats.finishes = mini(99999, int(stats.finishes) + 1)
+		stats.clean_finishes = mini(99999, int(stats.clean_finishes) + int(retries == 0))
 		if best:
 			times[route] = duration
+			stats.record_retries = retries
+			stats.erase("ghost")
+			var trace := ParkourReplay.sanitize(report.get("trace"), duration)
+			if not trace.is_empty():
+				stats.ghost = trace
+		progress[route] = stats
 		profile.data.settled.append(id)
 		if profile.data.settled.size() > 128:
 			profile.data.settled.pop_front()
@@ -445,7 +457,8 @@ func reset_progression() -> Dictionary:
 	if _recognizable(_read(SAVE)) and DirAccess.copy_absolute(profile_file(SAVE), profile_file(RESET_BACKUP)) != OK:
 		return {"ok": false, "message": "Impossible de créer la copie de sécurité."}
 	return profile_action(func() -> Dictionary:
-		profile.restore({"id": profile.data.id, "name": profile.data.name})
+		profile.restore({"id": profile.data.id, "name": profile.data.name, "career": {
+			"parkour": profile.data.career.parkour, "parkour_progress": profile.data.career.parkour_progress}})
 		return {"ok": true, "message": "Progression réinitialisée. Réglages et records conservés."})
 
 func _recognizable(document: Dictionary) -> bool:
