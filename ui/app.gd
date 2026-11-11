@@ -25,6 +25,8 @@ const Lobby := preload("res://ui/lobby.gd")
 const Rules := preload("res://game/modes/rules.gd")
 const ClassicSetup := preload("res://ui/screens/classic_setup.gd")
 const GunGameResult := preload("res://ui/screens/gun_game_result.gd")
+const ResultSummary := preload("res://ui/screens/result_summary.gd")
+const Progression := preload("res://ui/screens/progression.gd")
 const PlayMenu := preload("res://ui/screens/play.gd")
 const ParkourSetup := preload("res://ui/screens/parkour_setup.gd")
 const Courses := preload("res://game/modes/parkour_routes.gd")
@@ -1022,55 +1024,45 @@ func _result(victory: bool, owner: Node3D) -> void:
 	if last_mode == "gungame":
 		GunGameResult.new().build(view, session.director, top, best, accuracy)
 	else:
-		_operation_result_stats(report, top, best, victory, accuracy)
+		_operation_result_stats(report, leaderboard, best, victory, accuracy, online)
 	var reward_label := "+%d PIÈCES   +%d XP   ·   NIVEAU %d" % [
 		reward.get("coins", 0), reward.get("xp", 0), Profile.level(Prefs.profile.data.xp)] if reward.ok else String(reward.get("message", "Profil indisponible"))
 	if reward.ok and reward.has("message"):
 		reward_label = reward.message
 	elif not reward.get("badges", []).is_empty():
 		reward_label += "   ·   SUCCÈS  " + String(reward.badges[0]).to_upper()
-	Palette.label(view, Rect2(59, 500, 1163, 43), reward_label, 16, Palette.AMBER, Palette.MONO)
+	var reward_panel := Palette.panel(view, Rect2(57, 505, 1166, 38), Tokens.SURFACE)
+	Palette.label(reward_panel, Rect2(16, 0, 1135, 38), reward_label, 15, Tokens.ACCENT, Palette.MONO)
 	if not reward.ok:
 		Palette.button(view, Rect2(642, 552, 280, 57), "Réessayer la sauvegarde", _result.bind(victory, owner))
 	if online:
 		Palette.button(view, Rect2(57, 552, 305, 57), "Retour à la coop", leave_coop, true).grab_focus()
 	else:
-		Palette.button(view, Rect2(57, 552, 305, 57), "REJOUER     ›", _restart, true).grab_focus()
+		Palette.button(view, Rect2(57, 552, 305, 57), "REJOUER", _restart, true).grab_focus()
 		if Rules.LABELS.has(last_mode) and reward.ok:
 			Palette.button(view, Rect2(642, 552, 280, 57), "Modifier les règles", open_classic.bind(last_mode))
 	Palette.button(view, Rect2(377, 552, 246, 57), "Retour au menu", menu)
-	_footer("RAPPORT D’OPÉRATION   /   CLASSEMENT PAR MODE, DIFFICULTÉ ET ARÈNE")
+	_footer("Classement par mode, difficulté et arène")
 
-func _operation_result_stats(report: Dictionary, top: int, best: bool, victory: bool, accuracy: int) -> void:
-	var wave: int = session.director.cleared
-	var score: int = session.director.score
-	var kills: int = session.director.kills
-	var elapsed: float = session.director.elapsed
-	Palette.panel(view, Rect2(57, 215, 1166, 161), Color("#112a32"), Palette.CYAN if victory else Palette.LINE)
-	Palette.label(view, Rect2(79, 227, 513, 30), "SCORE FINAL", 14, Palette.MUTED, Palette.MONO)
-	Palette.label(view, Rect2(75, 256, 668, 101), "%06d" % score, 68, Palette.TEXT, Palette.MONO)
-	Palette.label(view, Rect2(737, 238, 449, 33), "NOUVEAU RECORD" if best else "RECORD LOCAL", 14,
-		Palette.AMBER if best else Palette.MUTED, Palette.MONO, HORIZONTAL_ALIGNMENT_RIGHT)
-	Palette.label(view, Rect2(733, 275, 456, 55), "%06d" % top, 36, Palette.AMBER, Palette.MONO, HORIZONTAL_ALIGNMENT_RIGHT)
+func _operation_result_stats(report: Dictionary, leaderboard: Array, best: bool, victory: bool, accuracy: int, online: bool) -> void:
+	var record := "Aucun score classé"
+	if not leaderboard.is_empty():
+		record = "%s  ·  %d pts" % ["Nouveau record" if best else "Record local", leaderboard[0].score]
+	var total: int = session.director.total_waves
+	var waves := "%d / %d" % [report.wave, total] if total > 0 else str(report.wave)
+	var kills := "%d / %d" % [report.kills, session.director.trial_goal] if last_mode == "trial" else str(report.kills)
 	var rows := [
-		["VAGUES", "%d / %d" % [wave, session.director.total_waves] if session.director.total_waves > 0 else str(wave)],
-		["NEUTRALISÉS", "%d" % kills if last_mode != "trial" else "%d / %d" % [kills, session.director.trial_goal]],
-		["PRÉCISION", "%d %%" % accuracy],
-		["DURÉE", Palette.clock(elapsed)],
-		["MEILLEURE SÉRIE", "×%d" % session.director.highest_combo],
+		["Vagues", waves], ["Neutralisations", kills],
+		["Précision", "%d %%" % accuracy], ["Durée", Palette.clock(report.seconds)],
+		["Boss neutralisés", str(report.bosses)] if online else ["Meilleure série", "×%d" % session.director.highest_combo],
 	]
 	if last_mode == "trial":
 		rows.remove_at(0)
 	elif report.has("outcome"):
-		rows = [["NEUTRALISÉS", str(kills)], ["DÉFAITES", str(report.deaths)],
-			["SCORE ADVERSE", str(report.rival)], ["PRÉCISION", "%d %%" % accuracy],
-			["DURÉE", Palette.clock(elapsed)]]
-	for i in rows.size():
-		var width := 1166.0 / rows.size()
-		var x := 57.0 + i * width
-		Palette.panel(view, Rect2(x, 394, width - 9.0, 99), Color("#10242b"))
-		Palette.label(view, Rect2(x + 13.0, 402, width - 29, 33), rows[i][0], 12, Palette.MUTED, Palette.MONO)
-		Palette.label(view, Rect2(x + 13.0, 435, width - 29, 46), rows[i][1], 26, Palette.TEXT, Palette.MONO)
+		rows = [["Neutralisations", kills], ["Mises hors combat", str(report.deaths)],
+			["Score adverse", str(report.rival)], ["Précision", "%d %%" % accuracy], ["Durée", Palette.clock(report.seconds)]]
+	var image := load("res://assets/maps/%s.jpg" % last_map) as Texture2D
+	ResultSummary.build(view, image, "Score final", str(report.score), record, rows, Tokens.SUCCESS if victory else Tokens.ACCENT)
 
 func _parkour_result() -> void:
 	_freeze()
@@ -1084,19 +1076,14 @@ func _parkour_result() -> void:
 	var medal := Courses.medal(report.route, report.milliseconds) if report.valid else ""
 	var subtitle: String = course.name if medal.is_empty() else "%s  ·  Médaille %s" % [course.name, medal.to_lower()]
 	_new_screen("result", "overlay")
-	_header("PARKOUR", "Nouveau record" if reward.get("best", false) else "Parcours terminé", subtitle)
-	Palette.panel(view, Rect2(57, 215, 1166, 159), Palette.PANEL)
-	Palette.label(view, Rect2(80, 232, 700, 30), "TEMPS TOTAL", 14, Palette.MUTED, Palette.MONO)
-	Palette.label(view, Rect2(74, 273, 709, 86), Courses.clock(report.milliseconds), 63, Palette.TEXT, Palette.MONO)
-	Palette.label(view, Rect2(803, 238, 389, 31), "RECORD PERSONNEL", 14, Palette.MUTED, Palette.MONO, HORIZONTAL_ALIGNMENT_RIGHT)
-	Palette.label(view, Rect2(803, 281, 389, 55), Courses.clock(best) if best > 0 else "—", 33, Palette.AMBER, Palette.MONO, HORIZONTAL_ALIGNMENT_RIGHT)
-	var rows := [["COURSE", Courses.clock(report.elapsed_ms)], ["RETOURS", str(report.retries)],
-		["PÉNALITÉS", "+%.1f s" % (report.penalty_ms / 1000.0)], ["CHECKPOINTS", "%d / %d" % [report.checkpoints, course.points.size()]]]
-	for i in rows.size():
-		var x := 57 + i * 296
-		Palette.panel(view, Rect2(x, 392, 278, 94), Palette.PANEL)
-		Palette.label(view, Rect2(x + 17, 400, 245, 31), rows[i][0], 13, Palette.MUTED, Palette.MONO)
-		Palette.label(view, Rect2(x + 17, 437, 245, 39), rows[i][1], 26, Palette.TEXT, Palette.MONO)
+	var title := "Nouveau record" if reward.get("best", false) else ("Parcours terminé" if report.valid else "Chrono non classé")
+	_header("PARKOUR", title, subtitle)
+	var rows := [["Temps de course", Courses.clock(report.elapsed_ms)], ["Retours", str(report.retries)],
+		["Pénalités", "+%.1f s" % (report.penalty_ms / 1000.0)], ["Checkpoints", "%d / %d" % [report.checkpoints, course.points.size()]]]
+	var image := load("res://assets/maps/parkour-%s.jpg" % report.route) as Texture2D
+	var record := "Record personnel  ·  " + Courses.clock(best) if best > 0 else "Aucun chrono classé"
+	ResultSummary.build(view, image, "Temps total", Courses.clock(report.milliseconds), record, rows,
+		Tokens.SUCCESS if report.valid else Tokens.WARNING)
 	Palette.label(view, Rect2(59, 503, 1157, 37), reward.get("message", ""), 17, Palette.AMBER)
 	Palette.button(view, Rect2(57, 564, 305, 57), "Rejouer le parcours", _restart, true).grab_focus()
 	Palette.button(view, Rect2(377, 564, 305, 57), "Changer de parcours", open_parkour)
@@ -1220,81 +1207,24 @@ func show_profile(page := "profile", notice := "") -> void:
 	_new_screen("profile")
 	var data: Dictionary = Prefs.profile.data
 	var title: String = "Contrats locaux" if page == "contracts" else ("Classements locaux" if page == "records" else data.name)
-	_header("DOSSIER PILOTE", title, "NIVEAU %02d   ·   %d XP   ·   %d PIÈCES" % [Profile.level(data.xp), data.xp, data.coins])
-	Palette.panel(view, Rect2(57, 207, 1166, 361), Color("#282b24"))
-	if page == "contracts":
-		var row := 0
-		for id in Profile.CONTRACTS:
-			var entry: Dictionary = Profile.CONTRACTS[id]
-			var y := 221 + row * 82
-			var value: int = data.contracts.progress[id]
-			Palette.label(view, Rect2(78, y, 680, 35), entry.name, 25, Palette.TEXT, Palette.HEAD)
-			Palette.label(view, Rect2(78, y + 35, 690, 30), "%d / %d  ·  %d pièces + %d XP" % [
-				value, entry.goal, entry.coins, entry.xp], 14, Palette.CYAN, Palette.MONO)
-			var claim := Palette.button(view, Rect2(900, y + 14, 287, 45),
-				"Encaissé" if data.contracts.claimed[id] else "Encaisser", _claim.bind(id))
-			claim.disabled = data.contracts.claimed[id] or value < entry.goal
-			row += 1
-		var weekly: Dictionary = data.career.weekly
-		var challenge := Career.challenge(weekly.period)
-		Palette.label(view, Rect2(78, 467, 693, 37), challenge[0], 25, Palette.TEXT, Palette.HEAD)
-		Palette.label(view, Rect2(78, 502, 690, 30), "%d / %d · 70 pièces + 150 XP" % [weekly.value, challenge[2]],
-			14, Palette.AMBER, Palette.MONO)
-		var claim := Palette.button(view, Rect2(900, 481, 287, 45),
-			"Encaissé" if weekly.claimed else "Encaisser la semaine", _claim_week)
-		claim.disabled = weekly.claimed or weekly.value < challenge[2]
-	elif page == "records":
-		var entries := []
-		for key in Prefs.records:
-			var parts: PackedStringArray = key.split("|")
-			var rows: Array = Prefs.records[key]
-			if rows.is_empty():
-				continue
-			var label := "%s  ·  %s  ·  %s" % [_mode_name(parts[0]), Catalog.MAPS[parts[2]].name, Catalog.DIFFICULTIES[parts[1]].name]
-			if parts.size() == 4:
-				var options := parts[3].split("-")
-				label += "  ·  %s bots / %d min / %s pts" % [options[0], int(options[1]) / 60, options[2]]
-			entries.append({"label": label, "score": int(rows[0].score), "wave": int(rows[0].wave)})
-		entries.sort_custom(func(a: Dictionary, b: Dictionary): return a.score > b.score)
-		var scroll := ScrollContainer.new()
-		Palette.at(view, scroll, Rect2(79, 228, 1118, 310))
-		var rows := VBoxContainer.new()
-		rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		scroll.add_child(rows)
-		if entries.is_empty():
-			rows.add_child(Label.new())
-			rows.get_child(0).text = "Vos scores apparaîtront ici après une opération."
-		for record in entries:
-			var label := Label.new()
-			label.text = "%07d pts   ·   %s%s" % [record.score, record.label, "  ·  Vague %d" % record.wave if record.wave > 0 else ""]
-			label.custom_minimum_size.y = 37
-			rows.add_child(label)
-	else:
-		var stats: Dictionary = data.stats
-		var lines := [
-			"%d parties   ·   %d victoires   ·   %d neutralisations" % [stats.runs, stats.wins, stats.kills],
-			"Record personnel  ·  vague %d   /   %d boss neutralisés" % [stats.best_wave, stats.bosses],
-			"Précision  ·  %d %%   /   %d tirs   /   %d CR dépensés" % [
-				roundi(100.0 * stats.hits / maxi(1, stats.shots)), stats.shots, stats.spent],
-		]
-		for i in lines.size():
-			Palette.label(view, Rect2(81, 230 + i * 48, 1107, 38), lines[i], 19, Palette.TEXT)
-		var name := LineEdit.new()
-		name.text = data.name
-		name.max_length = 18
-		Palette.at(view, name, Rect2(82, 389, 310, 46))
-		Palette.button(view, Rect2(410, 389, 248, 46), "Enregistrer le nom", _rename_pilot.bind(name))
-		Palette.button(view, Rect2(82, 473, 300, 46), "Réinitialiser la progression", _confirm_reset)
-		var level := Profile.level(data.xp)
-		Palette.label(view, Rect2(725, 389, 440, 46), "%d XP AVANT LE NIVEAU %d" % [level * level * 80 - data.xp, level + 1]
-			if level < 500 else "NIVEAU MAXIMUM", 16, Palette.AMBER, Palette.MONO)
-	Palette.label(view, Rect2(57, 574, 1166, 30), notice, 15, Palette.AMBER)
-	Palette.button(view, Rect2(57, 615, 136, 43), "Retour", menu, true).grab_focus()
-	Palette.button(view, Rect2(208, 615, 183, 43), "Profil", show_profile.bind("profile"))
-	Palette.button(view, Rect2(405, 615, 183, 43), "Contrats", show_profile.bind("contracts"))
-	Palette.button(view, Rect2(602, 615, 183, 43), "Classements", show_profile.bind("records"))
+	var description: String = "Contrats du jour et défi hebdomadaire" if page == "contracts" else ""
+	_header("Progression", title, description)
+	match page:
+		"contracts": Progression.contracts(view, data, _claim, _claim_week)
+		"records": Progression.records(view, Prefs.records, _mode_name)
+		_: Progression.overview(view, data, _rename_pilot, _confirm_reset)
+	Palette.label(view, Rect2(57, 581, 1166, 32), notice, 15, Tokens.ACCENT)
+	Palette.button(view, Rect2(57, 615, 136, 43), "Retour", menu, true)
+	var tabs := {"profile": "Profil", "contracts": "Contrats", "records": "Classements"}
+	var x := 208
+	for tab in tabs:
+		var button := Palette.button(view, Rect2(x, 615, 183, 43), tabs[tab], show_profile.bind(tab))
+		if tab == page:
+			button.theme_type_variation = "SelectedTab"
+			button.grab_focus()
+		x += 197
 	Palette.button(view, Rect2(799, 615, 183, 43), "Carrière", show_career)
-	_footer("PROFIL LOCAL   /   " + data.contracts.date)
+	_footer("Contrats du " + data.contracts.date if page == "contracts" else "Profil local")
 
 func _claim(id: String) -> void:
 	var result := Prefs.profile_action(Prefs.profile.claim.bind(id))

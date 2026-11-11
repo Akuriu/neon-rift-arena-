@@ -78,6 +78,7 @@ func run() -> void:
 		app.pause()
 		await capture("15-pause")
 		check(Input.mouse_mode == Input.MOUSE_MODE_VISIBLE, "La pause rend le curseur")
+	await result_and_progression(app)
 	app.menu()
 	app.open_settings("menu")
 	app.settings.show_tab(5)
@@ -103,6 +104,49 @@ func run() -> void:
 	await RenderingServer.frame_post_draw
 	await create_timer(0.28, true, false, true).timeout
 	quit(1 if failed else 0)
+
+func result_and_progression(app) -> void:
+	app.menu()
+	app.show_profile("records")
+	check(has_label(app.view, "Aucun score enregistré"), "État vide du classement avec un profil neuf")
+	await capture("20-classements-vides")
+	app.begin("endless", "discovery", "cryo", 921)
+	await physics_frame
+	var stage = app.session
+	stage.director.open_wave()
+	while not stage.director.pending.is_empty():
+		var unit: CharacterBody3D = stage.spawn_unit(stage.director.pending[0], stage.arena.spawn_points[0])
+		stage.director.registered_spawn()
+		unit.take_hit(90000.0, unit.center(), Vector3.DOWN, stage.player)
+	app.bank_run()
+	await process_frame
+	check(app.screen == "result" and stage.credited_result.get("ok", false)
+		and has_label(app.view, str(stage.director.score)), "Le bilan affiche le score enregistré d’une vague jouée")
+	if app.screen != "result":
+		return
+	await capture("21-bilan-cryo")
+	var prefs := root.get_node("Prefs")
+	var xp: int = prefs.profile.data.xp
+	app._result(true, stage)
+	check(prefs.profile.data.xp == xp and xp > 0, "Réafficher le bilan ne crédite pas l’XP une seconde fois")
+	app.show_profile()
+	var bars: Array[Node] = app.view.find_children("*", "ProgressBar", true, false)
+	check(bars.size() == 1 and bars[0].value > 0.0 and has_label(app.view, "%d XP au total" % xp),
+		"La progression affiche l’expérience sauvegardée et la position dans le niveau")
+	await capture("22-progression")
+	button_named(app.view, "Contrats").pressed.emit()
+	check(app.view.find_children("*", "ProgressBar", true, false).size() == 4,
+		"Les trois contrats quotidiens et le défi hebdomadaire affichent leur progression")
+	await capture("23-contrats")
+	button_named(app.view, "Classements").pressed.emit()
+	check(has_label(app.view, str(stage.director.score)), "Le score du bilan se retrouve dans le classement local")
+	await capture("24-classements")
+
+func has_label(parent: Node, caption: String) -> bool:
+	for label in parent.find_children("*", "Label", true, false):
+		if label.text == caption:
+			return true
+	return false
 
 func has_title(frame: Image) -> bool:
 	var extent := Vector2(frame.get_size())
