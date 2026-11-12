@@ -146,11 +146,11 @@ func result_and_progression(app) -> void:
 	check(bars.size() == 1 and bars[0].value > 0.0 and has_label(app.view, "%d XP au total" % xp),
 		"La progression affiche l’expérience sauvegardée et la position dans le niveau")
 	await capture("22-progression")
-	button_named(app.view, "Contrats").pressed.emit()
+	await tap(button_named(app.view, "Contrats"))
 	check(app.view.find_children("*", "ProgressBar", true, false).size() == 4,
-		"Les trois contrats quotidiens et le défi hebdomadaire affichent leur progression")
+		"Un toucher ouvre les trois contrats quotidiens et le défi hebdomadaire")
 	await capture("23-contrats")
-	button_named(app.view, "Classements").pressed.emit()
+	await tap(button_named(app.view, "Classements"))
 	check(has_label(app.view, str(score)), "Le score du bilan se retrouve dans le classement local")
 	await capture("24-classements")
 
@@ -182,6 +182,22 @@ func click(point: Vector2, pressed: bool) -> void:
 	event.global_position = point
 	event.pressed = pressed
 	Input.parse_input_event(event)
+
+func tap(button: Button) -> void:
+	if button == null:
+		check(false, "Commande tactile présente")
+		return
+	var emulate := Input.emulate_mouse_from_touch
+	Input.emulate_mouse_from_touch = true
+	var position := button.get_global_transform_with_canvas() * (button.size * 0.5)
+	for pressed in [true, false]:
+		var event := InputEventScreenTouch.new()
+		event.position = position
+		event.pressed = pressed
+		Input.parse_input_event(event)
+		await process_frame
+	await process_frame
+	Input.emulate_mouse_from_touch = emulate
 
 func capture(name: String) -> void:
 	await create_timer(0.25, true, false, true).timeout

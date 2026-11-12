@@ -9,5 +9,6 @@
 | RA-05 | P1 | Ouvrir la saisie d’une touche. Le panneau d’origine n’interceptait que les clics sur son rectangle, ce qui laissait les onglets derrière accessibles. | `tests/ui_motion.gd` couvre la garde d’onglet, l’interception et la restauration du focus. | Modale plein écran au lot C. |
 | RA-06 | P1 | Remplir le pool d’effets en Élevée puis passer en Ultra faible. Les emplacements supérieurs au nouveau budget restaient visibles et le curseur pouvait en sélectionner un. | `tests/vfx_budget.gd` exerce 149 effets, la réduction à 64, le retour au repos et la densité nulle. | Corrigé au lot F. |
 | RA-07 | P1 | Recevoir une vague ou un bilan coop pendant la construction de l’arène client. | `tests/coop_loading.gd` reçoit un état de vague et un bilan avant l’attachement, ferme un salon pendant l’attente et annule un assemblage partiel. | Les données fiables attendent la session correspondante. |
+| RA-08 | P2 | Toucher un onglet de progression. Le clic émulé remplace la vue avant que Godot libère le focus tactile. | `tests/polish_render.gd` injecte des événements tactiles et vérifie le changement d’onglet en fenêtre. | L’action tactile attend la fin de la distribution de l’événement. La compression du bouton commence dès le contact. |
 
 Les campagnes de navigation rapide, de reprise Android, d’endurance fenêtrée et de réseau sur appareils restent à exécuter.
