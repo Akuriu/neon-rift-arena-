@@ -121,8 +121,8 @@ class Batch:
 		var xform := Transform3D(Basis.from_euler(rotation), at - Vector3(cell.x * 13.0, 0.0, cell.y * 13.0))
 		tool.append_from(mesh, 0, xform)
 
-	func commit(parent: Node3D, shadows := true) -> void:
-		for key in groups:
+	func commit(parent: Node3D, shadows := true, deadline_usec := -1) -> void:
+		for key in groups.keys():
 			var tool: SurfaceTool = groups[key]
 			tool.index()
 			var at := Vector3(key[0].x * 13.0, 0.0, key[0].y * 13.0)
@@ -138,4 +138,6 @@ class Batch:
 			part.position = at
 			part.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if casts else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			parent.add_child(part)
-		groups.clear()
+			groups.erase(key)
+			if deadline_usec >= 0 and Time.get_ticks_usec() >= deadline_usec:
+				break

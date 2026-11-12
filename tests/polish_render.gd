@@ -74,6 +74,14 @@ func run() -> void:
 	check(app.screen == "hud" and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED,
 		"Le HUD et la capture souris sont rétablis après le chargement")
 	if app.screen == "hud":
+		var overlay: Control = app.map_loading
+		check(is_instance_valid(overlay) and app.session.arena.pending_surface_count() == 0
+			and not app.session.player.input_blocked,
+			"La vue est prête et les commandes sont actives pendant l’ouverture")
+		if is_instance_valid(overlay):
+			await RenderingServer.frame_post_draw
+			if is_instance_valid(overlay):
+				save(root.get_texture().get_image(), "25-ouverture-arene")
 		await capture("14-depot")
 		app.pause()
 		await capture("15-pause")
@@ -114,9 +122,11 @@ func result_and_progression(app) -> void:
 	await physics_frame
 	var stage = app.session
 	stage.director.open_wave()
+	await create_timer(1.1, true, false, true).timeout
 	while not stage.director.pending.is_empty():
-		var unit: CharacterBody3D = stage.spawn_unit(stage.director.pending[0], stage.arena.spawn_points[0])
+		stage.spawn_unit(stage.director.pending[0], stage.arena.spawn_points[0])
 		stage.director.registered_spawn()
+	for unit in stage.units.duplicate():
 		unit.take_hit(90000.0, unit.center(), Vector3.DOWN, stage.player)
 	app.bank_run()
 	await process_frame
@@ -127,8 +137,10 @@ func result_and_progression(app) -> void:
 	await capture("21-bilan-cryo")
 	var prefs := root.get_node("Prefs")
 	var xp: int = prefs.profile.data.xp
-	app._result(true, stage)
+	var score: int = stage.director.score
+	app._result(false, stage)
 	check(prefs.profile.data.xp == xp and xp > 0, "Réafficher le bilan ne crédite pas l’XP une seconde fois")
+	app.menu()
 	app.show_profile()
 	var bars: Array[Node] = app.view.find_children("*", "ProgressBar", true, false)
 	check(bars.size() == 1 and bars[0].value > 0.0 and has_label(app.view, "%d XP au total" % xp),
@@ -139,7 +151,7 @@ func result_and_progression(app) -> void:
 		"Les trois contrats quotidiens et le défi hebdomadaire affichent leur progression")
 	await capture("23-contrats")
 	button_named(app.view, "Classements").pressed.emit()
-	check(has_label(app.view, str(stage.director.score)), "Le score du bilan se retrouve dans le classement local")
+	check(has_label(app.view, str(score)), "Le score du bilan se retrouve dans le classement local")
 	await capture("24-classements")
 
 func has_label(parent: Node, caption: String) -> bool:

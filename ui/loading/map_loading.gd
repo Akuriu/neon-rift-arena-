@@ -7,12 +7,14 @@ const Palette := preload("res://ui/skin.gd")
 const Tokens := preload("res://ui/design/tokens.gd")
 const SafeLayout := preload("res://ui/design/safe_layout.gd")
 const Meter := preload("res://ui/loading/load_meter.gd")
+const Reveal := preload("res://ui/loading/map_reveal.gdshader")
 
 var title := ""
 var mode := ""
 var tip := ""
 var image: Texture2D
 var page: Control
+var curtain: ShaderMaterial
 var stage: Label
 var percent: Label
 var meter: Meter
@@ -26,6 +28,10 @@ func _ready() -> void:
 	var fill := ColorRect.new()
 	fill.color = Tokens.BACKGROUND
 	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if Prefs.values.ui_motion and DisplayServer.get_name() != "headless":
+		curtain = ShaderMaterial.new()
+		curtain.shader = Reveal
+		fill.material = curtain
 	add_child(fill)
 	fill.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	page = Control.new()
@@ -74,3 +80,14 @@ func show_status(caption: String, fraction := -1.0, cancellable := true, error :
 
 func _fit() -> void:
 	SafeLayout.center(page, SafeLayout.area(get_window(), size), Tokens.FRAME)
+
+func reveal() -> Tween:
+	var animation := create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	animation.tween_property(page, "modulate:a", 0.0, Tokens.REVEAL_SECONDS * 0.70)
+	animation.tween_property(page, "position:y", page.position.y - 8.0 * page.scale.y, Tokens.REVEAL_SECONDS)
+	if curtain != null:
+		animation.tween_method(func(opening: float): curtain.set_shader_parameter("opening", opening),
+			-0.04, 1.05, Tokens.REVEAL_SECONDS)
+	else:
+		animation.tween_property(self, "modulate:a", 0.0, Tokens.REVEAL_SECONDS)
+	return animation

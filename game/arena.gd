@@ -25,7 +25,9 @@ var spawn_points: Array[Vector3] = [
 var footprints: Array[Rect2] = []
 var routes := Routes.new()
 var batches := Fabric.Batch.new()
+var scenery_batches := Fabric.Batch.new()
 var structure: Node3D
+var scenery: Node3D
 var collision: StaticBody3D
 var sun: DirectionalLight3D
 var utility_light: OmniLight3D
@@ -35,6 +37,7 @@ var air: CPUParticles3D
 var deck_surface: ShaderMaterial
 var is_backdrop := false
 var simulation_only := false
+var defer_surfaces := false
 var build_landscape := true
 var emergency := false
 var map_id := "reactor"
@@ -63,14 +66,26 @@ func _ready() -> void:
 	if simulation_only:
 		routes.setup(footprints, half_size)
 		return
-	batches.commit(structure)
+	if not defer_surfaces:
+		batches.commit(structure)
 	if map_id != "station" and build_landscape:
-		Scenery.build(self)
+		scenery = Scenery.build(self, scenery_batches)
+		if not defer_surfaces:
+			scenery_batches.commit(scenery, false)
 	if not is_backdrop:
 		routes.setup(footprints, half_size)
 	apply_quality()
 	Art.changed.connect(apply_art)
 	apply_art()
+
+func pending_surface_count() -> int:
+	return batches.groups.size() + scenery_batches.groups.size()
+
+func commit_surfaces(deadline_usec: int) -> void:
+	if not batches.groups.is_empty():
+		batches.commit(structure, true, deadline_usec)
+	elif not scenery_batches.groups.is_empty():
+		scenery_batches.commit(scenery, false, deadline_usec)
 
 func _build_layout() -> void:
 	_deck()

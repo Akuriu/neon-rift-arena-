@@ -122,6 +122,10 @@ static func _progress_bar(parent: Control, area: Rect2, progress: float, caption
 	bar.show_percentage = false
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.accessibility_name = caption
-	bar.add_theme_stylebox_override("background", Palette.box(Tokens.BACKGROUND, Color.TRANSPARENT, 3, 0))
-	bar.add_theme_stylebox_override("fill", Palette.box(Tokens.ACCENT, Color.TRANSPARENT, 3, 0))
+	for role in ["background", "fill"]:
+		var ink := Tokens.ACCENT if role == "fill" else Tokens.BACKGROUND
+		var style := Palette.box(ink, Color.TRANSPARENT, 3, 0)
+		for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+			style.set_content_margin(side, 0.0)
+		bar.add_theme_stylebox_override(role, style)
 	Palette.at(parent, bar, area)

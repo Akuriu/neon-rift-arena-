@@ -74,7 +74,7 @@ jobs:
           export LIBGL_ALWAYS_SOFTWARE=1 LP_NUM_THREADS=4 NEON_QA_ISOLATED=1
           export RIFLE_QA_CAPTURE_DIR="$RUNNER_TEMP/rifle-render"
           mkdir -p "$RIFLE_QA_CAPTURE_DIR"
-          for suite in polish_render ui_audio; do
+          for suite in polish_render coop_loading ui_audio; do
             profile="$RUNNER_TEMP/rifle-$suite-profile"
             mkdir -p "$profile/NeonRiftArena"
             export XDG_DATA_HOME="$profile" XDG_CONFIG_HOME="$profile" XDG_CACHE_HOME="$profile"

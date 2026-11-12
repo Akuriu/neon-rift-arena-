@@ -1,6 +1,7 @@
 extends Node
 
 const SESSION_PATH := "res://scenes/Session.tscn"
+const SURFACE_BATCH_BUDGET_USEC := 3000
 const SceneLoader := preload("res://services/threaded_scene.gd")
 const MapLoading := preload("res://ui/loading/map_loading.gd")
 const Tokens := preload("res://ui/design/tokens.gd")
@@ -507,6 +508,7 @@ func _show_match_loading(mode: String, difficulty: String, map_id: String, run_s
 	screen = "loading"
 	map_layer = CanvasLayer.new()
 	map_layer.layer = 12
+	map_layer.process_mode = Node.PROCESS_MODE_ALWAYS
 	add_child(map_layer)
 	map_loading = MapLoading.new()
 	map_loading.mode = "Coop · " + _mode_name(mode) if online else _mode_name(mode)
@@ -553,16 +555,30 @@ func _resolve_match() -> void:
 	if map_loader.status != SceneLoader.Status.LOADED:
 		overlay.show_status("La carte n’a pas pu être chargée", -1.0, true, true)
 		return
-	overlay.show_status("Construction de l’arène", -1.0, false)
+	var request := match_request
+	overlay.show_status("Construction de l’arène", -1.0, request.online)
 	await _visible_frame()
 	if not is_instance_valid(overlay) or overlay != map_loading:
 		return
-	var request := match_request
-	if request.online and (not coop.active() or (coop.hosting and coop.roster.size() < 2)):
-		_leave_coop_loading("Le chargement a été interrompu. Le salon n’a plus assez de pilotes.")
+	if request.online and not _coop_loading_viable():
 		return
 	_launch_session(map_loader.scene, request.mode, request.difficulty, request.map, request.seed,
 		request.weapon, request.online, request.rules, false)
+	var remaining: int = session.arena.pending_surface_count()
+	var total := remaining
+	while remaining > 0:
+		session.arena.commit_surfaces(Time.get_ticks_usec() + SURFACE_BATCH_BUDGET_USEC)
+		remaining = session.arena.pending_surface_count()
+		if remaining == 0:
+			break
+		overlay.show_status("Assemblage du décor", float(total - remaining) / total, request.online)
+		await _visible_frame()
+		if not is_instance_valid(overlay) or overlay != map_loading:
+			return
+	if request.online and not _coop_loading_viable():
+		return
+	overlay.show_status("Préparation de la vue", -1.0, false)
+	_activate_session(request.online, false)
 	await _visible_frame()
 	if not is_instance_valid(overlay) or overlay != map_loading:
 		return
@@ -576,9 +592,7 @@ func _resolve_match() -> void:
 		else:
 			hud()
 	if Prefs.values.ui_motion and DisplayServer.get_name() != "headless":
-		var reveal := overlay.create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-		reveal.tween_property(overlay, "modulate:a", 0.0, Tokens.REVEAL_SECONDS)
-		await reveal.finished
+		await overlay.reveal().finished
 	if is_instance_valid(overlay) and overlay == map_loading:
 		_clear_loading()
 
@@ -602,6 +616,15 @@ func _cancel_loading() -> void:
 func _leave_coop_loading(message: String) -> void:
 	coop.status = message
 	leave_coop()
+
+func _coop_loading_viable() -> bool:
+	if not coop.active():
+		_leave_coop_loading("La connexion au salon a été fermée.")
+		return false
+	if coop.hosting and coop.roster.size() < 2:
+		_leave_coop_loading("Le salon n’a plus assez de pilotes pour démarrer.")
+		return false
+	return true
 
 func _clear_loading() -> void:
 	if is_instance_valid(map_layer):
@@ -642,6 +665,9 @@ func _launch_session(packed: PackedScene, mode: String, difficulty: String, map_
 	session.run_seed = run_seed
 	session.test_weapon = test_weapon
 	session.match_rules = rules
+	session.defer_arena_surfaces = not interactive
+	if not interactive:
+		session.process_mode = Node.PROCESS_MODE_DISABLED
 	if online:
 		session.net = coop
 	field_notice = ""
@@ -651,18 +677,24 @@ func _launch_session(packed: PackedScene, mode: String, difficulty: String, map_
 	session.director.changed.connect(_session_changed)
 	session.director.campaign_complete.connect(_milestone)
 	session.director.finished.connect(_result.bind(session), CONNECT_DEFERRED)
+	if interactive:
+		_activate_session(online, true)
+	else:
+		_freeze()
+
+func _activate_session(online: bool, interactive: bool) -> void:
 	if online:
 		coop.attach(session)
 		if coop.dedicated:
 			screen = "server"
 			return
+	if not interactive:
+		session.process_mode = Node.PROCESS_MODE_PAUSABLE
 	Sounds.duck = false
 	Sounds.set_region(last_map)
-	Sounds.set_track("menu" if mode == "explore" else "combat")
+	Sounds.set_track("menu" if last_mode == "explore" else "combat")
 	if interactive:
 		hud()
-	else:
-		_freeze()
 	if online:
 		coop.complete_launch()
 
@@ -1169,6 +1201,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 func _back() -> void:
+	if screen != "loading" and is_instance_valid(map_loading):
+		_clear_loading()
 	match screen:
 		"loading": _cancel_loading()
 		"hud": pause()

@@ -32,3 +32,20 @@ Le test en fenêtre utilise Mesa llvmpipe 25.0.7 avec quatre threads, Xorg dummy
 - Garder les surfaces de menu majoritairement statiques, borner les animations au contrôle ou au panneau concerné et mesurer toute nouvelle vue 3D.
 
 Documentation vérifiée pour Godot 4.6. [Chargement asynchrone](https://docs.godotengine.org/en/4.6/tutorials/io/background_loading.html) · [ResourceLoader](https://docs.godotengine.org/en/4.6/classes/class_resourceloader.html) · [Optimisation 3D](https://docs.godotengine.org/en/4.6/tutorials/performance/optimizing_3d_performance.html) · [Compilation des shaders](https://docs.godotengine.org/en/4.6/tutorials/performance/pipeline_compilations.html).
+
+## Rendu à douze bots · lot de regroupement
+
+Médianes de trois processus par révision sur Godot 4.6.3, Mesa llvmpipe, 1280 × 720 Faible. Réacteur, graine 7114, douze bots figés et caméra identique, VSync désactivée. Chaque passage mesure 120 images après 22 images d’échauffement. Le banc décrit le rendu, avec les bots et la simulation figés.
+
+| Mesure | Avant · `e10f852` | Après · `1c9acba` |
+| --- | ---: | ---: |
+| P50 | 33,74 ms | 32,00 ms |
+| P95 | 45,37 ms | 39,12 ms |
+| P99 | 52,94 ms | 42,76 ms |
+| Appels de dessin | 522 | 381 |
+| Primitives | 40 154 | 40 154 |
+| Mémoire statique du moteur | 55,12 Mio | 53,09 Mio |
+
+Sur la même image 720p, 138 pixels diffèrent d’au plus 3 valeurs par canal après le regroupement. La médiane historique de la v0.0.7a était de 40,90 ms au P95. Les valeurs absolues varient avec la charge du banc. Les gains sur l’Intel N150 et le Honor 400 Lite restent à mesurer.
+
+Pour reproduire le JSON, utiliser une fenêtre et un profil jetable avec `NEON_QA_ISOLATED=1`, puis lancer `godot --audio-driver Dummy --script res://tests/combat_render_benchmark.gd -- 0 1`. Pour comparer une révision antérieure, passer le chemin absolu du même script à `--script` et le répertoire de la révision à `--path`.

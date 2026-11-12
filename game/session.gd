@@ -77,6 +77,7 @@ var training_ended := false
 var workshop: Workshop
 var cargo_lift: CargoLift
 var map_interactables: Array[Node3D] = []
+var defer_arena_surfaces := false
 
 func _ready() -> void:
 	if run_seed < 0:
@@ -94,6 +95,7 @@ func _ready() -> void:
 			"bastion", "district", "grove", "station": arena = Frontiers.new(map_id)
 			_: arena = Arena.new()
 	arena.simulation_only = is_instance_valid(net) and net.dedicated
+	arena.defer_surfaces = defer_arena_surfaces
 	add_child(arena)
 	effects = Effects.new()
 	effects.enabled = not arena.simulation_only

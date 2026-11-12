@@ -338,13 +338,16 @@ func receive_room(members: Dictionary, options: Dictionary) -> void:
 	connect_left = 0.0
 	status = "Salon rejoint. Indiquez quand vous êtes prêt."
 	if in_match():
-		for id in stage.pilots.keys():
-			if not roster.has(id):
-				stage.remove_pilot(id)
-		for id in roster:
-			if not stage.pilots.has(id):
-				stage.add_pilot(int(id), roster[id], false)
+		_sync_pilots()
 	changed.emit()
+
+func _sync_pilots() -> void:
+	for id in stage.pilots.keys():
+		if not roster.has(id):
+			stage.remove_pilot(id)
+	for id in roster:
+		if not stage.pilots.has(id):
+			stage.add_pilot(int(id), roster[id], false)
 
 @rpc("authority", "call_remote", "reliable")
 func receive_launch(id: String, options: Dictionary, members: Dictionary, initial: Array) -> void:
@@ -361,6 +364,9 @@ func receive_launch(id: String, options: Dictionary, members: Dictionary, initia
 
 func attach(session: Node3D) -> void:
 	stage = session
+	_sync_pilots()
+	if hosting:
+		stage.director.player_count = stage.pilots.size()
 	replicas.clear()
 	previous_phase = -1
 	snapshot_left = 0.0

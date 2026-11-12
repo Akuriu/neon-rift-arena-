@@ -14,7 +14,7 @@ const SERVICE_TOWERS := {
 	"cryo": [Vector3(-9.0, 7.5, -2.6), 2.20, Color("#899a9e")],
 }
 
-static func build(arena: Node3D) -> Node3D:
+static func build(arena: Node3D, vegetation: Fabric.Batch) -> Node3D:
 	var scenery := Node3D.new()
 	scenery.name = "Landscape"
 	arena.structure.add_child(scenery)
@@ -22,7 +22,6 @@ static func build(arena: Node3D) -> Node3D:
 	ground.size = Vector2(174, 174)
 	var terrain := Materials.finish(TERRAIN.get(arena.map_id, Color("#767b63")), "gravel", 0.42)
 	Fabric.place(scenery, ground, terrain, Vector3(0, -0.23, 0), Vector3.ZERO, false)
-	var vegetation := Fabric.Batch.new()
 	vegetation.world_materials = true
 	var edge: Vector2 = arena.half_size
 	var rng := RandomNumberGenerator.new()
@@ -34,7 +33,6 @@ static func build(arena: Node3D) -> Node3D:
 			tree(vegetation, at, rng.randf_range(5.3, 8.7), rng)
 	if SERVICE_TOWERS.has(arena.map_id):
 		_service_towers(vegetation, edge, SERVICE_TOWERS[arena.map_id])
-	vegetation.commit(scenery, false)
 	return scenery
 
 static func _service_towers(work: Fabric.Batch, edge: Vector2, spec: Array) -> void:

@@ -2,7 +2,10 @@
 
 ## v0.0.7-alpha
 
-- La v0.0.7b Preview ajoute un démarrage animé avec chargement réel, une transition de carte solo et des commandes de menu réactives.
+- La v0.0.7b Preview ajoute un démarrage animé avec chargement réel, une transition de carte en solo et en coop et des commandes de menu réactives.
+- Assemblage des surfaces de l’arène sur plusieurs images et ouverture sur la vue 3D prête à jouer.
+- Bilan, progression, contrats et classements retravaillés. Le bilan coop attend l’état validé par l’hôte.
+- Surfaces des personnages et de l’équipement regroupées par finition pour réduire les appels de dessin.
 - L’accueil, Jouer, la pause et l’armurerie utilisent des composants partagés. Le réglage de mouvement réduit se trouve sous Accessibilité.
 - Éclairage et matériaux revus sur les sept arènes, aperçus des trois parcours rendus dans Godot et poses de déplacement plus souples.
 - Sons de menu réglables, fondu entre ambiances de carte et effets d’impact bornés par préréglage.
