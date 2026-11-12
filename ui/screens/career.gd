@@ -4,6 +4,7 @@ const Palette := preload("res://ui/skin.gd")
 const Catalog := preload("res://game/catalog.gd")
 const Profile := preload("res://services/profile.gd")
 const Career := preload("res://services/career.gd")
+const MotionButton := preload("res://ui/design/components/motion_button.gd")
 
 var app: Node
 var page := "history"
@@ -46,14 +47,14 @@ func _history() -> void:
 	for run in data.career.history:
 		if not Catalog.MAPS.has(run.map):
 			continue
-		var button := Button.new()
+		var button := MotionButton.new()
 		button.custom_minimum_size.y = 47
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.text = "%s  /  %s  /  %s   ·   %d pts   ·   %s   ·   +%d XP / +%d pièces   ›" % [
 			app._mode_name(run.mode), Catalog.MAPS[run.map].name, Catalog.DIFFICULTIES[run.difficulty].name,
 			run.score, Palette.clock(run.seconds), run.xp, run.coins]
 		button.tooltip_text = "Rejouer la graine %d" % run.seed if run.mode != "coop" else "Ouvrir le salon coop"
-		button.pressed.connect(app.replay_report.bind(run))
+		button.bind_action(app.replay_report.bind(run))
 		rows.add_child(button)
 	if rows.get_child_count() == 0:
 		_line("Les prochaines opérations terminées apparaîtront ici.")

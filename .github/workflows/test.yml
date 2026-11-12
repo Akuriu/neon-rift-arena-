@@ -3,7 +3,7 @@ name: Rifle Arena checks
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main, feature/v0.0.6]
+    branches: [main, feature/v0.0.6, feature/v0.0.7]
   push:
     branches: [main, 'feature/**']
     paths:

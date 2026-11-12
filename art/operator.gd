@@ -31,7 +31,7 @@ class Limb:
 		var along := (upper_length * upper_length - lower_length * lower_length + length * length) / (2.0 * length)
 		var sideways := bend - axis * bend.dot(axis)
 		if sideways.length_squared() < 0.0001:
-			sideways = axis.cross(Vector3.RIGHT)
+			sideways = axis.cross(Vector3.FORWARD if absf(axis.x) > 0.92 else Vector3.RIGHT)
 		var joint := origin + axis * along + sideways.normalized() * sqrt(maxf(0.0, upper_length * upper_length - along * along))
 		tip.position = origin + axis * length
 		upper.position = origin
@@ -115,6 +115,22 @@ func kick(fire := true) -> void:
 	recoil = 1.0
 	flash_time = 0.060 if fire else 0.0
 
+func reset_motion() -> void:
+	gait = 0.0
+	movement = Vector2.ZERO
+	lean = 0.0
+	low_weight = 0.0
+	slide_weight = 0.0
+	air_weight = 0.0
+	landing = 0.0
+	was_airborne = false
+	idle_clock = 0.0
+	recoil = 0.0
+	flash_time = 0.0
+	swap = 0.0
+	torso.rotation = Vector3.ZERO
+	_aim_weapon(0.0, 0.0, false, false, 0.0, 1.0)
+
 func animate(delta: float, motion: Vector3, pitch: float, crouch: float, flags: int, reload: float) -> void:
 	var running := (flags & (Track.RUN | Track.DASH)) != 0
 	var aiming := (flags & Track.AIM) != 0
@@ -134,22 +150,26 @@ func animate(delta: float, motion: Vector3, pitch: float, crouch: float, flags: 
 		landing = 1.0
 	was_airborne = airborne
 	var bounce := absf(sin(gait * TAU)) * stride * 0.029 * (1.0 - air_weight)
-	hips.position = Vector3(0, HIP - low_weight * 0.30 - slide_weight * 0.095 - landing * 0.107 + bounce, slide_weight * 0.040)
+	var weight_shift := sin(gait * TAU) * stride * (1.0 - maxf(air_weight, slide_weight))
+	hips.position = Vector3(weight_shift * 0.032, HIP - low_weight * 0.30 - slide_weight * 0.095 - landing * 0.107 + bounce,
+		slide_weight * 0.040)
 	lean = lerpf(lean, clampf(-motion.z * 0.018, -0.12, 0.22) - slide_weight * 0.31, blend)
 	torso.rotation.x = lean - landing * 0.15 + sin(idle_clock * 2.0) * 0.014
-	torso.rotation.z = lerpf(torso.rotation.z, clampf(-motion.x * 0.017, -0.17, 0.17), blend)
+	torso.rotation.z = lerpf(torso.rotation.z, clampf(-motion.x * 0.017, -0.17, 0.17) - weight_shift * 0.032, blend)
 	for i in 2:
 		var side := -1.0 if i == 0 else 1.0
 		var phase := fposmod(gait + i * 0.5, 1.0)
-		var travel := lerpf(0.43, -0.48, phase / 0.60) if phase < 0.60 else lerpf(-0.48, 0.43, (phase - 0.60) / 0.40)
-		var lift := 0.0 if phase < 0.60 else sin(PI * (phase - 0.60) / 0.40) * (0.21 if running else 0.14)
+		var swing := clampf((phase - 0.60) / 0.40, 0.0, 1.0)
+		var travel := lerpf(0.43, -0.48, phase / 0.60) if phase < 0.60 else lerpf(-0.48, 0.43, smoothstep(0.0, 1.0, swing))
+		var lift := sin(PI * swing) * (0.21 if running else 0.14)
 		var foot := Vector3(side * 0.111, 0.090 + lift * stride, 0.023)
 		foot += direction * travel * stride * (1.32 if running else 0.92)
 		foot = foot.lerp(Vector3(side * 0.12, 0.22 + i * 0.068, 0.17 - i * 0.25), air_weight)
 		foot = foot.lerp(Vector3(side * 0.15, 0.092, -0.48 + i * 0.27), slide_weight)
 		var limb := legs[i]
 		limb.place(hips.position + Vector3(side * 0.109, 0, 0.024), foot, Vector3(side * 0.20, 0, -1.0))
-		limb.tip.rotation.x = air_weight * (0.31 - i * 0.24) - slide_weight * 0.19
+		var ankle := sin(TAU * swing) * 0.19 * stride * (1.0 - maxf(air_weight, slide_weight))
+		limb.tip.rotation.x = ankle + air_weight * (0.31 - i * 0.24) - slide_weight * 0.19
 	landing = move_toward(landing, 0.0, delta * 4.1)
 	_aim_weapon(delta, pitch, aiming, running, reload, blend)
 
@@ -195,6 +215,8 @@ static func _body(node: Node3D, cloth: Color, heavy: bool, accessory: String) ->
 	_box(w, Vector3(0, 1.220, -0.095), Vector3(0.363, 0.338, 0.128), PLATE if heavy else WEBBING, 0.034)
 	_box(w, Vector3(0, 1.175, 0.148), Vector3(0.271, 0.372, 0.152), cloth.darkened(0.25), 0.042)
 	_box(w, Vector3(0, 1.287, 0.217), Vector3(0.236, 0.057, 0.023), WEBBING, 0.009)
+	_box(w, Vector3(-0.112, 1.245, -0.164), Vector3(0.094, 0.105, 0.033), cloth.darkened(0.25), 0.009)
+	_box(w, Vector3(-0.112, 1.276, -0.183), Vector3(0.064, 0.014, 0.008), PLATE, 0.002)
 	for side in [-1.0, 1.0]:
 		_box(w, Vector3(side * 0.123, 1.336, -0.061), Vector3(0.063, 0.153, 0.175), WEBBING, 0.021, Vector3(0.36, 0, 0))
 		_box(w, Vector3(side * 0.137, 1.074, 0.017), Vector3(0.093, 0.141, 0.263), WEBBING, 0.016)
@@ -262,4 +284,4 @@ static func _limb(parent: Node3D, upper: float, lower: float) -> Limb:
 
 static func _box(w: Fabric.Batch, at: Vector3, size: Vector3, color: Color, cut: float,
 		rotation := Vector3.ZERO) -> void:
-	w.put(Fabric.bevel(size, cut), Materials.finish(color, "canvas", 7.5), at, rotation, false)
+	w.put(Fabric.bevel(size, cut, color), Materials.vertex_finish("canvas", 7.5), at, rotation, false)

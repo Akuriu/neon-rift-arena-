@@ -26,6 +26,7 @@ func run() -> void:
 	deadline = Time.get_ticks_msec() + 110000
 	app = load("res://scenes/App.tscn").instantiate()
 	root.add_child(app)
+	app.staged_loading = true
 	app.open_lobby()
 	net = app.coop
 	root.get_node("Prefs").values.telemetry = true
@@ -56,6 +57,10 @@ func host_game() -> void:
 	if not await until(func(): return net.roster.size() == expected and net.can_start(), "Pilotes prêts"):
 		return
 	app.lobby.start.pressed.emit()
+	check(app.screen == "loading" and app.map_loading != null and app.session == null and not net.can_start(),
+		"Le masque coop précède la construction, le lancement ne peut pas être dupliqué")
+	if not await until(func(): return app.screen == "hud", "Arène coop chargée chez l’hôte"):
+		return
 	var stage = app.session
 	var other_ids: Array = stage.pilots.keys()
 	other_ids.erase(1)
@@ -162,7 +167,7 @@ func dedicated_client() -> void:
 	if not await enter_lobby():
 		return
 	net.ready_up()
-	if not await until(func(): return net.in_match(), "Démarrage du serveur headless sans joueur hôte"):
+	if not await until(func(): return net.in_match() and app.screen == "hud", "Démarrage du serveur headless sans joueur hôte"):
 		return
 	var stage = app.session
 	check(stage.mode == "short" and stage.map_id == "skyline" and not stage.pilots.has(1) and stage.pilots.size() == 2,
@@ -175,7 +180,7 @@ func client_game() -> void:
 	if not await enter_lobby():
 		return
 	app.lobby.ready_button.pressed.emit()
-	if not await until(func(): return net.in_match(), "Lancement reçu"):
+	if not await until(func(): return net.in_match() and app.screen == "hud", "Lancement reçu et arène prête"):
 		return
 	var stage = app.session
 	var pilot = stage.player
@@ -241,7 +246,8 @@ func client_game() -> void:
 		return
 	check(app.session.result_override.wave == 7 and app.session.credited_result.get("ok", false), "Bilan autoritaire et progression locale")
 	if await until(func(): return not net.active(), "Fin de connexion de l’hôte"):
-		check(app.screen == "lobby" and app.session == null, "Retour au salon sans état résiduel")
+		check(app.screen == "lobby" and app.session == null and app.map_loading == null
+			and net.pending_round.is_empty() and net.pending_result.is_empty(), "Retour au salon sans état résiduel")
 
 func enter_lobby() -> bool:
 	app.lobby.port.text = str(port)

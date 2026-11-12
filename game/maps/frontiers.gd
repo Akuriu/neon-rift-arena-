@@ -40,11 +40,7 @@ func _build_layout() -> void:
 	_terminal()
 
 func _floor() -> void:
-	deck_surface = ShaderMaterial.new()
-	deck_surface.shader = preload("res://assets/art/deck.gdshader")
-	var surface := PlaneMesh.new()
-	surface.size = half_size * 2.0
-	Fabric.place(structure, surface, deck_surface, Vector3.ZERO, Vector3.ZERO, false)
+	_paint_deck()
 	_block(Vector3(0, -0.35, 0), Vector3(50, 0.7, 48), Vector3.ZERO, false)
 	var plaque: String = {"bastion": "POSTE RADIO 02", "district": "RUE DU MARCHÉ",
 		"grove": "SENTIER NORD", "station": "ACCÈS AUX QUAIS"}[map_id]

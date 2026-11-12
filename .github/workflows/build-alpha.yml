@@ -66,6 +66,34 @@ jobs:
           if grep -E 'ERROR:|Parse Error' "$RUNNER_TEMP/import.log"; then exit 1; fi
           python3 tools/release_version.py
           python3 tools/run_tests.py --suite all
+      - name: Render the menus and verify the digital audio mix
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb xauth libgl1-mesa-dri
+          export LIBGL_ALWAYS_SOFTWARE=1 LP_NUM_THREADS=4 NEON_QA_ISOLATED=1
+          export RIFLE_QA_CAPTURE_DIR="$RUNNER_TEMP/rifle-render"
+          mkdir -p "$RIFLE_QA_CAPTURE_DIR"
+          for suite in polish_render coop_loading ui_audio; do
+            profile="$RUNNER_TEMP/rifle-$suite-profile"
+            mkdir -p "$profile/NeonRiftArena"
+            export XDG_DATA_HOME="$profile" XDG_CONFIG_HOME="$profile" XDG_CACHE_HOME="$profile"
+            export NEON_QA_PROFILE_PATH="$profile"
+            extra=()
+            if [[ "$suite" == ui_audio ]]; then
+              extra=(--write-movie "$RUNNER_TEMP/rifle-mix.avi" --fixed-fps 60)
+            fi
+            log="$RIFLE_QA_CAPTURE_DIR/$suite.log"
+            timeout 90 xvfb-run -a -s '-screen 0 1920x1080x24' godot --audio-driver Dummy "${extra[@]}" \
+              --script "res://tests/$suite.gd" > "$log" 2>&1 || { cat "$log"; exit 1; }
+            cat "$log"
+            if grep -E '^FAIL |ERROR:|Parse Error|ObjectDB instances leaked' "$log"; then exit 1; fi
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rifle-polish-render
+          path: ${{ runner.temp }}/rifle-render
+          if-no-files-found: error
       - name: Export and verify binaries
         env:
           GH_TOKEN: ${{ github.token }}
@@ -244,13 +272,14 @@ jobs:
           "$adb" logcat -b all -c
           "$adb" shell am start -W -n "$activity" | tee "$RUNNER_TEMP/android-start.log"
           grep -F 'Status: ok' "$RUNNER_TEMP/android-start.log"
-          sleep 9
+          sleep 12
           "$adb" shell dumpsys activity activities > "$RUNNER_TEMP/android-activity.log"
           "$adb" logcat -d -s AndroidRuntime godot > "$RUNNER_TEMP/android-runtime.log"
           tail -60 "$RUNNER_TEMP/android-runtime.log"
           "$adb" shell pidof "$package"
           grep -E '(topResumedActivity|mResumedActivity)' "$RUNNER_TEMP/android-activity.log" | grep -F "$package/"
           grep -F 'Godot Engine v' "$RUNNER_TEMP/android-runtime.log"
+          grep -F 'RIFLE_BOOT ready' "$RUNNER_TEMP/android-runtime.log"
           if grep -E 'FATAL EXCEPTION|SCRIPT ERROR:|SHADER ERROR:|Program linking failed' "$RUNNER_TEMP/android-runtime.log"; then exit 1; fi
 
   windows-smoke:
@@ -279,12 +308,15 @@ jobs:
               Copy-Item tests/fixtures/profile-v0.0.5.json (Join-Path $save pilot_profile.json)
             }
             $log = Join-Path $env:RUNNER_TEMP "rifle-$profile.log"
-            $process = Start-Process -FilePath $exe -WorkingDirectory $env:RUNNER_TEMP -ArgumentList @('--headless', '--quit-after', '60', '--log-file', $log) -PassThru
+            $process = Start-Process -FilePath $exe -WorkingDirectory $env:RUNNER_TEMP -ArgumentList @('--headless', '--quit-after', '240', '--log-file', $log) -PassThru
             if (-not $process.WaitForExit(60000)) { $process.Kill(); throw "Windows launch timed out for $profile" }
             if (-not (Test-Path $log)) { throw "Missing startup log for $profile" }
             Get-Content $log
             if ($process.ExitCode -ne 0 -or (Select-String -Path $log -Pattern 'ERROR:|Parse Error' -Quiet)) {
               throw "Windows launch failed for $profile"
+            }
+            if (-not (Select-String -Path $log -SimpleMatch 'RIFLE_BOOT ready' -Quiet)) {
+              throw "Windows menu did not become ready for $profile"
             }
           }
       - name: Test desktop mouse input on Windows

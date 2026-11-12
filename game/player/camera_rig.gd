@@ -47,7 +47,8 @@ func present(delta: float) -> void:
 		1.0 - exp(-10.0 * delta))
 	var footfall := 0.0
 	if Prefs.values.head_bob:
-		footfall = (absf(sin(pilot.rendered_step_phase())) - 0.54) * step_weight * 0.046 * strength
+		var step := sin(pilot.rendered_step_phase())
+		footfall = (step * step - 0.5) * step_weight * 0.039 * strength
 	var eye: Vector3 = pilot.get_global_transform_interpolated().origin
 	var view_basis: Basis = pilot.head.global_basis * Basis(Vector3.BACK, lean)
 	eye.y += eye_height + footfall - spring * Prefs.values.shake * strength

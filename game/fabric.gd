@@ -44,7 +44,7 @@ static func ring(radius: float, width: float, segments := 32) -> TorusMesh:
 	mesh.ring_segments = 8
 	return mesh
 
-static func bevel(size: Vector3, cut: float) -> ArrayMesh:
+static func bevel(size: Vector3, cut: float, tint := Color.TRANSPARENT) -> ArrayMesh:
 	var x := size.x * 0.5
 	var z := size.z * 0.5
 	var y := size.y * 0.5
@@ -54,6 +54,8 @@ static func bevel(size: Vector3, cut: float) -> ArrayMesh:
 		Vector2(-x, z - c), Vector2(-x, -z + c)])
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	if tint.a > 0.0:
+		st.set_color(tint)
 	for i in rim.size():
 		var a := rim[i]
 		var b := rim[(i + 1) % rim.size()]
@@ -68,6 +70,16 @@ static func bevel(size: Vector3, cut: float) -> ArrayMesh:
 		_tri(st, Vector3.DOWN * y, r, s, Vector3.DOWN)
 	st.index()
 	return st.commit()
+
+static func tint_surface(source: Mesh, tint: Color) -> ArrayMesh:
+	var arrays := source.surface_get_arrays(0)
+	var colors := PackedColorArray()
+	colors.resize(arrays[Mesh.ARRAY_VERTEX].size())
+	colors.fill(tint)
+	arrays[Mesh.ARRAY_COLOR] = colors
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
 
 static func _tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, outward: Vector3) -> void:
 	if (b - a).cross(c - a).dot(outward) > 0.0:
@@ -94,8 +106,11 @@ static func place(parent: Node3D, mesh: Mesh, material: Material, at: Vector3,
 class Batch:
 	var groups := {}
 	var world_materials := false
+	var enabled := true
 
 	func put(mesh: Mesh, material: Material, at: Vector3, rotation := Vector3.ZERO, sector := true) -> void:
+		if not enabled:
+			return
 		var cell := Vector2i(floori(at.x / 13.0), floori(at.z / 13.0)) if sector else Vector2i.ZERO
 		var key := [cell, material]
 		if not groups.has(key):
@@ -106,8 +121,8 @@ class Batch:
 		var xform := Transform3D(Basis.from_euler(rotation), at - Vector3(cell.x * 13.0, 0.0, cell.y * 13.0))
 		tool.append_from(mesh, 0, xform)
 
-	func commit(parent: Node3D, shadows := true) -> void:
-		for key in groups:
+	func commit(parent: Node3D, shadows := true, deadline_usec := -1) -> void:
+		for key in groups.keys():
 			var tool: SurfaceTool = groups[key]
 			tool.index()
 			var at := Vector3(key[0].x * 13.0, 0.0, key[0].y * 13.0)
@@ -123,4 +138,6 @@ class Batch:
 			part.position = at
 			part.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if casts else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			parent.add_child(part)
-		groups.clear()
+			groups.erase(key)
+			if deadline_usec >= 0 and Time.get_ticks_usec() >= deadline_usec:
+				break

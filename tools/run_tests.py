@@ -136,7 +136,9 @@ def main():
             return 1
         outcomes = []
         if args.suite in ("all", "solo"):
-            for script in ["regression", "v2_wave_generation", "v2_systems",
+            for script in ["boot_flow", "map_loading", "coop_loading", "ui_navigation", "vfx_budget", "session_cycles"]:
+                outcomes.append(scenario(engine, directory, script, "--script", f"res://tests/{script}.gd"))
+            for script in ["regression", "profile_recovery", "v2_wave_generation", "v2_systems",
                            "v3_feeling", "v3_modes", "v7_gungame", "v7_parkour", "v7_interactions", "v7_motion", "v3_career", "v3_field", "export_smoke"]:
                 outcomes.append(scenario(engine, directory, script, "--fixed-fps", "60",
                                          "--script", f"res://tests/{script}.gd"))
@@ -149,6 +151,9 @@ def main():
             for fps in (30, 45, 60):
                 outcomes.append(scenario(engine, directory, f"v6_camera_{fps}", "--fixed-fps", str(fps),
                                          "--script", "res://tests/v6_camera.gd"))
+            for fps in (30, 45, 60, 90):
+                outcomes.append(scenario(engine, directory, f"ui_motion_{fps}", "--fixed-fps", str(fps),
+                                         "--script", "res://tests/ui_motion.gd"))
             for mode, arena in [("survival", "cryo"), ("short", "skyline"), ("trial", "reactor"), ("boss_rush", "reactor")]:
                 outcomes.append(scenario(engine, directory, mode, "--fixed-fps", "120",
                                          "--script", "res://tests/survival.gd", "--", mode, arena, "discovery"))

@@ -1,21 +1,25 @@
 extends RefCounted
 
-const TEXT := Color("#f2efe6")
-const MUTED := Color("#aab5a8")
-const QUIET := Color("#84877a")
+const Tokens := preload("res://ui/design/tokens.gd")
+const MotionButton := preload("res://ui/design/components/motion_button.gd")
+const TEXT := Tokens.TEXT
+const MUTED := Tokens.MUTED
+const QUIET := Tokens.QUIET
 const CYAN := Color("#d1c4a9")
-const AMBER := Color("#c8ad83")
+const AMBER := Tokens.ACCENT
 const PINK := Color("#d8846e")
-const PANEL := Color("#202723")
-const BASE := Color("#151c19")
-const LINE := Color("#44473d")
+const PANEL := Tokens.SURFACE
+const BASE := Tokens.BACKGROUND
+const LINE := Tokens.EDGE
 const BODY := preload("res://assets/fonts/OpenSans-Regular.ttf")
 const BOLD := preload("res://assets/fonts/OpenSans-Bold.ttf")
 const HEAD := preload("res://assets/fonts/OpenSans-CondBold.ttf")
 const BRAND := HEAD
 const MONO := preload("res://assets/fonts/DejaVuSansMono.ttf")
 
-static func box(fill: Color, edge: Color = Color.TRANSPARENT, corner := 5, border := 1) -> StyleBoxFlat:
+static var themes := {}
+
+static func box(fill: Color, edge: Color = Color.TRANSPARENT, corner := Tokens.CORNER, border := 1) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = fill
 	style.border_color = edge
@@ -28,15 +32,18 @@ static func box(fill: Color, edge: Color = Color.TRANSPARENT, corner := 5, borde
 	return style
 
 static func theme() -> Theme:
+	var mobile := Prefs.mobile()
+	if themes.has(mobile):
+		return themes[mobile]
 	var skin := Theme.new()
 	skin.default_font = BODY
-	skin.default_font_size = 19 if Prefs.mobile() else 17
+	skin.default_font_size = 19 if mobile else 17
 	for kind in ["Button", "OptionButton", "CheckButton"]:
 		skin.set_stylebox("normal", kind, box(PANEL, LINE))
-		skin.set_stylebox("hover", kind, box(Color("#363a30"), Color("#73715f")))
-		skin.set_stylebox("pressed", kind, box(Color("#424437"), CYAN))
-		skin.set_stylebox("hover_pressed", kind, box(Color("#424437"), CYAN))
-		skin.set_stylebox("focus", kind, box(Color.TRANSPARENT, AMBER, 5, 2))
+		skin.set_stylebox("hover", kind, box(Tokens.HOVER, Color("#737e70")))
+		skin.set_stylebox("pressed", kind, box(Tokens.PRESSED, CYAN))
+		skin.set_stylebox("hover_pressed", kind, box(Tokens.PRESSED, CYAN))
+		skin.set_stylebox("focus", kind, box(Color.TRANSPARENT, Tokens.FOCUS, Tokens.CORNER, 2))
 		skin.set_stylebox("disabled", kind, box(BASE, LINE))
 		skin.set_color("font_color", kind, TEXT)
 		skin.set_color("font_hover_color", kind, Color.WHITE)
@@ -44,6 +51,12 @@ static func theme() -> Theme:
 		skin.set_color("font_pressed_color", kind, TEXT)
 		skin.set_color("font_disabled_color", kind, QUIET)
 		skin.set_font("font", kind, BOLD)
+	_action_style(skin, "PrimaryAction", Tokens.ACCENT)
+	_action_style(skin, "DangerAction", Tokens.DANGER)
+	skin.set_type_variation("SelectedTab", "Button")
+	skin.set_stylebox("normal", "SelectedTab", box(Tokens.RAISED, AMBER))
+	skin.set_stylebox("hover", "SelectedTab", box(Tokens.HOVER, AMBER))
+	skin.set_color("font_color", "SelectedTab", Tokens.FOCUS)
 	skin.set_color("font_color", "Label", TEXT)
 	skin.set_stylebox("panel", "PanelContainer", box(PANEL, LINE))
 	skin.set_stylebox("panel", "PopupMenu", box(BASE, LINE))
@@ -59,8 +72,19 @@ static func theme() -> Theme:
 	skin.set_color("font_color", "LineEdit", TEXT)
 	skin.set_color("font_placeholder_color", "LineEdit", MUTED)
 	skin.set_color("caret_color", "LineEdit", TEXT)
-	skin.set_constant("v_separation", "PopupMenu", 13 if Prefs.mobile() else 9)
+	skin.set_constant("v_separation", "PopupMenu", 13 if mobile else 9)
+	themes[mobile] = skin
 	return skin
+
+static func _action_style(skin: Theme, role: String, ink: Color) -> void:
+	skin.set_type_variation(role, "Button")
+	skin.set_stylebox("normal", role, box(ink, ink))
+	skin.set_stylebox("hover", role, box(ink.lightened(0.16), ink.lightened(0.16)))
+	skin.set_stylebox("pressed", role, box(ink.darkened(0.12), ink.darkened(0.12)))
+	skin.set_stylebox("hover_pressed", role, skin.get_stylebox("pressed", role))
+	skin.set_stylebox("focus", role, box(Color.TRANSPARENT, Color("#fff4db"), Tokens.CORNER, 2))
+	for key in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color"]:
+		skin.set_color(key, role, BASE)
 
 static func clock(seconds: float) -> String:
 	var time := maxi(0, int(seconds))
@@ -93,30 +117,29 @@ static func label(parent: Node, rect: Rect2, value: String, pixels := 16,
 	return node
 
 static func button(parent: Node, rect: Rect2, caption: String, action: Callable,
-		primary := false, alignment := HORIZONTAL_ALIGNMENT_LEFT) -> Button:
-	var node := Button.new()
+		primary := false, alignment := HORIZONTAL_ALIGNMENT_LEFT, destructive := false) -> Button:
+	var node := MotionButton.new()
 	node.text = caption
 	node.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	node.alignment = alignment
-	node.custom_minimum_size = Vector2(0, 38)
+	node.custom_minimum_size = Vector2(0, Tokens.CONTROL_HEIGHT)
 	node.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	if primary:
-		var ink := AMBER
-		node.add_theme_stylebox_override("normal", box(ink, ink, 5))
-		node.add_theme_stylebox_override("hover", box(ink.lightened(0.16), ink.lightened(0.16), 5))
-		node.add_theme_stylebox_override("pressed", box(ink.darkened(0.14), ink.darkened(0.14), 5))
-		node.add_theme_stylebox_override("focus", box(Color.TRANSPARENT, AMBER, 4, 2))
-		for key in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color"]:
-			node.add_theme_color_override(key, Color("#22241c"))
-	node.pressed.connect(Sounds.play.bind("click"))
-	node.pressed.connect(action)
+	if destructive:
+		node.theme_type_variation = "DangerAction"
+	elif primary:
+		node.theme_type_variation = "PrimaryAction"
+	if caption.begins_with("Annuler"):
+		node.sound_cue = "ui_cancel"
+	elif primary or destructive:
+		node.sound_cue = "ui_confirm"
+	node.bind_action(action)
 	at(parent, node, rect)
 	return node
 
 static func panel(parent: Node, rect: Rect2, fill: Color = PANEL, outline: Color = LINE) -> Panel:
 	var node := Panel.new()
 	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	node.add_theme_stylebox_override("panel", box(fill, outline, 5))
+	node.add_theme_stylebox_override("panel", box(fill, outline))
 	at(parent, node, rect)
 	return node
 

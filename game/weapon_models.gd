@@ -224,7 +224,7 @@ static func _scope(w: Fabric.Batch, z: float, y: float, length: float) -> void:
 		_cylinder(w, Vector3(0, y, z + end * (length * 0.5 - 0.043)), 0.043, 0.086, DARK)
 		_cylinder(w, Vector3(0, y, z + end * (length * 0.5 + 0.001)), 0.033, 0.004, GLASS)
 	_cylinder(w, Vector3(0, y, z), 0.028, length - 0.06, DARK)
-	w.put(Fabric.tube(0.021, 0.024, 10), Materials.finish(STEEL, "steel", 9.0, 0.32),
+	w.put(Fabric.tint_surface(Fabric.tube(0.021, 0.024, 10), STEEL), Materials.vertex_finish("steel", 9.0, 0.32),
 		Vector3(0, y + 0.030, z), Vector3.ZERO, false)
 
 static func _hands(root: Node3D, index: int) -> void:
@@ -236,7 +236,8 @@ static func _hands(root: Node3D, index: int) -> void:
 		var wrist := palm + Vector3(0.023 if side == 0 else -0.034, -0.025, 0.049)
 		var elbow := Vector3(0.17 if side == 0 else -0.23, -0.37, 0.52)
 		var link := elbow - wrist
-		w.put(Fabric.tube(0.064, link.length(), 10, 0.044), Materials.finish(Color("#747860"), "canvas", 12.0),
+		w.put(Fabric.tint_surface(Fabric.tube(0.064, link.length(), 10, 0.044), Color("#747860")),
+			Materials.vertex_finish("canvas", 12.0),
 			(wrist + elbow) * 0.5, Basis(Quaternion(Vector3.UP, link.normalized())).get_euler(), false)
 		_block(w, wrist, Vector3(0.092, 0.079, 0.075), Color("#5c5e52"), 0.02, Vector3(0.28, 0, 0), "canvas")
 		_block(w, palm, Vector3(0.079, 0.101 if side == 0 else 0.066, 0.112), Color("#4b4a40"),
@@ -257,9 +258,9 @@ static func _muzzle_flash(anchor: Node3D) -> Node3D:
 
 static func _block(w: Fabric.Batch, at: Vector3, size: Vector3, color: Color, cut := 0.012,
 		rotation := Vector3.ZERO, finish := "steel") -> void:
-	var paint := Materials.finish(color, finish, 9.0 if finish == "steel" else 4.0, 0.26 if finish == "steel" else 0.0)
-	w.put(Fabric.bevel(size, cut), paint, at, rotation, false)
+	var paint := Materials.vertex_finish(finish, 9.0 if finish == "steel" else 4.0, 0.26 if finish == "steel" else 0.0)
+	w.put(Fabric.bevel(size, cut, color), paint, at, rotation, false)
 
 static func _cylinder(w: Fabric.Batch, at: Vector3, radius: float, depth: float, color: Color, sides := 12) -> void:
-	w.put(Fabric.tube(radius, depth, sides), Materials.finish(color, "steel", 9.0, 0.33),
+	w.put(Fabric.tint_surface(Fabric.tube(radius, depth, sides), color), Materials.vertex_finish("steel", 9.0, 0.33),
 		at, Vector3(PI * 0.5, 0, 0), false)

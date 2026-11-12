@@ -33,14 +33,7 @@ func _build_layout() -> void:
 	_distant_beacon()
 
 func _floor() -> void:
-	var deck := PlaneMesh.new()
-	deck.size = half_size * 2.0
-	var finish := ShaderMaterial.new()
-	finish.shader = preload("res://assets/art/deck.gdshader")
-	deck_surface = finish
-	finish.set_shader_parameter("base_color", Color("#484c52"))
-	finish.set_shader_parameter("groove_color", Color("#272c38"))
-	Fabric.place(structure, deck, finish, Vector3.ZERO, Vector3.ZERO, false)
+	_paint_deck()
 	_block(Vector3(0, -0.25, 0), Vector3(60, 0.5, 50), Vector3.ZERO, false)
 	for lane in [-9.1, 9.1]:
 		for j in 12:

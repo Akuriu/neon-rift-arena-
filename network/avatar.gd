@@ -48,6 +48,8 @@ func present_alive(active: bool) -> void:
 	if active:
 		body.rotation = Vector3.ZERO
 		body.position = Vector3.ZERO
+		rig.reset_motion()
+		rig.animate(0.0, Vector3.ZERO, 0.0, 0.0, 0, 0.0)
 		body.show()
 		body.reset_physics_interpolation()
 	else:

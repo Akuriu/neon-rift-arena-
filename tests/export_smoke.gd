@@ -35,7 +35,10 @@ func run() -> void:
 	mouse_button(MOUSE_BUTTON_RIGHT, false)
 	check(not Input.is_action_pressed("fire") and not Input.is_action_pressed("ads"),
 		"Relâcher les boutons libère le tir et la visée")
-	check(root.get_node("Sounds").bank.size() == 45, "45 échantillons audio chargés depuis le paquet")
+	var sounds := root.get_node("Sounds")
+	for id in sounds.IDS:
+		sounds.get_sample(id)
+	check(sounds.bank.size() == sounds.IDS.size(), "Tous les échantillons audio sont chargés à la demande")
 	app.begin("domination", "discovery", "station", 882, "", false, {"bots": 4})
 	for frame in 185:
 		await physics_frame

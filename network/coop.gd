@@ -29,6 +29,8 @@ var returning := {}
 var reconnect_token := ""
 var endpoint := ""
 var match_id := ""
+var pending_round := []
+var pending_result := {}
 var room := {"map": "reactor", "mode": "survival", "difficulty": "standard", "seed": 0}
 var stage: Node3D
 var status := "Hébergez une partie ou entrez l’adresse de l’hôte."
@@ -131,13 +133,13 @@ func join(address: String, port: int, passcode := "", version := PROTOCOL) -> bo
 	return true
 
 func configure(map: String, mode: String, difficulty: String) -> void:
-	if not hosting or in_match() or not Catalog.MAPS.has(map) or mode not in MODES or difficulty not in Prefs.DIFFICULTIES:
+	if not hosting or not match_id.is_empty() or not Catalog.MAPS.has(map) or mode not in MODES or difficulty not in Prefs.DIFFICULTIES:
 		return
 	room = {"map": map, "mode": mode, "difficulty": difficulty, "seed": 0}
 	_broadcast_room()
 
 func can_start() -> bool:
-	if not hosting or in_match() or roster.size() < 2:
+	if not hosting or not match_id.is_empty() or roster.size() < 2:
 		return false
 	for entry in roster.values():
 		if not entry.ready:
@@ -181,6 +183,8 @@ func stop() -> void:
 	returning.clear()
 	replicas.clear()
 	match_id = ""
+	pending_round = []
+	pending_result = {}
 	connect_left = 0.0
 	quit_due = 0.0
 	sequence = 0
@@ -272,7 +276,7 @@ func register(version: int, pilot_name: String, gear: Dictionary, passcode: Stri
 	if roster.size() >= capacity:
 		_reject(id, "Salon complet.")
 		return
-	if in_match() and stage.director.phase != Director.Phase.UPGRADE:
+	if not match_id.is_empty() and (not in_match() or stage.director.phase != Director.Phase.UPGRADE):
 		_reject(id, "Partie en cours. Rejoignez pendant l’intermission.")
 		return
 	handshakes.erase(id)
@@ -334,27 +338,35 @@ func receive_room(members: Dictionary, options: Dictionary) -> void:
 	connect_left = 0.0
 	status = "Salon rejoint. Indiquez quand vous êtes prêt."
 	if in_match():
-		for id in stage.pilots.keys():
-			if not roster.has(id):
-				stage.remove_pilot(id)
-		for id in roster:
-			if not stage.pilots.has(id):
-				stage.add_pilot(int(id), roster[id], false)
+		_sync_pilots()
 	changed.emit()
+
+func _sync_pilots() -> void:
+	for id in stage.pilots.keys():
+		if not roster.has(id):
+			stage.remove_pilot(id)
+	for id in roster:
+		if not stage.pilots.has(id):
+			stage.add_pilot(int(id), roster[id], false)
 
 @rpc("authority", "call_remote", "reliable")
 func receive_launch(id: String, options: Dictionary, members: Dictionary, initial: Array) -> void:
+	if id.is_empty() or not match_id.is_empty():
+		return
 	match_id = id
 	room = options
 	roster = members
 	replicas.clear()
 	connect_left = 0.0
 	received_sequence = 0
+	pending_round = initial
 	app.launch_coop()
-	receive_round(id, initial)
 
 func attach(session: Node3D) -> void:
 	stage = session
+	_sync_pilots()
+	if hosting:
+		stage.director.player_count = stage.pilots.size()
 	replicas.clear()
 	previous_phase = -1
 	snapshot_left = 0.0
@@ -366,6 +378,18 @@ func attach(session: Node3D) -> void:
 	incoming.clear()
 	if hosting:
 		stage.director.finished.connect(_finish_round, CONNECT_DEFERRED)
+
+func complete_launch() -> void:
+	# These reliable updates can arrive before the arena exists. A round replaces the
+	# whole preceding round state, and the result follows it once the UI is connected.
+	var round_state := pending_round
+	var result := pending_result
+	pending_round = []
+	pending_result = {}
+	if not round_state.is_empty():
+		receive_round(match_id, round_state)
+	if not result.is_empty():
+		receive_result(match_id, result)
 
 func ready_up() -> void:
 	if hosting:
@@ -379,6 +403,8 @@ func request_pilot_ready(id: String, wave: int) -> void:
 
 func _ready_for(sender: int, id: String, wave: int) -> void:
 	if not hosting or not roster.has(sender) or id != match_id:
+		return
+	if not in_match() and not match_id.is_empty():
 		return
 	if in_match() and (stage.director.phase != Director.Phase.UPGRADE or wave != stage.director.wave):
 		return
@@ -562,7 +588,10 @@ func _apply_shop(state: Array) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func receive_round(id: String, value: Array) -> void:
-	if not in_match() or id != match_id:
+	if id.is_empty() or id != match_id or value.size() != 8:
+		return
+	if not in_match():
+		pending_round = value
 		return
 	var director = stage.director
 	var changed_phase: bool = director.phase != int(value[0]) or director.wave != int(value[1])
@@ -616,7 +645,12 @@ func _finish_round(victory: bool) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func receive_result(id: String, result: Dictionary) -> void:
-	if id != match_id or not in_match() or not stage.result_override.is_empty():
+	if id.is_empty() or id != match_id:
+		return
+	if not in_match():
+		pending_result = result
+		return
+	if not stage.result_override.is_empty():
 		return
 	var report := {}
 	for key in ["score", "wave", "kills", "seconds", "bosses", "shots", "hits", "credits", "spent"]:

@@ -3,6 +3,7 @@ extends Control
 const Palette := preload("res://ui/skin.gd")
 const Catalog := preload("res://game/catalog.gd")
 const Coop := preload("res://network/coop.gd")
+const Tokens := preload("res://ui/design/tokens.gd")
 const MODES := ["Survie · 20 vagues", "Survie · 10 vagues", "Infini"]
 
 var net: Coop
@@ -12,7 +13,9 @@ var port: LineEdit
 var code: LineEdit
 var limit: SpinBox
 var status: Label
+var connection: Label
 var rows: Array[Label] = []
+var readiness: Array[Label] = []
 var map: OptionButton
 var mode: OptionButton
 var difficulty: OptionButton
@@ -27,8 +30,9 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	Palette.panel(self, Rect2(56, 204, 552, 356), Palette.PANEL)
 	Palette.panel(self, Rect2(625, 204, 598, 356), Palette.PANEL)
-	Palette.label(self, Rect2(76, 215, 506, 40), "CONNEXION DIRECTE", 23, Palette.CYAN, Palette.HEAD)
-	Palette.label(self, Rect2(646, 215, 549, 40), "ÉQUIPE · JUSQU’À QUATRE PILOTES", 23, Palette.CYAN, Palette.HEAD)
+	Palette.label(self, Rect2(76, 215, 265, 40), "Connexion directe", 25, Tokens.TEXT, Palette.HEAD)
+	connection = Palette.label(self, Rect2(345, 219, 242, 31), "", 13, Tokens.MUTED, Palette.MONO, HORIZONTAL_ALIGNMENT_RIGHT)
+	Palette.label(self, Rect2(646, 215, 549, 40), "Équipe", 25, Tokens.TEXT, Palette.HEAD)
 	address = _line_entry(Rect2(76, 288, 344, 43), "Adresse de l’hôte", "127.0.0.1", 64)
 	port = _line_entry(Rect2(436, 288, 151, 43), "Port UDP", str(net.listening_port), 5)
 	code = _line_entry(Rect2(76, 366, 344, 43), "Code du salon · facultatif", "", 32)
@@ -44,7 +48,10 @@ func _ready() -> void:
 	connect_button = Palette.button(self, Rect2(334, 428, 253, 47), "Rejoindre", _join)
 	status = Palette.label(self, Rect2(76, 489, 510, 60), "", 15, Palette.AMBER, Palette.BODY, HORIZONTAL_ALIGNMENT_LEFT, true)
 	for index in 4:
-		rows.append(Palette.label(self, Rect2(647, 260 + index * 30, 542, 27), "", 15, Palette.TEXT, Palette.MONO))
+		var y := 260 + index * 30
+		rows.append(Palette.label(self, Rect2(647, y, 371, 27), "", 15, Palette.TEXT, Palette.BODY))
+		readiness.append(Palette.label(self, Rect2(1025, y, 170, 27), "", 13, Tokens.MUTED, Palette.MONO,
+			HORIZONTAL_ALIGNMENT_RIGHT))
 	Palette.rule(self, Rect2(647, 389, 553, 1))
 	map = _option(Rect2(647, 423, 185, 42), "Arène", Catalog.MAPS.values().map(func(spec): return spec.name))
 	mode = _option(Rect2(841, 423, 184, 42), "Mode", MODES)
@@ -103,6 +110,9 @@ func _leave() -> void:
 
 func refresh() -> void:
 	var online := net.active()
+	var connecting := online and net.connect_left > 0.0 and net.roster.is_empty()
+	connection.text = "Connexion…" if connecting else ("Salon ouvert" if online else "Hors connexion")
+	connection.modulate = Tokens.WARNING if connecting else (Tokens.SUCCESS if online else Color.WHITE)
 	create.disabled = online
 	connect_button.disabled = online
 	disconnect.disabled = not online
@@ -122,13 +132,18 @@ func refresh() -> void:
 		if index >= ids.size():
 			rows[index].text = "—  Place libre"
 			rows[index].modulate = Palette.QUIET
+			readiness[index].text = ""
 			continue
 		var id: int = ids[index]
 		var pilot: Dictionary = net.roster[id]
 		var label := "HÔTE" if id == 1 else ("VOUS" if id == net.local_id() else "PILOTE")
-		rows[index].text = "%s   %s    ·    %s" % [label, pilot.name, "PRÊT" if pilot.ready else "EN ATTENTE"]
-		rows[index].modulate = Palette.CYAN if pilot.ready else Palette.TEXT
+		rows[index].text = "%s   ·   %s" % [label, pilot.name]
+		rows[index].modulate = Color.WHITE
+		readiness[index].text = "Prêt" if pilot.ready else "En attente"
+		readiness[index].modulate = Tokens.SUCCESS if pilot.ready else Tokens.MUTED
 	ready_button.disabled = not net.roster.has(net.local_id())
 	ready_button.text = "Annuler prêt" if net.roster.get(net.local_id(), {}).get("ready", false) else "Je suis prêt"
 	start.disabled = not net.can_start()
+	start.tooltip_text = "" if not start.disabled else ("L’hôte lance la partie." if not net.hosting else
+		("Il faut au moins deux pilotes." if ids.size() < 2 else "Tous les pilotes doivent être prêts."))
 	status.text = net.status

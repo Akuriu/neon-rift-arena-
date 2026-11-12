@@ -1,6 +1,12 @@
 extends Node
 
-const Session := preload("res://scenes/Session.tscn")
+const SESSION_PATH := "res://scenes/Session.tscn"
+const SURFACE_BATCH_BUDGET_USEC := 3000
+const SceneLoader := preload("res://services/threaded_scene.gd")
+const MapLoading := preload("res://ui/loading/map_loading.gd")
+const Tokens := preload("res://ui/design/tokens.gd")
+const SafeLayout := preload("res://ui/design/safe_layout.gd")
+const ScreenRouter := preload("res://ui/navigation/screen_router.gd")
 const Arena := preload("res://game/arena.gd")
 const Depot := preload("res://game/skyline.gd")
 const FRAME := Vector2(1280, 720)
@@ -9,7 +15,8 @@ const Catalog := preload("res://game/catalog.gd")
 const Palette := preload("res://ui/skin.gd")
 const Hud := preload("res://ui/hud.gd")
 const Livery := preload("res://ui/livery.gd")
-const Glyph := preload("res://ui/glyph.gd")
+const Link := preload("res://ui/design/components/navigation_link.gd")
+const Home := preload("res://ui/screens/home.gd")
 const Options := preload("res://ui/settings.gd")
 const Hub := preload("res://ui/hub.gd")
 const Profile := preload("res://services/profile.gd")
@@ -19,6 +26,8 @@ const Lobby := preload("res://ui/lobby.gd")
 const Rules := preload("res://game/modes/rules.gd")
 const ClassicSetup := preload("res://ui/screens/classic_setup.gd")
 const GunGameResult := preload("res://ui/screens/gun_game_result.gd")
+const ResultSummary := preload("res://ui/screens/result_summary.gd")
+const Progression := preload("res://ui/screens/progression.gd")
 const PlayMenu := preload("res://ui/screens/play.gd")
 const ParkourSetup := preload("res://ui/screens/parkour_setup.gd")
 const Courses := preload("res://game/modes/parkour_routes.gd")
@@ -46,10 +55,12 @@ const MODES := {
 	"relax": {"name": "Détente", "tag": "REPRISE", "line": "5 vagues · rythme modéré",
 		"summary": "Cinq vagues avec des adversaires moins puissants et des renforts espacés. Les crédits restent dans la partie."},
 }
-const ICON := preload("res://assets/art/rift.svg")
 
 var layer: CanvasLayer
 var canvas: Control
+var screen_frame: Control
+var screen_surface: Control
+var router := ScreenRouter.new()
 var view: Control
 var matte: Livery
 var screen := "menu"
@@ -86,8 +97,18 @@ var coop: Coop
 var lobby: Lobby
 var shop_clock: Label
 var version_label := ""
+var staged_loading := false
+var map_loader := SceneLoader.new()
+var map_layer: CanvasLayer
+var map_loading: MapLoading
+var match_request := {}
+var loading_origin := ""
+var loading_focus: Control
 
 func _ready() -> void:
+	if "--server" in OS.get_cmdline_user_args():
+		get_tree().change_scene_to_file.call_deferred("res://scenes/Dedicated.tscn")
+		return
 	var version: String = ProjectSettings.get_setting("application/config/version")
 	version_label = "v" + version.trim_suffix("-alpha") + " Alpha" if version.ends_with("-alpha") else "v" + version
 	layer = CanvasLayer.new()
@@ -97,6 +118,12 @@ func _ready() -> void:
 	canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	canvas.theme = Palette.theme()
+	screen_frame = Control.new()
+	screen_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	canvas.add_child(screen_frame)
+	screen_surface = Control.new()
+	screen_surface.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	screen_frame.add_child(screen_surface)
 	get_window().size_changed.connect(_safe_canvas)
 	canvas.resized.connect(_fit_menu)
 	_safe_canvas.call_deferred()
@@ -112,11 +139,7 @@ func _ready() -> void:
 		get_window().focus_exited.connect(_focus_lost)
 		get_tree().auto_accept_quit = false
 		get_window().close_requested.connect(_quit)
-	var arguments := OS.get_cmdline_user_args()
-	if "--server" in arguments:
-		_dedicated(arguments)
-	else:
-		menu()
+	menu()
 
 func _process(delta: float) -> void:
 	if screen == "upgrade" and is_instance_valid(shop_clock) and coop.in_match():
@@ -135,7 +158,9 @@ func _new_screen(name: String, treatment := "page") -> void:
 		_freeze()
 	if Prefs.mobile():
 		Input.emulate_mouse_from_touch = true
-	_drop_menu_view()
+	if name != "menu":
+		_drop_backdrop()
+	_drop_menu_view(false)
 	settings = null
 	lobby = null
 	shop_clock = null
@@ -147,23 +172,23 @@ func _new_screen(name: String, treatment := "page") -> void:
 	matte.mode = treatment
 	layer.add_child(matte)
 	layer.move_child(matte, 0)
-	canvas.add_child(view)
+	screen_surface.add_child(view)
 	view.size = FRAME
 	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fit_menu()
-	if Prefs.values.ui_motion and not Prefs.mobile():
-		view.modulate.a = 0.84
-		view.create_tween().tween_property(view, "modulate:a", 1.0, 0.15)
+	router.enter(screen_surface, name, treatment)
 
-func _drop_menu_view() -> void:
+func _drop_menu_view(settle := true) -> void:
 	if is_instance_valid(view):
-		canvas.remove_child(view)
+		screen_surface.remove_child(view)
 		view.queue_free()
 		view = null
 	if is_instance_valid(matte):
 		layer.remove_child(matte)
 		matte.queue_free()
 		matte = null
+	if settle:
+		router.reset(screen_surface, screen)
 
 func _footer(copy: String) -> void:
 	var line := Palette.rule(view, Rect2(57, 660, 1166, 1), Color(Palette.MUTED, 0.25))
@@ -177,29 +202,24 @@ func _safe_canvas() -> void:
 	canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	if OS.has_feature("android"):
 		var extent := get_window().get_visible_rect().size
-		var safe := DisplayServer.get_display_safe_area()
-		if safe.has_area():
-			var inverse := get_window().get_final_transform().affine_inverse()
-			var allowed := Rect2(Vector2.ZERO, extent).intersection(inverse * Rect2(safe))
-			if allowed.has_area():
-				_apply_safe_insets(allowed, extent)
+		_apply_safe_insets(SafeLayout.area(get_window(), extent), extent)
 	_fit_menu()
 
 func _apply_safe_insets(allowed: Rect2, extent: Vector2) -> void:
-	var x := minf(maxf(allowed.position.x, extent.x - allowed.end.x) + 4.0, extent.x * 0.24)
-	var y := minf(maxf(allowed.position.y, extent.y - allowed.end.y) + 4.0, extent.y * 0.24)
-	canvas.offset_left = x
-	canvas.offset_right = -x
-	canvas.offset_top = y
-	canvas.offset_bottom = -y
+	canvas.offset_left = allowed.position.x + 4.0
+	canvas.offset_right = allowed.end.x - extent.x - 4.0
+	canvas.offset_top = allowed.position.y + 4.0
+	canvas.offset_bottom = allowed.end.y - extent.y - 4.0
 
 func _fit_menu() -> void:
 	if not is_instance_valid(view):
 		return
 	var factor := minf(canvas.size.x / FRAME.x, canvas.size.y / FRAME.y)
-	view.scale = Vector2.ONE * factor
 	view.size = Vector2(canvas.size.x / maxf(factor, 0.001), FRAME.y) if screen in ["menu", "touch_editor"] else FRAME
-	view.position = (canvas.size - view.size * factor) * 0.5
+	screen_frame.size = view.size
+	screen_surface.size = view.size
+	screen_frame.scale = Vector2.ONE * factor
+	screen_frame.position = (canvas.size - view.size * factor) * 0.5
 
 func _right_block(width: float, height: float, y: float) -> Control:
 	var block := Control.new()
@@ -211,12 +231,6 @@ func _right_block(width: float, height: float, y: float) -> Control:
 	block.offset_top = y
 	block.offset_bottom = y + height
 	return block
-
-func _glyph(parent: Control, rect: Rect2, mark: String, ink: Color) -> void:
-	var icon := Glyph.new()
-	icon.mark = mark
-	icon.ink = ink
-	Palette.at(parent, icon, rect)
 
 func _header(index: String, name: String, description: String) -> void:
 	Palette.label(view, Rect2(57, 27, 840, 27), index, 15, Palette.AMBER, Palette.BOLD)
@@ -230,6 +244,7 @@ func _make_backdrop() -> void:
 		return
 	backdrop = Depot.new()
 	backdrop.is_backdrop = true
+	backdrop.build_landscape = false
 	add_child(backdrop)
 	title_cam = Camera3D.new()
 	title_cam.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
@@ -239,6 +254,17 @@ func _make_backdrop() -> void:
 	add_child(title_cam)
 	title_cam.look_at_from_position(title_cam.position, Vector3(-3.5, 2.82, -5.6), Vector3.UP)
 	title_cam.current = true
+
+func _reveal_backdrop(home: Control) -> void:
+	if Prefs.values.quality not in [1, 2] or DisplayServer.get_name() == "headless":
+		return
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	if not is_instance_valid(home) or view != home or exiting or Prefs.values.quality not in [1, 2]:
+		return
+	_make_backdrop()
+	matte.live = true
+	matte.queue_redraw()
 
 func _drop_backdrop() -> void:
 	if is_instance_valid(title_cam):
@@ -251,101 +277,31 @@ func _drop_backdrop() -> void:
 		backdrop = null
 
 func menu() -> void:
+	_clear_loading()
 	coop.stop()
 	_drop_session()
-	_make_backdrop()
 	_free_cursor()
 	Sounds.duck = false
 	Sounds.set_track("menu")
 	Sounds.set_region("skyline")
 	_new_screen("menu", "home")
-	var mark := TextureRect.new()
-	mark.texture = ICON
-	mark.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	mark.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Palette.at(view, mark, Rect2(53, 29, 46, 46))
-	Palette.rule(view, Rect2(107, 40, 1, 25))
-	Palette.label(view, Rect2(120, 30, 282, 44), "FPS D’ARÈNE", 14, Palette.MUTED, Palette.MONO)
-	var edition := _right_block(158.0, 32.0, 36.0)
-	Palette.panel(edition, Rect2(0, 0, 158, 32), Color("#242823"), Color(Palette.AMBER, 0.41))
-	Palette.rule(edition, Rect2(13, 13, 6, 6), Palette.AMBER)
-	Palette.label(edition, Rect2(28, 0, 119, 32), "ALPHA PUBLIQUE", 12, Palette.TEXT, Palette.MONO)
-	Palette.rule(view, Rect2(58, 107, 30, 2), Palette.AMBER)
-	Palette.label(view, Rect2(99, 93, 297, 30), "SOLO  /  COOP", 14, Palette.AMBER, Palette.MONO)
-	Palette.label(view, Rect2(52, 121, 670, 110), "RIFLE ARENA", 113, Palette.TEXT, Palette.BRAND)
-	Palette.label(view, Rect2(58, 251, 520, 31), "Affrontez les bots en solo ou jouez jusqu’à quatre en coop.", 19, Palette.MUTED)
-	var start := _home_link(Rect2(57, 302, 389, 70), "Jouer", "play", play_menu, true)
-	_home_link(Rect2(57, 386, 389, 51), "Arsenal", "target", open_hub.bind("arsenal"))
-	_home_link(Rect2(57, 448, 389, 51), "Progression", "progress", show_profile.bind("profile"))
-	_home_link(Rect2(57, 510, 389, 51), "Paramètres", "settings", open_settings.bind("menu"))
-	_home_link(Rect2(57, 590, 187, 46), "Crédits", "info", credits)
-	_home_link(Rect2(255, 590, 191, 46), "Quitter", "quit", _quit)
-	var map := _right_block(312.0, 99.0, 536.0)
-	var plate := Palette.panel(map, Rect2(0, 0, 312, 99), Color(0.090, 0.104, 0.085, 0.88), Color(Palette.MUTED, 0.29))
-	Palette.rule(plate, Rect2(0, 14, 3, 69), Palette.AMBER)
-	Palette.label(plate, Rect2(18, 12, 206, 21), "APERÇU DE L’ARÈNE", 12, Palette.AMBER, Palette.MONO)
-	Palette.label(plate, Rect2(16, 34, 235, 37), Catalog.MAPS.skyline.name, 29, Palette.TEXT, Palette.HEAD)
-	Palette.label(plate, Rect2(18, 71, 210, 17), "Cour de chargement", 12, Palette.MUTED)
-	Palette.rule(plate, Rect2(246, 18, 1, 62))
-	_glyph(plate, Rect2(263, 35, 31, 31), "target", Palette.AMBER)
-	start.grab_focus()
-	_footer("Commandes tactiles" if Prefs.mobile() else "Clavier et souris")
-
-func _home_link(rect: Rect2, title: String, icon: String, action: Callable, primary := false) -> Button:
-	var button := Palette.button(view, rect, "", action, primary)
-	button.accessibility_name = title
-	var ink := Palette.BASE if primary else Palette.TEXT
-	if not primary:
-		button.add_theme_stylebox_override("normal", Palette.box(Color("#252922"), Palette.LINE, 4))
-	var icon_size := 29.0 if primary else 22.0
-	_glyph(button, Rect2(16.0, (rect.size.y - icon_size) * 0.5, icon_size, icon_size),
-		icon, ink if primary else Palette.AMBER)
-	Palette.label(button, Rect2(52, 0, rect.size.x - 90, rect.size.y), title,
-		31 if primary else 19, ink, Palette.HEAD if primary else Palette.BOLD)
-	if rect.size.x > 200.0:
-		_glyph(button, Rect2(rect.size.x - 41.0, (rect.size.y - 23.0) * 0.5, 23, 23),
-			"arrow", ink if primary else Palette.QUIET)
-	return button
+	Home.build(view, {"play": play_menu, "arsenal": open_hub.bind("arsenal"), "profile": show_profile.bind("profile"),
+		"settings": open_settings.bind("menu"), "credits": credits, "quit": _quit}, Catalog.MAPS.skyline.name)
+	var controls_hint := "Commandes tactiles" if Prefs.mobile() else "Clavier et souris"
+	_footer(Prefs.profile_notice if not Prefs.profile_notice.is_empty() else controls_hint)
+	_reveal_backdrop(view)
 
 func play_menu() -> void:
 	_new_screen("play")
-	_header("RIFLE ARENA / JOUER", "Choisir un mode", "Choisissez une partie solo, un entraînement ou un salon coop.")
+	_header("Jouer", "Choisir un mode", "")
 	PlayMenu.new().build(view, {"gungame": open_classic.bind("gungame"), "classic": open_classic,
 		"parkour": open_parkour,
 		"survival": select_session, "coop": open_lobby,
-		"training": func(): begin("training", selected_difficulty, selected_map)})
-	_home_link(Rect2(57, 593, 166, 53), "Retour", "back", menu)
-	_footer("Parties locales et salons privés")
-
-func _play_card(rect: Rect2, title: String, description: String, map_id: String, index: String,
-		action: Callable, featured := false) -> void:
-	var button := Palette.button(view, rect, "", action)
-	button.accessibility_name = title
-	var picture := TextureRect.new()
-	picture.texture = load("res://assets/maps/%s.jpg" % map_id)
-	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var crop := Control.new()
-	crop.clip_contents = true
-	crop.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Palette.at(button, crop, Rect2(270, 5, 299, 158))
-	crop.add_child(picture)
-	picture.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var veil := Livery.new()
-	veil.mode = "tile"
-	crop.add_child(veil)
-	Palette.label(button, Rect2(22, 15, 275, 24), index, 13, Palette.AMBER, Palette.MONO)
-	Palette.label(button, Rect2(20, 48, 339, 47), title, 35, Palette.TEXT, Palette.HEAD)
-	Palette.label(button, Rect2(22, 99, 248, 50), description, 16, Palette.MUTED)
-	Palette.panel(button, Rect2(517, 111, 39, 39), Color("#252922"), Color(Palette.MUTED, 0.32))
-	_glyph(button, Rect2(524, 118, 25, 25), "arrow", Palette.AMBER)
-	if featured:
-		button.grab_focus()
+		"training": func(): request_match("training", selected_difficulty, selected_map)})
+	Link.create(view, Rect2(57, 593, 166, 53), "Retour", "back", menu)
+	_footer("")
 
 func open_lobby() -> void:
-	_make_backdrop()
 	_free_cursor()
 	Sounds.duck = false
 	Sounds.set_track("menu")
@@ -353,17 +309,25 @@ func open_lobby() -> void:
 	_header("Jouer", "Coop", "Jouez en équipe sur le réseau local ou via l’adresse de l’hôte.")
 	lobby = Lobby.new()
 	lobby.net = coop
-	lobby.back = play_menu
+	lobby.back = _close_lobby
 	view.add_child(lobby)
 	_footer("2 à 4 joueurs")
 
 func leave_coop() -> void:
+	_clear_loading()
 	coop.stop()
 	_drop_session()
 	open_lobby()
 
+func _close_lobby() -> void:
+	coop.stop()
+	play_menu()
+
 func launch_coop() -> void:
-	begin(coop.room.mode, coop.room.difficulty, coop.room.map, coop.room.seed, "", true)
+	if not staged_loading:
+		begin(coop.room.mode, coop.room.difficulty, coop.room.map, coop.room.seed, "", true)
+		return
+	_show_match_loading(coop.room.mode, coop.room.difficulty, coop.room.map, coop.room.seed, "", {}, true)
 
 func _coop_changed() -> void:
 	if is_instance_valid(lobby):
@@ -377,34 +341,10 @@ func _coop_notice(message: String) -> void:
 		_upgrade()
 
 func _coop_ended(_message: String) -> void:
+	_clear_loading()
 	_drop_session()
 	if screen != "lobby":
 		open_lobby()
-
-func _dedicated(arguments: PackedStringArray) -> void:
-	var port := Coop.PORT
-	var map := "reactor"
-	var mode := "survival"
-	var difficulty := "standard"
-	var code := ""
-	for argument in arguments:
-		if argument.begins_with("--port="):
-			port = argument.get_slice("=", 1).to_int()
-		elif argument.begins_with("--map="):
-			map = argument.get_slice("=", 1)
-		elif argument.begins_with("--mode="):
-			mode = argument.get_slice("=", 1)
-		elif argument.begins_with("--difficulty="):
-			difficulty = argument.get_slice("=", 1)
-		elif argument.begins_with("--code="):
-			code = argument.substr(7)
-	if coop.host(port, 4, code, true):
-		coop.configure(map, mode, difficulty)
-		screen = "server"
-		print("COOP dedicated UDP ", port, " · ", coop.room)
-	else:
-		printerr(coop.status)
-		get_tree().quit(2)
 
 func open_classic(variant := "classic") -> void:
 	var initial := {}
@@ -424,7 +364,7 @@ func open_classic(variant := "classic") -> void:
 	_footer("SCORE LOCAL   /   LES RÈGLES DU MATCH DÉFINISSENT LE CLASSEMENT")
 
 func _start_classic(mode: String, difficulty: String, map_id: String, seed: int, rules: Dictionary) -> void:
-	begin(mode, difficulty, map_id, seed, "", false, rules)
+	request_match(mode, difficulty, map_id, seed, "", rules)
 
 func open_parkour() -> void:
 	_drop_session()
@@ -433,7 +373,7 @@ func open_parkour() -> void:
 	_new_screen("parkour")
 	_header("Mouvement", "Parkour", "Traversez les portiques dans l’ordre. Une chute ou un retour au checkpoint ajoute deux secondes.")
 	ParkourSetup.new().build(view, func(route: String, ghost: bool):
-		begin("parkour", "standard", "skyline", -1, "", false, {"route": route, "ghost": ghost}))
+		request_match("parkour", "standard", "skyline", -1, "", {"route": route, "ghost": ghost}))
 	Palette.button(view, Rect2(57, 581, 166, 53), "Retour", play_menu)
 	_footer("CHRONOMÈTRES PERSONNELS / Départ au premier portique / Pause disponible")
 
@@ -540,9 +480,179 @@ func _refresh_selection() -> void:
 
 func _start_selected() -> void:
 	var value := seed_input.text.strip_edges() if is_instance_valid(seed_input) else ""
-	begin(selected_mode, selected_difficulty, selected_map, int(value) if value.is_valid_int() else -1)
+	request_match(selected_mode, selected_difficulty, selected_map, int(value) if value.is_valid_int() else -1)
+
+func request_match(mode: String, difficulty: String, map_id := "reactor", run_seed := -1, test_weapon := "", rules: Dictionary = {}) -> void:
+	if exiting or (is_instance_valid(map_loading) and screen == "loading"):
+		return
+	if not staged_loading:
+		begin(mode, difficulty, map_id, run_seed, test_weapon, false, rules)
+		return
+	_show_match_loading(mode, difficulty, map_id, run_seed, test_weapon, rules, false)
+
+func _show_match_loading(mode: String, difficulty: String, map_id: String, run_seed: int,
+		test_weapon: String, rules: Dictionary, online: bool) -> void:
+	_clear_loading()
+	loading_origin = screen
+	loading_focus = get_viewport().gui_get_focus_owner()
+	match_request = {"mode": mode, "difficulty": difficulty, "map": map_id, "seed": run_seed,
+		"weapon": test_weapon, "rules": rules.duplicate(true), "online": online}
+	if is_instance_valid(session):
+		_freeze()
+	else:
+		_free_cursor()
+	if is_instance_valid(view):
+		view.hide()
+	if Prefs.mobile():
+		Input.emulate_mouse_from_touch = true
+	screen = "loading"
+	map_layer = CanvasLayer.new()
+	map_layer.layer = 12
+	map_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(map_layer)
+	map_loading = MapLoading.new()
+	map_loading.mode = "Coop · " + _mode_name(mode) if online else _mode_name(mode)
+	if mode == "parkour":
+		var route := Courses.normalize(rules.get("route"))
+		map_loading.title = Courses.ROUTES[route].name
+		map_loading.image = load("res://assets/maps/parkour-%s.jpg" % route)
+		map_loading.tip = "Franchissez les checkpoints dans l’ordre pour valider votre chrono."
+	else:
+		map_loading.title = Catalog.MAPS.get(map_id, Catalog.MAPS.reactor).name
+		map_loading.image = load("res://assets/maps/%s.jpg" % (map_id if Catalog.MAPS.has(map_id) else "reactor"))
+		map_loading.tip = "Le chef de salon et les pilotes partagent la même arène." if online else _loading_tip(mode)
+	map_layer.add_child(map_loading)
+	if online:
+		map_loading.cancel_button.text = "Quitter la coop"
+	map_loading.cancelled.connect(_cancel_loading)
+	map_loading.retry.connect(_resolve_match)
+	_resolve_match()
+
+func _loading_tip(mode: String) -> String:
+	match mode:
+		"gungame": return "Chaque élimination vous fait passer à l’arme suivante."
+		"training": return "Réarmez au terminal pour réinitialiser les cibles."
+		"explore": return "Vous pouvez explorer les passages et essayer les interactions à votre rythme."
+		"capture", "domination": return "Les objectifs et leur état sont indiqués sur le HUD."
+		"survival", "short", "endless", "boss_rush": return "Ravitaillez-vous et adaptez votre équipement entre les vagues."
+		_: return "Le bilan de partie affiche votre score et vos statistiques."
+
+func _resolve_match() -> void:
+	var overlay := map_loading
+	overlay.show_status("Chargement des ressources")
+	await _visible_frame()
+	if not is_instance_valid(overlay) or overlay != map_loading:
+		return
+	if map_loader.status in [SceneLoader.Status.IDLE, SceneLoader.Status.FAILED]:
+		map_loader.request(SESSION_PATH)
+	while map_loader.status == SceneLoader.Status.LOADING:
+		map_loader.poll()
+		if map_loader.status == SceneLoader.Status.LOADING and map_loader.progress != overlay.meter.fraction:
+			overlay.show_status("Chargement des ressources", map_loader.progress)
+		await get_tree().process_frame
+		if not is_instance_valid(overlay) or overlay != map_loading:
+			return
+	if map_loader.status != SceneLoader.Status.LOADED:
+		overlay.show_status("La carte n’a pas pu être chargée", -1.0, true, true)
+		return
+	var request := match_request
+	overlay.show_status("Construction de l’arène", -1.0, request.online)
+	await _visible_frame()
+	if not is_instance_valid(overlay) or overlay != map_loading:
+		return
+	if request.online and not _coop_loading_viable():
+		return
+	_launch_session(map_loader.scene, request.mode, request.difficulty, request.map, request.seed,
+		request.weapon, request.online, request.rules, false)
+	var remaining: int = session.arena.pending_surface_count()
+	var total := remaining
+	while remaining > 0:
+		session.arena.commit_surfaces(Time.get_ticks_usec() + SURFACE_BATCH_BUDGET_USEC)
+		remaining = session.arena.pending_surface_count()
+		if remaining == 0:
+			break
+		overlay.show_status("Assemblage du décor", float(total - remaining) / total, request.online)
+		await _visible_frame()
+		if not is_instance_valid(overlay) or overlay != map_loading:
+			return
+	if request.online and not _coop_loading_viable():
+		return
+	overlay.show_status("Préparation de la vue", -1.0, false)
+	_activate_session(request.online, false)
+	await _visible_frame()
+	if not is_instance_valid(overlay) or overlay != map_loading:
+		return
+	overlay.show_status("Prêt", 1.0, false)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if screen == "loading":
+		if session.director.phase == Director.Phase.UPGRADE:
+			_upgrade()
+		elif session.director.phase == Director.Phase.MILESTONE:
+			_milestone()
+		else:
+			hud()
+	if Prefs.values.ui_motion and DisplayServer.get_name() != "headless":
+		overlay.reveal().chain().tween_callback(func():
+			if is_instance_valid(overlay) and overlay == map_loading:
+				_clear_loading())
+	else:
+		_clear_loading()
+
+func _cancel_loading() -> void:
+	if not is_instance_valid(map_loading) or not map_loading.cancel_button.visible:
+		return
+	if match_request.online:
+		_leave_coop_loading("Vous avez quitté la partie pendant le chargement.")
+		return
+	var origin := loading_origin
+	var focus := loading_focus
+	_clear_loading()
+	screen = origin
+	if is_instance_valid(view):
+		view.show()
+	if is_instance_valid(focus):
+		focus.grab_focus()
+	if screen == "hud":
+		hud()
+
+func _leave_coop_loading(message: String) -> void:
+	coop.status = message
+	leave_coop()
+
+func _coop_loading_viable() -> bool:
+	if not coop.active():
+		_leave_coop_loading("La connexion au salon a été fermée.")
+		return false
+	if coop.hosting and coop.roster.size() < 2:
+		_leave_coop_loading("Le salon n’a plus assez de pilotes pour démarrer.")
+		return false
+	return true
+
+func _clear_loading() -> void:
+	if is_instance_valid(map_layer):
+		remove_child(map_layer)
+		map_layer.queue_free()
+	map_layer = null
+	map_loading = null
+	match_request.clear()
+	loading_focus = null
+
+func _visible_frame() -> void:
+	if DisplayServer.get_name() == "headless":
+		await get_tree().process_frame
+	else:
+		await RenderingServer.frame_post_draw
 
 func begin(mode: String, difficulty: String, map_id := "reactor", run_seed := -1, test_weapon := "", online := false, rules: Dictionary = {}) -> void:
+	_clear_loading()
+	var packed := load(SESSION_PATH) as PackedScene
+	if packed == null:
+		push_error("La scène de partie n’a pas pu être chargée.")
+		return
+	_launch_session(packed, mode, difficulty, map_id, run_seed, test_weapon, online, rules, true)
+
+func _launch_session(packed: PackedScene, mode: String, difficulty: String, map_id: String,
+		run_seed: int, test_weapon: String, online: bool, rules: Dictionary, interactive: bool) -> void:
 	if not online:
 		coop.stop()
 	_drop_session()
@@ -550,13 +660,16 @@ func begin(mode: String, difficulty: String, map_id := "reactor", run_seed := -1
 	last_mode = mode
 	last_difficulty = difficulty
 	last_map = map_id
-	session = Session.instantiate()
+	session = packed.instantiate()
 	session.mode = mode
 	session.difficulty = difficulty
 	session.map_id = map_id
 	session.run_seed = run_seed
 	session.test_weapon = test_weapon
 	session.match_rules = rules
+	session.defer_arena_surfaces = not interactive
+	if not interactive:
+		session.process_mode = Node.PROCESS_MODE_DISABLED
 	if online:
 		session.net = coop
 	field_notice = ""
@@ -566,15 +679,26 @@ func begin(mode: String, difficulty: String, map_id := "reactor", run_seed := -1
 	session.director.changed.connect(_session_changed)
 	session.director.campaign_complete.connect(_milestone)
 	session.director.finished.connect(_result.bind(session), CONNECT_DEFERRED)
+	if interactive:
+		_activate_session(online, true)
+	else:
+		_freeze()
+
+func _activate_session(online: bool, interactive: bool) -> void:
 	if online:
 		coop.attach(session)
 		if coop.dedicated:
 			screen = "server"
 			return
+	if not interactive:
+		session.process_mode = Node.PROCESS_MODE_PAUSABLE
 	Sounds.duck = false
 	Sounds.set_region(last_map)
-	Sounds.set_track("menu" if mode == "explore" else "combat")
-	hud()
+	Sounds.set_track("menu" if last_mode == "explore" else "combat")
+	if interactive:
+		hud()
+	if online:
+		coop.complete_launch()
 
 func _drop_session() -> void:
 	if is_instance_valid(touch_panel):
@@ -622,6 +746,7 @@ func hud() -> void:
 func _freeze() -> void:
 	get_tree().paused = not coop.in_match()
 	Sounds.duck = true
+	Sounds.stop_world()
 	_free_cursor()
 	if is_instance_valid(session):
 		session.player.input_blocked = true
@@ -637,7 +762,7 @@ func _free_cursor() -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _session_changed() -> void:
-	if coop.dedicated:
+	if coop.dedicated or screen == "loading":
 		return
 	if session.director.phase == Director.Phase.UPGRADE and (screen == "hud" or (coop.in_match() and screen != "upgrade")):
 		field_notice = ""
@@ -743,6 +868,8 @@ func _milestone() -> void:
 	if coop.dedicated:
 		session.director.continue_endless.call_deferred()
 		return
+	if screen == "loading":
+		return
 	_freeze()
 	_new_screen("milestone", "overlay")
 	_header("CAMPAGNE TERMINÉE", "Secteur sous contrôle", "Vingt vagues sécurisées. Choisissez la suite de cette opération.")
@@ -780,13 +907,17 @@ func _show_pause() -> void:
 	Palette.button(view, Rect2(57, 481, 440, 51), "Quitter la partie" if coop.in_match() else "Retour au menu", func():
 		var copy := "Fermer le salon déconnectera tous les pilotes." if coop.in_match() and coop.hosting else "Votre progression dans la partie en cours sera effacée."
 		confirm("Retourner au menu ?", copy, menu, _show_pause))
-	Palette.panel(view, Rect2(534, 229, 690, 303), Color("#272b24"))
-	Palette.label(view, Rect2(559, 242, 620, 56), "Partie en cours", 31, Palette.CYAN, Palette.HEAD)
-	Palette.rule(view, Rect2(560, 307, 634, 1))
-	Palette.label(view, Rect2(560, 321, 634, 61), "Checkpoint %d / %d" % [session.director.next, session.director.checkpoints.size()] if last_mode == "parkour" else "Santé %d    ·    Protection %d" % [
-		ceili(session.player.health), ceili(session.player.shield)], 17, Palette.TEXT, Palette.MONO)
-	Palette.label(view, Rect2(560, 384, 634, 67), "Pénalités   +%.1f s" % session.director.penalty if last_mode == "parkour" else "Arme   %s" % session.player.arsenal.spec().name, 17, Palette.TEXT, Palette.MONO)
-	Palette.label(view, Rect2(560, 451, 634, 54), "Durée   %s" % Palette.clock(session.director.elapsed), 17, Palette.MUTED, Palette.MONO)
+	Palette.panel(view, Rect2(534, 229, 690, 303), Tokens.SURFACE)
+	Palette.label(view, Rect2(559, 246, 620, 45), "Partie en cours", 32, Tokens.TEXT, Palette.HEAD)
+	Palette.rule(view, Rect2(560, 300, 634, 1), Tokens.EDGE)
+	var parkour := last_mode == "parkour"
+	var first := "%d / %d" % [session.director.next, session.director.checkpoints.size()] if parkour else str(ceili(session.player.health))
+	var second := "+%.1f s" % session.director.penalty if parkour else str(ceili(session.player.shield))
+	_pause_stat(Vector2(560, 317), "Checkpoints" if parkour else "Santé", first)
+	_pause_stat(Vector2(779, 317), "Pénalités" if parkour else "Protection", second)
+	_pause_stat(Vector2(998, 317), "Durée", Palette.clock(session.director.elapsed))
+	if not parkour:
+		Palette.label(view, Rect2(560, 421, 632, 48), session.player.arsenal.spec().name, 23, Tokens.TEXT, Palette.HEAD)
 	if Prefs.mobile():
 		var accuracy := roundi(100.0 * session.hits / maxi(1, session.shots))
 		Palette.label(view, Rect2(560, 505, 634, 24), "%d neutralisations  ·  %d %% de précision" % [
@@ -795,6 +926,11 @@ func _show_pause() -> void:
 		Palette.button(view, Rect2(534, 551, 344, 53), "Configurer les cibles", open_training)
 	resume.grab_focus()
 	_footer("Échap pour reprendre" if not Prefs.mobile() else "")
+
+func _pause_stat(at: Vector2, label: String, value: String) -> void:
+	var tile := Palette.panel(view, Rect2(at, Vector2(196, 94)), Tokens.RAISED, Tokens.EDGE)
+	Palette.label(tile, Rect2(12, 9, 172, 23), label, 14, Tokens.MUTED, Palette.BODY)
+	Palette.label(tile, Rect2(12, 34, 171, 51), value, 31, Tokens.TEXT, Palette.HEAD)
 
 func open_training() -> void:
 	_new_screen("training_setup", "overlay")
@@ -830,7 +966,7 @@ func confirm(title: String, copy: String, accept: Callable, cancel: Callable) ->
 	Palette.label(view, Rect2(343, 279, 595, 56), title, 38, Palette.TEXT, Palette.HEAD)
 	Palette.label(view, Rect2(346, 343, 565, 52), copy, 16, Palette.MUTED, Palette.BODY, HORIZONTAL_ALIGNMENT_LEFT, true)
 	var stay := Palette.button(view, Rect2(346, 431, 269, 48), "Annuler", cancel)
-	Palette.button(view, Rect2(632, 431, 301, 48), "Confirmer", accept, true)
+	Palette.button(view, Rect2(632, 431, 301, 48), "Confirmer", accept, false, HORIZONTAL_ALIGNMENT_LEFT, true)
 	stay.grab_focus()
 	_footer("ÉCHAP  /  ANNULER")
 
@@ -839,7 +975,7 @@ func _restart() -> void:
 		session.director.restart()
 		hud()
 		return
-	begin(last_mode, last_difficulty, last_map, last_seed if Rules.LABELS.has(last_mode) else -1, "", false, last_rules)
+	request_match(last_mode, last_difficulty, last_map, last_seed if Rules.LABELS.has(last_mode) else -1, "", last_rules)
 
 func open_settings(origin: String) -> void:
 	options_origin = origin
@@ -922,55 +1058,45 @@ func _result(victory: bool, owner: Node3D) -> void:
 	if last_mode == "gungame":
 		GunGameResult.new().build(view, session.director, top, best, accuracy)
 	else:
-		_operation_result_stats(report, top, best, victory, accuracy)
+		_operation_result_stats(report, leaderboard, best, victory, accuracy, online)
 	var reward_label := "+%d PIÈCES   +%d XP   ·   NIVEAU %d" % [
 		reward.get("coins", 0), reward.get("xp", 0), Profile.level(Prefs.profile.data.xp)] if reward.ok else String(reward.get("message", "Profil indisponible"))
 	if reward.ok and reward.has("message"):
 		reward_label = reward.message
 	elif not reward.get("badges", []).is_empty():
 		reward_label += "   ·   SUCCÈS  " + String(reward.badges[0]).to_upper()
-	Palette.label(view, Rect2(59, 500, 1163, 43), reward_label, 16, Palette.AMBER, Palette.MONO)
+	var reward_panel := Palette.panel(view, Rect2(57, 505, 1166, 38), Tokens.SURFACE)
+	Palette.label(reward_panel, Rect2(16, 0, 1135, 38), reward_label, 15, Tokens.ACCENT, Palette.MONO)
 	if not reward.ok:
 		Palette.button(view, Rect2(642, 552, 280, 57), "Réessayer la sauvegarde", _result.bind(victory, owner))
 	if online:
 		Palette.button(view, Rect2(57, 552, 305, 57), "Retour à la coop", leave_coop, true).grab_focus()
 	else:
-		Palette.button(view, Rect2(57, 552, 305, 57), "REJOUER     ›", _restart, true).grab_focus()
+		Palette.button(view, Rect2(57, 552, 305, 57), "REJOUER", _restart, true).grab_focus()
 		if Rules.LABELS.has(last_mode) and reward.ok:
 			Palette.button(view, Rect2(642, 552, 280, 57), "Modifier les règles", open_classic.bind(last_mode))
 	Palette.button(view, Rect2(377, 552, 246, 57), "Retour au menu", menu)
-	_footer("RAPPORT D’OPÉRATION   /   CLASSEMENT PAR MODE, DIFFICULTÉ ET ARÈNE")
+	_footer("Classement par mode, difficulté et arène")
 
-func _operation_result_stats(report: Dictionary, top: int, best: bool, victory: bool, accuracy: int) -> void:
-	var wave: int = session.director.cleared
-	var score: int = session.director.score
-	var kills: int = session.director.kills
-	var elapsed: float = session.director.elapsed
-	Palette.panel(view, Rect2(57, 215, 1166, 161), Color("#112a32"), Palette.CYAN if victory else Palette.LINE)
-	Palette.label(view, Rect2(79, 227, 513, 30), "SCORE FINAL", 14, Palette.MUTED, Palette.MONO)
-	Palette.label(view, Rect2(75, 256, 668, 101), "%06d" % score, 68, Palette.TEXT, Palette.MONO)
-	Palette.label(view, Rect2(737, 238, 449, 33), "NOUVEAU RECORD" if best else "RECORD LOCAL", 14,
-		Palette.AMBER if best else Palette.MUTED, Palette.MONO, HORIZONTAL_ALIGNMENT_RIGHT)
-	Palette.label(view, Rect2(733, 275, 456, 55), "%06d" % top, 36, Palette.AMBER, Palette.MONO, HORIZONTAL_ALIGNMENT_RIGHT)
+func _operation_result_stats(report: Dictionary, leaderboard: Array, best: bool, victory: bool, accuracy: int, online: bool) -> void:
+	var record := "Aucun score classé"
+	if not leaderboard.is_empty():
+		record = "%s  ·  %d pts" % ["Nouveau record" if best else "Record local", leaderboard[0].score]
+	var total: int = session.director.total_waves
+	var waves := "%d / %d" % [report.wave, total] if total > 0 else str(report.wave)
+	var kills := "%d / %d" % [report.kills, session.director.trial_goal] if last_mode == "trial" else str(report.kills)
 	var rows := [
-		["VAGUES", "%d / %d" % [wave, session.director.total_waves] if session.director.total_waves > 0 else str(wave)],
-		["NEUTRALISÉS", "%d" % kills if last_mode != "trial" else "%d / %d" % [kills, session.director.trial_goal]],
-		["PRÉCISION", "%d %%" % accuracy],
-		["DURÉE", Palette.clock(elapsed)],
-		["MEILLEURE SÉRIE", "×%d" % session.director.highest_combo],
+		["Vagues", waves], ["Neutralisations", kills],
+		["Précision", "%d %%" % accuracy], ["Durée", Palette.clock(report.seconds)],
+		["Boss neutralisés", str(report.bosses)] if online else ["Meilleure série", "×%d" % session.director.highest_combo],
 	]
 	if last_mode == "trial":
 		rows.remove_at(0)
 	elif report.has("outcome"):
-		rows = [["NEUTRALISÉS", str(kills)], ["DÉFAITES", str(report.deaths)],
-			["SCORE ADVERSE", str(report.rival)], ["PRÉCISION", "%d %%" % accuracy],
-			["DURÉE", Palette.clock(elapsed)]]
-	for i in rows.size():
-		var width := 1166.0 / rows.size()
-		var x := 57.0 + i * width
-		Palette.panel(view, Rect2(x, 394, width - 9.0, 99), Color("#10242b"))
-		Palette.label(view, Rect2(x + 13.0, 402, width - 29, 33), rows[i][0], 12, Palette.MUTED, Palette.MONO)
-		Palette.label(view, Rect2(x + 13.0, 435, width - 29, 46), rows[i][1], 26, Palette.TEXT, Palette.MONO)
+		rows = [["Neutralisations", kills], ["Mises hors combat", str(report.deaths)],
+			["Score adverse", str(report.rival)], ["Précision", "%d %%" % accuracy], ["Durée", Palette.clock(report.seconds)]]
+	var image := load("res://assets/maps/%s.jpg" % last_map) as Texture2D
+	ResultSummary.build(view, image, "Score final", str(report.score), record, rows, Tokens.SUCCESS if victory else Tokens.ACCENT)
 
 func _parkour_result() -> void:
 	_freeze()
@@ -984,19 +1110,14 @@ func _parkour_result() -> void:
 	var medal := Courses.medal(report.route, report.milliseconds) if report.valid else ""
 	var subtitle: String = course.name if medal.is_empty() else "%s  ·  Médaille %s" % [course.name, medal.to_lower()]
 	_new_screen("result", "overlay")
-	_header("PARKOUR", "Nouveau record" if reward.get("best", false) else "Parcours terminé", subtitle)
-	Palette.panel(view, Rect2(57, 215, 1166, 159), Palette.PANEL)
-	Palette.label(view, Rect2(80, 232, 700, 30), "TEMPS TOTAL", 14, Palette.MUTED, Palette.MONO)
-	Palette.label(view, Rect2(74, 273, 709, 86), Courses.clock(report.milliseconds), 63, Palette.TEXT, Palette.MONO)
-	Palette.label(view, Rect2(803, 238, 389, 31), "RECORD PERSONNEL", 14, Palette.MUTED, Palette.MONO, HORIZONTAL_ALIGNMENT_RIGHT)
-	Palette.label(view, Rect2(803, 281, 389, 55), Courses.clock(best) if best > 0 else "—", 33, Palette.AMBER, Palette.MONO, HORIZONTAL_ALIGNMENT_RIGHT)
-	var rows := [["COURSE", Courses.clock(report.elapsed_ms)], ["RETOURS", str(report.retries)],
-		["PÉNALITÉS", "+%.1f s" % (report.penalty_ms / 1000.0)], ["CHECKPOINTS", "%d / %d" % [report.checkpoints, course.points.size()]]]
-	for i in rows.size():
-		var x := 57 + i * 296
-		Palette.panel(view, Rect2(x, 392, 278, 94), Palette.PANEL)
-		Palette.label(view, Rect2(x + 17, 400, 245, 31), rows[i][0], 13, Palette.MUTED, Palette.MONO)
-		Palette.label(view, Rect2(x + 17, 437, 245, 39), rows[i][1], 26, Palette.TEXT, Palette.MONO)
+	var title := "Nouveau record" if reward.get("best", false) else ("Parcours terminé" if report.valid else "Chrono non classé")
+	_header("PARKOUR", title, subtitle)
+	var rows := [["Temps de course", Courses.clock(report.elapsed_ms)], ["Retours", str(report.retries)],
+		["Pénalités", "+%.1f s" % (report.penalty_ms / 1000.0)], ["Checkpoints", "%d / %d" % [report.checkpoints, course.points.size()]]]
+	var image := load("res://assets/maps/parkour-%s.jpg" % report.route) as Texture2D
+	var record := "Record personnel  ·  " + Courses.clock(best) if best > 0 else "Aucun chrono classé"
+	ResultSummary.build(view, image, "Temps total", Courses.clock(report.milliseconds), record, rows,
+		Tokens.SUCCESS if report.valid else Tokens.WARNING)
 	Palette.label(view, Rect2(59, 503, 1157, 37), reward.get("message", ""), 17, Palette.AMBER)
 	Palette.button(view, Rect2(57, 564, 305, 57), "Rejouer le parcours", _restart, true).grab_focus()
 	Palette.button(view, Rect2(377, 564, 305, 57), "Changer de parcours", open_parkour)
@@ -1034,6 +1155,12 @@ func _key(action: String) -> String:
 	return OS.get_keycode_string(Prefs.keys[action])
 
 func _prefs_changed(key: String) -> void:
+	if key in ["ui_motion", "all"] and not Prefs.values.ui_motion:
+		router.finish(screen_surface)
+		if is_instance_valid(view):
+			for button in view.find_children("*", "Button", true, false):
+				if button.has_method("finish_motion"):
+					button.finish_motion()
 	if key in ["quality", "all"]:
 		if is_instance_valid(session):
 			session.arena.apply_quality()
@@ -1057,6 +1184,7 @@ func _quit() -> void:
 	if exiting:
 		return
 	exiting = true
+	_clear_loading()
 	if Prefs.dirty:
 		Prefs.save_disk()
 	_free_cursor()
@@ -1075,11 +1203,15 @@ func _unhandled_input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 func _back() -> void:
+	if screen != "loading" and is_instance_valid(map_loading):
+		_clear_loading()
 	match screen:
+		"loading": _cancel_loading()
 		"hud": pause()
 		"pause": hud()
 		"upgrade": _leave_intermission()
-		"select", "classic", "parkour", "lobby": play_menu()
+		"select", "classic", "parkour": play_menu()
+		"lobby": _close_lobby()
 		"play", "result", "credits", "hub", "profile", "career": menu()
 		"touch_editor": open_settings(options_origin)
 		"controls", "training_setup": _show_pause()
@@ -1104,88 +1236,31 @@ func open_hub(page: String, group := "Armes", id := "", notice := "") -> void:
 	_footer("PIÈCES DU PILOTE  /  ACHATS LOCAUX")
 
 func practice_weapon(id: String) -> void:
-	begin("training", selected_difficulty, selected_map, -1, id)
+	request_match("training", selected_difficulty, selected_map, -1, id)
 
 func show_profile(page := "profile", notice := "") -> void:
 	Prefs.profile.refresh_contracts()
 	_new_screen("profile")
 	var data: Dictionary = Prefs.profile.data
 	var title: String = "Contrats locaux" if page == "contracts" else ("Classements locaux" if page == "records" else data.name)
-	_header("DOSSIER PILOTE", title, "NIVEAU %02d   ·   %d XP   ·   %d PIÈCES" % [Profile.level(data.xp), data.xp, data.coins])
-	Palette.panel(view, Rect2(57, 207, 1166, 361), Color("#282b24"))
-	if page == "contracts":
-		var row := 0
-		for id in Profile.CONTRACTS:
-			var entry: Dictionary = Profile.CONTRACTS[id]
-			var y := 221 + row * 82
-			var value: int = data.contracts.progress[id]
-			Palette.label(view, Rect2(78, y, 680, 35), entry.name, 25, Palette.TEXT, Palette.HEAD)
-			Palette.label(view, Rect2(78, y + 35, 690, 30), "%d / %d  ·  %d pièces + %d XP" % [
-				value, entry.goal, entry.coins, entry.xp], 14, Palette.CYAN, Palette.MONO)
-			var claim := Palette.button(view, Rect2(900, y + 14, 287, 45),
-				"Encaissé" if data.contracts.claimed[id] else "Encaisser", _claim.bind(id))
-			claim.disabled = data.contracts.claimed[id] or value < entry.goal
-			row += 1
-		var weekly: Dictionary = data.career.weekly
-		var challenge := Career.challenge(weekly.period)
-		Palette.label(view, Rect2(78, 467, 693, 37), challenge[0], 25, Palette.TEXT, Palette.HEAD)
-		Palette.label(view, Rect2(78, 502, 690, 30), "%d / %d · 70 pièces + 150 XP" % [weekly.value, challenge[2]],
-			14, Palette.AMBER, Palette.MONO)
-		var claim := Palette.button(view, Rect2(900, 481, 287, 45),
-			"Encaissé" if weekly.claimed else "Encaisser la semaine", _claim_week)
-		claim.disabled = weekly.claimed or weekly.value < challenge[2]
-	elif page == "records":
-		var entries := []
-		for key in Prefs.records:
-			var parts: PackedStringArray = key.split("|")
-			var rows: Array = Prefs.records[key]
-			if rows.is_empty():
-				continue
-			var label := "%s  ·  %s  ·  %s" % [_mode_name(parts[0]), Catalog.MAPS[parts[2]].name, Catalog.DIFFICULTIES[parts[1]].name]
-			if parts.size() == 4:
-				var options := parts[3].split("-")
-				label += "  ·  %s bots / %d min / %s pts" % [options[0], int(options[1]) / 60, options[2]]
-			entries.append({"label": label, "score": int(rows[0].score), "wave": int(rows[0].wave)})
-		entries.sort_custom(func(a: Dictionary, b: Dictionary): return a.score > b.score)
-		var scroll := ScrollContainer.new()
-		Palette.at(view, scroll, Rect2(79, 228, 1118, 310))
-		var rows := VBoxContainer.new()
-		rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		scroll.add_child(rows)
-		if entries.is_empty():
-			rows.add_child(Label.new())
-			rows.get_child(0).text = "Vos scores apparaîtront ici après une opération."
-		for record in entries:
-			var label := Label.new()
-			label.text = "%07d pts   ·   %s%s" % [record.score, record.label, "  ·  Vague %d" % record.wave if record.wave > 0 else ""]
-			label.custom_minimum_size.y = 37
-			rows.add_child(label)
-	else:
-		var stats: Dictionary = data.stats
-		var lines := [
-			"%d parties   ·   %d victoires   ·   %d neutralisations" % [stats.runs, stats.wins, stats.kills],
-			"Record personnel  ·  vague %d   /   %d boss neutralisés" % [stats.best_wave, stats.bosses],
-			"Précision  ·  %d %%   /   %d tirs   /   %d CR dépensés" % [
-				roundi(100.0 * stats.hits / maxi(1, stats.shots)), stats.shots, stats.spent],
-		]
-		for i in lines.size():
-			Palette.label(view, Rect2(81, 230 + i * 48, 1107, 38), lines[i], 19, Palette.TEXT)
-		var name := LineEdit.new()
-		name.text = data.name
-		name.max_length = 18
-		Palette.at(view, name, Rect2(82, 389, 310, 46))
-		Palette.button(view, Rect2(410, 389, 248, 46), "Enregistrer le nom", _rename_pilot.bind(name))
-		Palette.button(view, Rect2(82, 473, 300, 46), "Réinitialiser la progression", _confirm_reset)
-		var level := Profile.level(data.xp)
-		Palette.label(view, Rect2(725, 389, 440, 46), "%d XP AVANT LE NIVEAU %d" % [level * level * 80 - data.xp, level + 1]
-			if level < 500 else "NIVEAU MAXIMUM", 16, Palette.AMBER, Palette.MONO)
-	Palette.label(view, Rect2(57, 574, 1166, 30), notice, 15, Palette.AMBER)
-	Palette.button(view, Rect2(57, 615, 136, 43), "Retour", menu, true).grab_focus()
-	Palette.button(view, Rect2(208, 615, 183, 43), "Profil", show_profile.bind("profile"))
-	Palette.button(view, Rect2(405, 615, 183, 43), "Contrats", show_profile.bind("contracts"))
-	Palette.button(view, Rect2(602, 615, 183, 43), "Classements", show_profile.bind("records"))
+	var description: String = "Contrats du jour et défi hebdomadaire" if page == "contracts" else ""
+	_header("Progression", title, description)
+	match page:
+		"contracts": Progression.contracts(view, data, _claim, _claim_week)
+		"records": Progression.records(view, Prefs.records, _mode_name)
+		_: Progression.overview(view, data, _rename_pilot, _confirm_reset)
+	Palette.label(view, Rect2(57, 581, 1166, 32), notice, 15, Tokens.ACCENT)
+	Palette.button(view, Rect2(57, 615, 136, 43), "Retour", menu, true)
+	var tabs := {"profile": "Profil", "contracts": "Contrats", "records": "Classements"}
+	var x := 208
+	for tab in tabs:
+		var button := Palette.button(view, Rect2(x, 615, 183, 43), tabs[tab], show_profile.bind(tab))
+		if tab == page:
+			button.theme_type_variation = "SelectedTab"
+			button.grab_focus()
+		x += 197
 	Palette.button(view, Rect2(799, 615, 183, 43), "Carrière", show_career)
-	_footer("PROFIL LOCAL   /   " + data.contracts.date)
+	_footer("Contrats du " + data.contracts.date if page == "contracts" else "Profil local")
 
 func _claim(id: String) -> void:
 	var result := Prefs.profile_action(Prefs.profile.claim.bind(id))
@@ -1213,7 +1288,7 @@ func replay_report(run: Dictionary) -> void:
 	if Rules.valid_key(run.rules):
 		var fields := String(run.rules).split("-")
 		rules = {"bots": int(fields[0]), "duration": int(fields[1]), "target": int(fields[2])}
-	begin(run.mode, run.difficulty, run.map, run.seed, "", false, rules)
+	request_match(run.mode, run.difficulty, run.map, run.seed, "", rules)
 
 func _rename_pilot(input: LineEdit) -> void:
 	var result := Prefs.profile_action(func():

@@ -25,14 +25,19 @@ var spawn_points: Array[Vector3] = [
 var footprints: Array[Rect2] = []
 var routes := Routes.new()
 var batches := Fabric.Batch.new()
+var scenery_batches := Fabric.Batch.new()
 var structure: Node3D
+var scenery: Node3D
 var collision: StaticBody3D
 var sun: DirectionalLight3D
+var utility_light: OmniLight3D
 var atmosphere: Environment
 var dome: ShaderMaterial
 var air: CPUParticles3D
 var deck_surface: ShaderMaterial
 var is_backdrop := false
+var simulation_only := false
+var defer_surfaces := false
 var build_landscape := true
 var emergency := false
 var map_id := "reactor"
@@ -49,21 +54,38 @@ func _ready() -> void:
 	structure = Node3D.new()
 	structure.name = "Architecture"
 	batches.world_materials = true
+	batches.enabled = not simulation_only
 	add_child(structure)
 	if not is_backdrop:
 		collision = StaticBody3D.new()
 		collision.name = "DeckCollision"
 		add_child(collision)
-	_light()
+	if not simulation_only:
+		_light()
 	_build_layout()
-	batches.commit(structure)
+	if simulation_only:
+		routes.setup(footprints, half_size)
+		return
+	if not defer_surfaces:
+		batches.commit(structure)
 	if map_id != "station" and build_landscape:
-		Scenery.build(self)
+		scenery = Scenery.build(self, scenery_batches)
+		if not defer_surfaces:
+			scenery_batches.commit(scenery, false)
 	if not is_backdrop:
 		routes.setup(footprints, half_size)
 	apply_quality()
 	Art.changed.connect(apply_art)
 	apply_art()
+
+func pending_surface_count() -> int:
+	return batches.groups.size() + scenery_batches.groups.size()
+
+func commit_surfaces(deadline_usec: int) -> void:
+	if not batches.groups.is_empty():
+		batches.commit(structure, true, deadline_usec)
+	elif not scenery_batches.groups.is_empty():
+		scenery_batches.commit(scenery, false, deadline_usec)
 
 func _build_layout() -> void:
 	_deck()
@@ -74,12 +96,15 @@ func _build_layout() -> void:
 	_skyline()
 
 func apply_quality() -> void:
+	if simulation_only:
+		return
 	sun.shadow_enabled = Prefs.values.quality in [1, 2]
 	sun.directional_shadow_max_distance = 47.0 if Prefs.values.quality == 2 else 28.0
 	if is_instance_valid(deck_surface):
 		deck_surface.set_shader_parameter("low_detail", Prefs.values.quality in [0, 3])
 	dome.set_shader_parameter("low_detail", Prefs.values.quality in [0, 3])
 	atmosphere.fog_enabled = Prefs.values.fog and Prefs.values.quality in [1, 2]
+	_update_utility_light(Art.world(map_id).utility)
 	_apply_weather()
 
 func _light() -> void:
@@ -101,17 +126,19 @@ func _light() -> void:
 	add_child(sun)
 
 func apply_art() -> void:
+	if simulation_only:
+		return
 	var colors: Dictionary = Art.world(map_id)
 	atmosphere.background_color = colors.horizon
 	atmosphere.ambient_light_color = colors.ambient
-	atmosphere.ambient_light_energy = 0.64 if map_id != "station" else 0.83
+	atmosphere.ambient_light_energy = colors.fill
 	atmosphere.fog_enabled = Prefs.values.fog and Prefs.values.quality in [1, 2]
 	atmosphere.fog_density = colors.mist
 	atmosphere.fog_light_color = colors.horizon
 	dome.set_shader_parameter("zenith", colors.sky)
 	dome.set_shader_parameter("haze", colors.horizon)
 	dome.set_shader_parameter("sun_tint", colors.sun)
-	dome.set_shader_parameter("cloud_amount", 0.22)
+	dome.set_shader_parameter("cloud_amount", colors.clouds)
 	sun.rotation_degrees = colors.angle
 	sun.light_color = colors.sun
 	sun.light_energy = colors.power * (0.82 if emergency else 1.0)
@@ -121,14 +148,34 @@ func apply_art() -> void:
 	if is_instance_valid(deck_surface):
 		deck_surface.set_shader_parameter("base_color", colors.floor)
 		deck_surface.set_shader_parameter("groove_color", colors.seam)
+		deck_surface.set_shader_parameter("wear_color", colors.wear)
 		deck_surface.set_shader_parameter("ground_path", map_id == "grove")
 		deck_surface.set_shader_parameter("aggregate", Materials.texture(colors.ground))
-		deck_surface.set_shader_parameter("joint_scale", 0.62 if map_id == "station" else (0.16 if map_id in ["reactor", "cryo"] else 0.0))
+		deck_surface.set_shader_parameter("joint_scale", 0.55 if map_id == "station" else (0.18 if map_id in ["reactor", "cryo", "district"] else 0.0))
+	_update_utility_light(colors.utility)
 	for child in structure.get_children():
 		if child is Label3D and child.has_meta("original_ink"):
 			var original: Color = child.get_meta("original_ink")
 			child.modulate = original.lerp(Color("#c4bba6"), 0.31)
 	_apply_weather()
+
+func _update_utility_light(tint: Color) -> void:
+	var enabled: bool = not is_backdrop and Prefs.values.quality in [1, 2] and DisplayServer.get_name() != "headless"
+	if not enabled:
+		if is_instance_valid(utility_light):
+			utility_light.hide()
+		return
+	if not is_instance_valid(utility_light):
+		utility_light = OmniLight3D.new()
+		utility_light.name = "TerminalFill"
+		utility_light.omni_range = 8.5
+		utility_light.omni_attenuation = 1.45
+		utility_light.light_specular = 0.35
+		utility_light.position = terminal_at + Vector3(0.0, 2.35, -1.0)
+		add_child(utility_light)
+	utility_light.light_color = tint
+	utility_light.light_energy = 0.38 if Prefs.values.quality == 1 else 0.58
+	utility_light.show()
 
 func alert_lighting(enabled: bool) -> void:
 	if enabled != emergency:
@@ -144,13 +191,17 @@ func _apply_weather() -> void:
 		air.emitting = enabled
 		air.visible = enabled
 
-func _deck() -> void:
-	var finish := ShaderMaterial.new()
-	finish.shader = preload("res://assets/art/deck.gdshader")
-	deck_surface = finish
+func _paint_deck() -> void:
+	if simulation_only:
+		return
+	deck_surface = ShaderMaterial.new()
+	deck_surface.shader = preload("res://assets/art/deck.gdshader")
 	var deck := PlaneMesh.new()
 	deck.size = half_size * 2.0
-	Fabric.place(structure, deck, finish, Vector3.ZERO, Vector3.ZERO, false)
+	Fabric.place(structure, deck, deck_surface, Vector3.ZERO, Vector3.ZERO, false)
+
+func _deck() -> void:
+	_paint_deck()
 	_block(Vector3(0, -0.25, 0), Vector3(half_size.x * 2, 0.5, half_size.y * 2), Vector3.ZERO, false)
 	for side in [-1.0, 1.0]:
 		var accent := CYAN if side < 0 else GOLD
@@ -340,6 +391,8 @@ func _terminal() -> void:
 	_box(foot + Vector3(0.23, 1.0, -0.04), Vector3(0.071, 0.24, 0.083), STEEL, false, Vector3(0.20, 0, 0))
 
 func _skyline() -> void:
+	if simulation_only:
+		return
 	var random := RandomNumberGenerator.new()
 	random.seed = 87374
 	for side in [-1.0, 1.0]:
@@ -362,6 +415,8 @@ func _skyline() -> void:
 
 func _box(at: Vector3, size: Vector3, color: Color, glow := false,
 		rot := Vector3.ZERO, bevel := 0.0) -> void:
+	if simulation_only:
+		return
 	var mesh: Mesh = Fabric.bevel(size, bevel) if bevel > 0.0 else Fabric.cube(size)
 	batches.put(mesh, Fabric.paint(color, glow), at, rot)
 
@@ -395,6 +450,8 @@ func _cylinder_collision(y: float, radius: float, height: float) -> void:
 	collision.add_child(node)
 
 func _stencil(text: String, at: Vector3, rot: Vector3, pixels: float, color: Color) -> void:
+	if simulation_only:
+		return
 	var label := Label3D.new()
 	label.text = text
 	label.font = FONT

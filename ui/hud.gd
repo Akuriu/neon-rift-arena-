@@ -5,12 +5,13 @@ const Catalog := preload("res://game/catalog.gd")
 const Director := preload("res://game/wave_director.gd")
 const Rules := preload("res://game/modes/rules.gd")
 const Courses := preload("res://game/modes/parkour_routes.gd")
+const Tokens := preload("res://ui/design/tokens.gd")
 const CYAN := Palette.CYAN
 const AMBER := Palette.AMBER
 const TEXT := Palette.TEXT
 const MUTE := Palette.MUTED
 const PINK := Palette.PINK
-const INK := Color(0.07, 0.079, 0.064, 0.86)
+const INK := Color(0.07, 0.09, 0.079, 0.76)
 
 var session: Node3D
 var sample_time := 0.0
@@ -21,8 +22,8 @@ var render_wait := 0.0
 var scope_mesh: ArrayMesh
 var scope_extent := Vector2.ZERO
 var signal_ink := CYAN
-var status_panel := Palette.box(INK, Color("#626357"), 5)
-var status_contrast := Palette.box(Color("#141611"), Color("#77776a"), 5)
+var status_panel := Palette.box(INK, Color(Tokens.EDGE, 0.72), 7)
+var status_contrast := Palette.box(Tokens.BACKGROUND, Color("#77776a"), 7)
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -65,8 +66,7 @@ func _draw() -> void:
 		draw_rect(Rect2(Vector2(3, 3), size - Vector2(6, 6)), edge, false, 7.0)
 	var objective := "Vague %d / %d" % [director.wave, director.total_waves] if director.total_waves > 0 else "Vague %d" % director.wave
 	if match_mode:
-		objective = {"gungame": "Gun Game · %d / 8" % mini(8, director.score + 1), "classic": "Chacun pour soi", "teams": "Équipes", "capture": "Capture",
-			"domination": "Domination"}[session.mode]
+		objective = "Gun Game · %d / 8" % mini(8, director.score + 1) if session.mode == "gungame" else Rules.LABELS[session.mode]
 	elif session.mode == "training":
 		objective = "Entraînement"
 	elif session.mode == "explore":
@@ -208,7 +208,7 @@ func _desktop_status(pilot: CharacterBody3D, gun: Node, objective: String, score
 	var factor: float = Prefs.values.hud_scale
 	draw_set_transform(Vector2(25, 23), 0, Vector2.ONE * factor)
 	_frame(Rect2(0, 0, 216, 62), signal_ink)
-	_print(Vector2(12, 23), Catalog.MAPS[session.map_id].name, 15, Palette.BOLD, MUTE)
+	_print(Vector2(12, 21), Catalog.MAPS[session.map_id].name, 13, Palette.MONO, MUTE)
 	_print(Vector2(12, 48), objective, 22, Palette.HEAD, TEXT)
 	draw_set_transform(Vector2(size.x - 25.0 - 186.0 * factor, 23), 0, Vector2.ONE * factor)
 	_frame(Rect2(0, 0, 186, 62), AMBER)
@@ -226,7 +226,7 @@ func _desktop_status(pilot: CharacterBody3D, gun: Node, objective: String, score
 	_frame(Rect2(0, 0, 209, 73), signal_ink)
 	_print(Vector2(12, 28), "%d" % ceili(pilot.health), 23, Palette.BOLD, TEXT)
 	_print(Vector2(67, 26), "Santé", 14, Palette.BODY, MUTE)
-	_meter(Vector2(118, 17), Vector2(78, 5), pilot.health / 100.0, TEXT)
+	_meter(Vector2(118, 17), Vector2(78, 5), pilot.health / 100.0, Tokens.SUCCESS if pilot.health > 25.0 else Tokens.DANGER)
 	_print(Vector2(12, 55), "%d" % ceili(pilot.shield), 19, Palette.BOLD, MUTE)
 	_print(Vector2(67, 54), "Protection", 13, Palette.BODY, MUTE)
 	_meter(Vector2(141, 46), Vector2(55, 5), pilot.shield / pilot.shield_max, Color("#a7b2a3"))

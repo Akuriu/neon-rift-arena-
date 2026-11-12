@@ -96,7 +96,7 @@ func test_arms() -> void:
 		var pilot = stage.player
 		var gun = pilot.arsenal
 		all_models = all_models and gun.spec().id == data.id and gun.view.get_child_count() > 2 \
-			and root.get_node("Sounds").bank.has(data.sound)
+			and root.get_node("Sounds").get_sample(data.sound) != null
 		var target = stage.units[0]
 		target.position = pilot.position + Vector3(0.0, 0.0, -6.5)
 		target.set_physics_process(false)
