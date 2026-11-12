@@ -68,6 +68,11 @@ func check_buffered_finish() -> void:
 		"L’état de vague le plus récent attend avec le résultat avant le premier HUD")
 	var directory := OS.get_environment("RIFLE_QA_CAPTURE_DIR")
 	if DisplayServer.get_name() != "headless" and not directory.is_empty():
+		var leave: Button = client.map_loading.cancel_button
+		var font := leave.get_theme_font("font")
+		var text_width := font.get_string_size(leave.text, HORIZONTAL_ALIGNMENT_LEFT, -1, leave.get_theme_font_size("font_size")).x
+		check(text_width + leave.get_theme_stylebox("normal").get_minimum_size().x <= leave.size.x,
+			"Le libellé Quitter la coop est visible en entier")
 		await RenderingServer.frame_post_draw
 		check(root.get_texture().get_image().save_png(directory.path_join("26-coop-chargement.png")) == OK,
 			"Capture moteur du chargement coop")
