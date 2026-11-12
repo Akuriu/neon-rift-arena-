@@ -82,6 +82,10 @@ func run() -> void:
 			await RenderingServer.frame_post_draw
 			if is_instance_valid(overlay):
 				save(root.get_texture().get_image(), "25-ouverture-arene")
+				app._back()
+				check(app.screen == "pause" and app.map_loading == null and not app.session.can_process(),
+					"Échap interrompt l’ouverture et met l’arène en pause")
+				app.hud()
 		await capture("14-depot")
 		app.pause()
 		await capture("15-pause")

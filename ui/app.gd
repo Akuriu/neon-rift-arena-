@@ -592,8 +592,10 @@ func _resolve_match() -> void:
 		else:
 			hud()
 	if Prefs.values.ui_motion and DisplayServer.get_name() != "headless":
-		await overlay.reveal().finished
-	if is_instance_valid(overlay) and overlay == map_loading:
+		overlay.reveal().chain().tween_callback(func():
+			if is_instance_valid(overlay) and overlay == map_loading:
+				_clear_loading())
+	else:
 		_clear_loading()
 
 func _cancel_loading() -> void:
